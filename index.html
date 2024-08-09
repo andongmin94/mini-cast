@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cursor and Keyboard Effect</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    #cursorEffect {
+      position: fixed;
+      width: 20px;
+      height: 20px;
+      border: 2px solid yellow;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      display: none;
+    }
+    #keyboardOverlay {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      font-size: 16px;
+      display: none;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+  <div id="cursorEffect"></div>
+  <div id="keyboardOverlay"></div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const cursorEffect = document.getElementById('cursorEffect');
+      const keyboardOverlay = document.getElementById('keyboardOverlay');
+
+      document.addEventListener('mousemove', (event) => {
+        const { clientX, clientY } = event;
+        const { innerWidth, innerHeight } = window;
+
+        // 커서가 화면 경계를 벗어나지 않도록 조정
+        if (clientX >= 0 && clientX <= innerWidth && clientY >= 0 && clientY <= innerHeight) {
+          cursorEffect.style.left = `${clientX - 10}px`;
+          cursorEffect.style.top = `${clientY - 10}px`;
+          cursorEffect.style.display = 'block';
+        } else {
+          cursorEffect.style.display = 'none';
+        }
+      });
+
+      // 창 크기 변경 시 커서 효과 숨기기
+      window.addEventListener('resize', () => {
+        cursorEffect.style.display = 'none';
+      });
+
+      // 커서가 문서 영역을 벗어날 때 커서 효과 숨기기
+      document.addEventListener('mouseleave', () => {
+        cursorEffect.style.display = 'none';
+      });
+
+      // 키보드 입력 감지 및 오버레이 표시
+      document.addEventListener('keydown', (event) => {
+        keyboardOverlay.textContent = `Key pressed: ${event.key}`;
+        keyboardOverlay.style.display = 'block';
+      });
+
+      // 키보드 입력이 끝나면 오버레이 숨기기
+      document.addEventListener('keyup', () => {
+        keyboardOverlay.style.display = 'none';
+      });
+    });
+  </script>
+</body>
+</html>
