@@ -5,19 +5,19 @@
   "author": "안동민",
   "main": "src/electron/main.cjs",
   "build": {
-    "appId": "kersor",
+    "appId": "커서",
     "mac": {
       "icon": "public/icon.png"
     },
     "win": {
       "icon": "public/icon.png"
     },
-    "productName": "kersor",
+    "productName": "커서",
     "copyright": "Copyright © andongmin",
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "uninstallDisplayName": "kersor"
+      "uninstallDisplayName": "커서"
     },
     "files": [
       "node_modules/**/*",
