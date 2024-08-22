@@ -47,18 +47,17 @@ export const Overlay: React.FC = () => {
     setSettings(newSettings);
   }, []);
 
-  const handleMouseMove = useCallback((localPosition: { x: number, y: number }) => {
-    console.log('Mouse moved:', localPosition);
-    setMousePosition(localPosition);
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    setMousePosition({ x: e.clientX, y: e.clientY });
   }, []);
 
-  const handleMouseClick = useCallback((localPosition: { x: number, y: number }) => {
-    console.log('Mouse clicked:', localPosition);
+  const handleMouseClick = useCallback((e: React.MouseEvent) => {
+    console.log('Mouse clicked:', { x: e.clientX, y: e.clientY });
     if (!settings.showClickHighlight) return;
     const newSpot: ClickSpot = {
       id: Date.now(),
-      x: localPosition.x,
-      y: localPosition.y,
+      x: e.clientX,
+      y: e.clientY,
     };
     setClickSpots(prev => [...prev, newSpot]);
     setTimeout(() => {
@@ -68,15 +67,10 @@ export const Overlay: React.FC = () => {
 
   useEffect(() => {
     electron.on('update-settings', handleSettingsUpdate);
-    electron.on('mouse-move', handleMouseMove);
-    electron.on('mouse-click',handleMouseClick);
-
     return () => {
       electron.removeListener('update-settings', handleSettingsUpdate);
-      electron.removeListener('mouse-move', handleMouseMove);
-      electron.removeListener('mouse-click', handleMouseClick);
     };
-  }, [handleSettingsUpdate, handleMouseMove, handleMouseClick]);
+  }, [handleSettingsUpdate]);
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -101,11 +95,13 @@ export const Overlay: React.FC = () => {
     };
   }, [settings.clickDuration]);
 
-  console.log('Rendering overlay with settings:', settings);
-  console.log('Current mouse position:', mousePosition);
-
   return (
-    <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 9999 }}>
+    <div 
+      className="fixed inset-0 pointer-events-auto" 
+      style={{ zIndex: 9999 }}
+      onMouseMove={handleMouseMove}
+      onClick={handleMouseClick}
+    >
       {settings.showCursorHighlight && (
         <div
           className="pointer-events-none absolute rounded-full"

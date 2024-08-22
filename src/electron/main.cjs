@@ -75,18 +75,7 @@ function createOverlayWindows() {
       overlayWindow.webContents.send('update-settings', currentSettings);
     });
     
-    // overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-
-    overlayWindow.webContents.on('before-input-event', (event, input) => {
-      if (input.type === 'mouseDown') {
-        const cursorPosition = screen.getCursorScreenPoint();
-        const localPosition = {
-          x: cursorPosition.x - display.bounds.x,
-          y: cursorPosition.y - display.bounds.y
-        };
-        overlayWindow.webContents.send('mouse-click', localPosition);
-      }
-    });
+    overlayWindow.setIgnoreMouseEvents(false);
   });
 }
 
