@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
 
+import "@/globals.css";
+
+//////////////// electron components ////////////////
+import TitleBar from "@/components/TitleBar";
+/////////////////////////////////////////////////////
+
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -34,7 +40,9 @@ export default function Controller() {
   ]);
 
   return (
-    <div className="pointer-events-auto max-w-sm rounded-lg p-4 pt-8">
+    <>
+    <TitleBar />
+    <div className="pointer-events-auto max-w-sm rounded-lg p-4 pt-12">
       <div className="mb-2 flex items-center justify-center">
         <h2 className="text-xl font-bold">커서 Kersor</h2>
       </div>
@@ -126,5 +134,6 @@ export default function Controller() {
         </div>
       </div>
     </div>
+    </>
   );
 }
