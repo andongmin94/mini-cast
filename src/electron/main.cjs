@@ -1,6 +1,7 @@
 const path = require("path");
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage } = require("electron");
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, globalShortcut } = require("electron");
 const fs = require('fs');
+const { GlobalKeyboardListener } = require('node-global-key-listener');
 
 const templateDir = __dirname;
 const packageJsonPath = path.join(templateDir, '../../package.json');
@@ -36,7 +37,7 @@ let overlayWindows = [];
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 350,
-    height: 550,
+    height: 750,
     frame: false,
     resizable: false,
     icon: path.join(__dirname, "../../public/icon.png"),
@@ -101,22 +102,46 @@ function captureMouseEvents() {
   }, 16); // 약 60fps
 }
 
-let currentSettings = {
-  cursorFillColor: "rgba(0, 0, 0, 0.2)",
-  cursorStrokeColor: "rgba(0, 0, 0, 1)",
-  cursorSize: 24,
-  showCursorHighlight: true,
-};
+function captureKeyboardEvents() {
+  const gkl = new GlobalKeyboardListener();
 
-function isPointInDisplay(point, display) {
-  return point.x >= display.bounds.x && point.x < display.bounds.x + display.bounds.width &&
-         point.y >= display.bounds.y && point.y < display.bounds.y + display.bounds.height;
+  gkl.addListener((e) => {
+    if (e.state === 'DOWN') {
+      const keyDetails = {
+        key: e.name,
+        code: e.rawKey._nameRaw,
+        ctrlKey: e.ctrlKey,
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        metaKey: e.metaKey,
+        timestamp: Date.now()
+      };
+
+      overlayWindows.forEach((window, index) => {
+        window.webContents.send('key-press', { ...keyDetails, displayId: index });
+        console.log('key-press', keyDetails);
+      });
+    }
+  });
 }
+
+let currentSettings = {
+  cursorFillColor: "rgba(255, 255, 0, 0.5)",
+  cursorStrokeColor: "rgba(255, 0, 0, 0.5)",
+  cursorSize: 30,
+  showCursorHighlight: true,
+  keyDisplayMonitor: 0,
+  keyDisplayDuration: 2000,
+  keyDisplayFontSize: 16,
+  keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.7)",
+  keyDisplayTextColor: "rgba(255, 255, 255, 1)",
+};
 
 app.whenReady().then(() => {
   createWindow();
   createOverlayWindows();
   captureMouseEvents();
+  captureKeyboardEvents();
 
   const tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "../../public/icon.png")));
   tray.setToolTip(pkg.build.productName);
@@ -174,4 +199,8 @@ ipcMain.on('update-settings', (event, newSettings) => {
   overlayWindows.forEach(window => {
     window.webContents.send('update-settings', currentSettings);
   });
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
