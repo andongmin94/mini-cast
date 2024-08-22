@@ -1,5 +1,5 @@
 const path = require("path");
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage } = require("electron");
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, globalShortcut } = require("electron");
 const fs = require('fs');
 
 const templateDir = __dirname;
@@ -75,7 +75,7 @@ function createOverlayWindows() {
       overlayWindow.webContents.send('update-settings', currentSettings);
     });
     
-    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    // overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
     overlayWindow.webContents.on('before-input-event', (event, input) => {
       if (input.type === 'mouseDown') {
@@ -105,20 +105,6 @@ function captureMouseEvents() {
       }
     });
   }, 16); // 약 60fps
-
-  // 클릭 이벤트 캡처
-  screen.on('mouse-down', (event, point) => {
-    const display = screen.getDisplayNearestPoint(point);
-    overlayWindows.forEach((window) => {
-      if (isPointInDisplay(point, display)) {
-        const localPosition = {
-          x: point.x - display.bounds.x,
-          y: point.y - display.bounds.y
-        };
-        window.webContents.send('mouse-click', localPosition);
-      }
-    });
-  });
 }
 
 let currentSettings = {
@@ -168,6 +154,7 @@ app.whenReady().then(() => {
             accelerator: "F12",
             click: () => {
               mainWindow.webContents.toggleDevTools();
+              overlayWindows[0].webContents.toggleDevTools();
             },
           },
         ],
@@ -216,5 +203,5 @@ ipcMain.on('simulate-click', () => {
 });
 
 app.on('will-quit', () => {
-  // globalShortcut.unregisterAll();
+  globalShortcut.unregisterAll();
 });
