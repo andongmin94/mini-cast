@@ -53,7 +53,7 @@ function createOverlayWindows() {
   overlayWindows = [];
   const displays = screen.getAllDisplays();
   
-  displays.forEach((display) => {
+  displays.forEach((display, index) => {
     let overlayWindow = new BrowserWindow({
       x: display.bounds.x,
       y: display.bounds.y,
@@ -72,10 +72,11 @@ function createOverlayWindows() {
     overlayWindow.loadURL(`http://localhost:${PORT}/overlay`);
     overlayWindows.push(overlayWindow);
     overlayWindow.webContents.on('did-finish-load', () => {
+      overlayWindow.webContents.send('init', { id: index, ...display.bounds });
       overlayWindow.webContents.send('update-settings', currentSettings);
     });
     
-    overlayWindow.setIgnoreMouseEvents(false);
+    // overlayWindow.setIgnoreMouseEvents(true, { forward: true });
   });
 }
 

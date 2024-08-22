@@ -97,8 +97,11 @@ export const Overlay: React.FC = () => {
 
   return (
     <div 
-      className="fixed inset-0 pointer-events-auto" 
-      style={{ zIndex: 9999 }}
+      className="fixed inset-0 pointer-events-auto"
+      style={{ 
+        zIndex: 9999,
+        background: 'transparent' // 배경을 투명하게 설정
+      }}
       onMouseMove={handleMouseMove}
       onClick={handleMouseClick}
     >
