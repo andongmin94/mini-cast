@@ -49,6 +49,14 @@ const createWindow = () => {
   mainWindow.loadURL(`http://localhost:${PORT}`);
 };
 
+function getConnectedDisplays() {
+  return screen.getAllDisplays().map((display, index) => ({
+    id: display.id,
+    name: `모니터 ${index + 1}`,
+    bounds: display.bounds
+  }));
+}
+
 function createOverlayWindows() {
   overlayWindows.forEach(window => window.close());
   overlayWindows = [];
@@ -104,23 +112,87 @@ function captureMouseEvents() {
 
 function captureKeyboardEvents() {
   const gkl = new GlobalKeyboardListener();
+  let specialKeys = {
+    ctrl: false,
+    shift: false,
+    alt: false,
+    meta: false
+  };
+  let capsLockOn = false;
+  let lastCombination = '';
+  let lastTimestamp = 0;
+
+  const keyNameMap = {
+    'LEFT CTRL': 'Ctrl', 'RIGHT CTRL': 'Ctrl',
+    'LEFT SHIFT': 'Shift', 'RIGHT SHIFT': 'Shift',
+    'LEFT ALT': 'Alt', 'RIGHT ALT': 'Alt',
+    'LEFT META': 'Meta', 'RIGHT META': 'Meta',
+    'ESCAPE': 'Esc', 'RETURN': 'Enter',
+    'BACK SPACE': 'Backspace', 'CAPS LOCK': 'CapsLock',
+    'SPACE': 'Space', 'TAB': 'Tab',
+    'UP ARROW': '↑', 'DOWN ARROW': '↓', 'LEFT ARROW': '←', 'RIGHT ARROW': '→',
+    'PERIOD': '.', 'COMMA': ',', 'SEMICOLON': ';', 'SLASH': '/',
+    'BACK SLASH': '\\', 'EQUAL': '=', 'MINUS': '-', 'OPEN BRACKET': '[',
+    'CLOSE BRACKET': ']', 'QUOTE': "'", 'BACK QUOTE': '`'
+  };
+
+  function getKeyName(name) {
+    if (name.length === 1 && name >= 'A' && name <= 'Z') {
+      const shouldBeUpperCase = (capsLockOn && !specialKeys.shift) || (!capsLockOn && specialKeys.shift);
+      return shouldBeUpperCase ? name : name.toLowerCase();
+    }
+    return keyNameMap[name] || name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+  }
+
+  function sendKeyPress(combination, keyDetails) {
+    const currentTime = Date.now();
+    if (combination !== lastCombination || currentTime - lastTimestamp > 500) {
+      overlayWindows.forEach((window, index) => {
+        window.webContents.send('key-press', { ...keyDetails, displayId: index, combination });
+        console.log('key-press', { ...keyDetails, combination });
+      });
+      lastCombination = combination;
+      lastTimestamp = currentTime;
+    }
+  }
 
   gkl.addListener((e) => {
-    if (e.state === 'DOWN') {
+    const isSpecialKey = ['LEFT CTRL', 'RIGHT CTRL', 'LEFT SHIFT', 'RIGHT SHIFT', 'LEFT ALT', 'RIGHT ALT', 'LEFT META', 'RIGHT META', 'CAPS LOCK'].includes(e.name);
+    
+    if (e.name === 'CAPS LOCK' && e.state === 'DOWN') {
+      capsLockOn = !capsLockOn;
+    }
+
+    const keyName = getKeyName(e.name);
+
+    if (isSpecialKey && e.name !== 'CAPS LOCK') {
+      specialKeys[keyName.toLowerCase()] = e.state === 'DOWN';
+    }
+
+    if (e.state === 'DOWN' && !isSpecialKey) {
+      const specialKeyCombination = [];
+      if (specialKeys.ctrl) specialKeyCombination.push('Ctrl');
+      if (specialKeys.shift) specialKeyCombination.push('Shift');
+      if (specialKeys.alt) specialKeyCombination.push('Alt');
+      if (specialKeys.meta) specialKeyCombination.push('Meta');
+
+      let combination = keyName;
+      if (specialKeyCombination.length > 0) {
+        combination = `${specialKeyCombination.join(' + ')} + ${keyName}`;
+      }
+
       const keyDetails = {
-        key: e.name,
+        key: keyName,
         code: e.rawKey._nameRaw,
-        ctrlKey: e.ctrlKey,
-        shiftKey: e.shiftKey,
-        altKey: e.altKey,
-        metaKey: e.metaKey,
+        ctrlKey: specialKeys.ctrl,
+        shiftKey: specialKeys.shift,
+        altKey: specialKeys.alt,
+        metaKey: specialKeys.meta,
+        capsLock: capsLockOn,
         timestamp: Date.now()
       };
 
-      overlayWindows.forEach((window, index) => {
-        window.webContents.send('key-press', { ...keyDetails, displayId: index });
-        console.log('key-press', keyDetails);
-      });
+      sendKeyPress(combination, keyDetails);
     }
   });
 }
@@ -179,8 +251,26 @@ app.whenReady().then(() => {
     Menu.setApplicationMenu(menu);
   }
 
-  screen.on('display-added', createOverlayWindows);
-  screen.on('display-removed', createOverlayWindows);
+  // Send initial displays data when requested
+  ipcMain.on('request-displays', (event) => {
+      const displays = getConnectedDisplays();
+      console.log("Sending displays data:", displays);
+      mainWindow.webContents.send('displays-updated', displays);
+  });
+  
+
+  // Display change events
+  screen.on('display-added', () => {
+    const displays = getConnectedDisplays();
+    mainWindow.webContents.send('displays-updated', displays);
+    createOverlayWindows();
+  });
+
+  screen.on('display-removed', () => {
+    const displays = getConnectedDisplays();
+    mainWindow.webContents.send('displays-updated', displays);
+    createOverlayWindows();
+  });
 
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 interface Settings {
   cursorFillColor: string;
@@ -38,6 +38,17 @@ export const Overlay: React.FC = () => {
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
   const [keyPresses, setKeyPresses] = useState<KeyPress[]>([]);
   const [displayId, setDisplayId] = useState<number>(0);
+  
+  const settingsRef = useRef(settings);
+  const displayIdRef = useRef(displayId);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    displayIdRef.current = displayId;
+  }, [displayId]);
 
   const handleSettingsUpdate = useCallback((newSettings: Settings) => {
     console.log('New settings received:', newSettings);
@@ -49,30 +60,39 @@ export const Overlay: React.FC = () => {
   }, []);
 
   const handleKeyPress = useCallback((keyPress: KeyPress) => {
-    if (keyPress.displayId === settings.keyDisplayMonitor) {
-      setKeyPresses(prev => [...prev, keyPress]);
-      setTimeout(() => {
-        setKeyPresses(prev => prev.filter(kp => kp.timestamp !== keyPress.timestamp));
-      }, settings.keyDisplayDuration);
+    if (keyPress.displayId === settingsRef.current.keyDisplayMonitor) {
+      setKeyPresses(prev => {
+        const newKeyPresses = [...prev, keyPress];
+        setTimeout(() => {
+          setKeyPresses(current => current.filter(kp => kp.timestamp !== keyPress.timestamp));
+        }, settingsRef.current.keyDisplayDuration);
+        return newKeyPresses;
+      });
     }
-  }, [settings.keyDisplayMonitor, settings.keyDisplayDuration]);
+  }, []);
 
   const handleInit = useCallback((data: { id: number }) => {
     setDisplayId(data.id);
   }, []);
 
   useEffect(() => {
-    electron.on('update-settings', handleSettingsUpdate);
-    electron.on('mouse-move', handleMouseMove);
-    electron.on('key-press', handleKeyPress);
-    electron.on('init', handleInit);
+    const settingsListener = (newSettings: Settings) => handleSettingsUpdate(newSettings);
+    const mouseMoveListener = (position: { x: number; y: number } | null) => handleMouseMove(position);
+    const keyPressListener = (keyPress: KeyPress) => handleKeyPress(keyPress);
+    const initListener = (data: { id: number }) => handleInit(data);
+
+    electron.on('update-settings', settingsListener);
+    electron.on('mouse-move', mouseMoveListener);
+    electron.on('key-press', keyPressListener);
+    electron.on('init', initListener);
+
     return () => {
-      electron.removeListener('update-settings', handleSettingsUpdate);
-      electron.removeListener('mouse-move', handleMouseMove);
-      electron.removeListener('key-press', handleKeyPress);
-      electron.removeListener('init', handleInit);
+      electron.removeListener('update-settings', settingsListener);
+      electron.removeListener('mouse-move', mouseMoveListener);
+      electron.removeListener('key-press', keyPressListener);
+      electron.removeListener('init', initListener);
     };
-  }, [handleSettingsUpdate, handleMouseMove, handleKeyPress, handleInit]);
+  }, []);
 
   return (
     <div 
@@ -114,7 +134,7 @@ export const Overlay: React.FC = () => {
                 keyPress.altKey && 'Alt',
                 keyPress.metaKey && 'Meta',
                 keyPress.key !== 'Control' && keyPress.key !== 'Shift' && keyPress.key !== 'Alt' && keyPress.key !== 'Meta' && keyPress.key
-              ].filter(Boolean).join('+')}
+              ].filter(Boolean).join(' + ')}
             </div>
           ))}
         </div>
