@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import "@/globals.css";
 
@@ -12,14 +12,15 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-//////////////// electron components ////////////////
 import TitleBar from "@/components/TitleBar";
+
+import Advertisement from "./Advertisement";
 
 function hexToRgba(hex: string, alpha: number = 1) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  return `rgba(${r}, ${g}, ${b}, ${1 - alpha})`;
 }
 
 interface Display {
@@ -46,20 +47,49 @@ export default function Controller() {
   const [keyDisplayBackgroundColor, setKeyDisplayBackgroundColor] =
     useState("#000000");
   const [keyDisplayBackgroundOpacity, setKeyDisplayBackgroundOpacity] =
-    useState(0.7);
+    useState(0.2);
   const [keyDisplayTextColor, setKeyDisplayTextColor] = useState("#FFFFFF");
+  const [keyDisplayPosition, setKeyDisplayPosition] = useState("bottom-right");
   const [displays, setDisplays] = useState<Display[]>([]);
+  const [cursorSettingsWidth, setCursorSettingsWidth] = useState(50);
+  const [showKeyDisplay, setShowKeyDisplay] = useState(true);
+
+  const dividerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (dividerRef.current && containerRef.current) {
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newX = e.clientX - containerRect.left;
+      const newWidth = (newX / containerRect.width) * 100;
+      setCursorSettingsWidth(Math.max(20, Math.min(80, newWidth)));
+    }
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  }, [handleMouseMove]);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [handleMouseMove, handleMouseUp],
+  );
 
   useEffect(() => {
-    electron.on("displays-updated", (updatedDisplays: Display[]) => {
+    const handleDisplaysUpdated = (updatedDisplays: Display[]) => {
       setDisplays(updatedDisplays);
-    });
+    };
 
-    console.log("Requesting displays data...");
+    electron.on("displays-updated", handleDisplaysUpdated);
     electron.send("request-displays");
 
     return () => {
-      electron.removeAllListeners("displays-updated");
+      electron.removeListener("displays-updated", handleDisplaysUpdated);
     };
   }, []);
 
@@ -77,6 +107,8 @@ export default function Controller() {
         keyDisplayBackgroundOpacity,
       ),
       keyDisplayTextColor,
+      keyDisplayPosition,
+      showKeyDisplay,
     });
   }, [
     cursorFillColor,
@@ -91,175 +123,291 @@ export default function Controller() {
     keyDisplayBackgroundColor,
     keyDisplayBackgroundOpacity,
     keyDisplayTextColor,
+    keyDisplayPosition,
+    showKeyDisplay,
   ]);
 
   return (
     <>
       <TitleBar />
-      <div className="pointer-events-auto max-w-sm rounded-lg p-4 pt-12">
+      <div className="pointer-events-auto overflow-hidden p-4 pb-0 pt-12">
         <div className="mb-2 flex items-center justify-center">
           <h2 className="text-xl font-bold">커서 Kersor</h2>
         </div>
-        <div className="space-y-4">
-          <hr />
-          <div className="flex items-center justify-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Label htmlFor="cursor-highlight">커서 활성화</Label>
+        <hr />
+        <div ref={containerRef} className="relative flex flex-row">
+          {/* 커서 설정 */}
+          <div
+            className="space-y-4 pr-4"
+            style={{ width: `${cursorSettingsWidth}%` }}
+          >
+            <h3 className="text-center text-lg font-semibold">커서 설정</h3>
+            <div className="flex items-center justify-center space-x-2">
+              <Label htmlFor="cursor-highlight" className="whitespace-nowrap">
+                커서 활성화
+              </Label>
               <Switch
                 id="cursor-highlight"
                 checked={showCursorHighlight}
                 onCheckedChange={setShowCursorHighlight}
               />
             </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-center space-x-2">
+                <Label
+                  htmlFor="cursor-fill-color"
+                  className="whitespace-nowrap"
+                >
+                  커서 칠 색상
+                </Label>
+                <input
+                  type="color"
+                  id="cursor-fill-color"
+                  value={cursorFillColor}
+                  onChange={(e) => setCursorFillColor(e.target.value)}
+                  className="h-8 w-8"
+                />
+              </div>
+              <div className="flex items-center justify-center space-x-2">
+                <Label
+                  htmlFor="cursor-fill-opacity"
+                  className="whitespace-nowrap"
+                >
+                  칠 투명도
+                </Label>
+                <Slider
+                  id="cursor-fill-opacity"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={[cursorFillOpacity]}
+                  onValueChange={(value) => setCursorFillOpacity(value[0])}
+                />
+                <span>{cursorFillOpacity.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-center space-x-2">
+                <Label
+                  htmlFor="cursor-stroke-color"
+                  className="whitespace-nowrap"
+                >
+                  커서 획 색상
+                </Label>
+                <input
+                  type="color"
+                  id="cursor-stroke-color"
+                  value={cursorStrokeColor}
+                  onChange={(e) => setCursorStrokeColor(e.target.value)}
+                  className="h-8 w-8"
+                />
+              </div>
+              <div className="flex items-center justify-center space-x-2">
+                <Label
+                  htmlFor="cursor-stroke-opacity"
+                  className="whitespace-nowrap"
+                >
+                  획 투명도
+                </Label>
+                <Slider
+                  id="cursor-stroke-opacity"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={[cursorStrokeOpacity]}
+                  onValueChange={(value) => setCursorStrokeOpacity(value[0])}
+                />
+                <span>{cursorStrokeOpacity.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="cursor-size" className="whitespace-nowrap">
+                커서 크기
+              </Label>
+              <Slider
+                id="cursor-size"
+                min={10}
+                max={60}
+                step={1}
+                value={[cursorSize]}
+                onValueChange={(value) => setCursorSize(value[0])}
+              />
+              <span>{cursorSize}px</span>
+            </div>
           </div>
-          <hr />
-          <div className="flex items-center justify-center space-x-2">
-            <Label htmlFor="cursor-fill-color">커서 칠 색상</Label>
-            <input
-              type="color"
-              id="cursor-fill-color"
-              value={cursorFillColor}
-              onChange={(e) => setCursorFillColor(e.target.value)}
-              className="block"
-            />
-          </div>
-          <div>
-            <Label htmlFor="cursor-fill-opacity">
-              커서 칠 불투명도 {cursorFillOpacity.toFixed(2)}
-            </Label>
-            <Slider
-              id="cursor-fill-opacity"
-              min={0}
-              max={1}
-              step={0.01}
-              value={[cursorFillOpacity]}
-              onValueChange={(value) => setCursorFillOpacity(value[0])}
-            />
-          </div>
-          <hr />
-          <div className="flex items-center justify-center space-x-2">
-            <Label htmlFor="cursor-stroke-color">커서 획 색상</Label>
-            <input
-              type="color"
-              id="cursor-stroke-color"
-              value={cursorStrokeColor}
-              onChange={(e) => setCursorStrokeColor(e.target.value)}
-              className="block"
-            />
-          </div>
-          <div>
-            <Label htmlFor="cursor-stroke-opacity">
-              커서 획 불투명도 {cursorStrokeOpacity.toFixed(2)}
-            </Label>
-            <Slider
-              id="cursor-stroke-opacity"
-              min={0}
-              max={1}
-              step={0.01}
-              value={[cursorStrokeOpacity]}
-              onValueChange={(value) => setCursorStrokeOpacity(value[0])}
-            />
-          </div>
-          <hr />
-          <div>
-            <Label htmlFor="cursor-size">커서 크기 {cursorSize}px</Label>
-            <Slider
-              id="cursor-size"
-              min={12}
-              max={48}
-              step={2}
-              value={[cursorSize]}
-              onValueChange={(value) => setCursorSize(value[0])}
-            />
-          </div>
-          <hr />
-          <div>
-          <Label htmlFor="key-display-monitor">키 표시 모니터</Label>
-          
-            <Select
-              value={keyDisplayMonitor.toString()}
-              onValueChange={(value) => setKeyDisplayMonitor(parseInt(value))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="모니터 선택" />
-              </SelectTrigger>
-              <SelectContent>
-                {displays.length > 0 ? (
-                  displays.map((display, index) => (
-                    <SelectItem key={display.id} value={index.toString()}>
-                      {display.name}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="-1">모니터 없음</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
 
+          {/* 분할선 */}
+          <div
+            ref={dividerRef}
+            className="w-1 cursor-col-resize bg-gray-200 transition-all duration-200 ease-in-out hover:bg-gray-300"
+            onMouseDown={handleMouseDown}
+          />
+
+          {/* 키 설정 */}
+          <div
+            className="space-y-4 pl-4"
+            style={{ width: `${100 - cursorSettingsWidth}%` }}
+          >
+            <h3 className="text-center text-lg font-semibold">키 설정</h3>
+            <div className="flex items-center justify-center space-x-2">
+              <Label htmlFor="key-display-active" className="whitespace-nowrap">
+                키 표시 활성화
+              </Label>
+              <Switch
+                id="key-display-active"
+                checked={showKeyDisplay}
+                onCheckedChange={setShowKeyDisplay}
+              />
+            </div>
+            <div className="flex justify-around space-x-4">
+              <div className="flex flex-col space-y-2">
+                <Label
+                  htmlFor="key-display-monitor"
+                  className="whitespace-nowrap"
+                >
+                  키 표시 모니터
+                </Label>
+                <Select
+                  value={keyDisplayMonitor.toString()}
+                  onValueChange={(value) =>
+                    setKeyDisplayMonitor(parseInt(value))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="모니터 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {displays.length > 0 ? (
+                      displays.map((display, index) => (
+                        <SelectItem key={display.id} value={index.toString()}>
+                          {display.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="-1">모니터 없음</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col space-y-2">
+                <Label
+                  htmlFor="key-display-position"
+                  className="whitespace-nowrap"
+                >
+                  키 표시 위치
+                </Label>
+                <Select
+                  value={keyDisplayPosition}
+                  onValueChange={setKeyDisplayPosition}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="위치 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="top-left">좌측 상단</SelectItem>
+                    <SelectItem value="top-right">우측 상단</SelectItem>
+                    <SelectItem value="bottom-left">좌측 하단</SelectItem>
+                    <SelectItem value="bottom-right">우측 하단</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Label
+                htmlFor="key-display-duration"
+                className="whitespace-nowrap"
+              >
+                지속시간
+              </Label>
+              <Slider
+                id="key-display-duration"
+                min={500}
+                max={5000}
+                step={100}
+                value={[keyDisplayDuration]}
+                onValueChange={(value) => setKeyDisplayDuration(value[0])}
+              />
+              <span className="whitespace-nowrap">
+                {(keyDisplayDuration / 1000).toFixed(1)}초
+              </span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Label
+                htmlFor="key-display-font-size"
+                className="whitespace-nowrap"
+              >
+                폰트 크기
+              </Label>
+              <Slider
+                id="key-display-font-size"
+                min={10}
+                max={60}
+                step={1}
+                value={[keyDisplayFontSize]}
+                onValueChange={(value) => setKeyDisplayFontSize(value[0])}
+              />
+              <span>{keyDisplayFontSize}px</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-evenly space-x-2">
+                <div className="flex items-center">
+                  <Label
+                    htmlFor="key-display-background-color"
+                    className="whitespace-nowrap"
+                  >
+                    키 표시 배경색&nbsp;&nbsp;
+                  </Label>
+                  <input
+                    type="color"
+                    id="key-display-background-color"
+                    value={keyDisplayBackgroundColor}
+                    onChange={(e) =>
+                      setKeyDisplayBackgroundColor(e.target.value)
+                    }
+                    className="h-8 w-8"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <Label
+                    htmlFor="key-display-text-color"
+                    className="whitespace-nowrap"
+                  >
+                    키 표시 텍스트 색상&nbsp;&nbsp;
+                  </Label>
+                  <input
+                    type="color"
+                    id="key-display-text-color"
+                    value={keyDisplayTextColor}
+                    onChange={(e) => setKeyDisplayTextColor(e.target.value)}
+                    className="h-8 w-8"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Label
+                  htmlFor="key-display-background-opacity"
+                  className="whitespace-nowrap"
+                >
+                  배경 투명도
+                </Label>
+                <Slider
+                  id="key-display-background-opacity"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={[keyDisplayBackgroundOpacity]}
+                  onValueChange={(value) =>
+                    setKeyDisplayBackgroundOpacity(value[0])
+                  }
+                />
+                <span>{keyDisplayBackgroundOpacity.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
         </div>
-          <div>
-            <Label htmlFor="key-display-duration">
-              키 표시 지속시간 {keyDisplayDuration}ms
-            </Label>
-            <Slider
-              id="key-display-duration"
-              min={500}
-              max={5000}
-              step={100}
-              value={[keyDisplayDuration]}
-              onValueChange={(value) => setKeyDisplayDuration(value[0])}
-            />
-          </div>
-          <div>
-            <Label htmlFor="key-display-font-size">
-              키 표시 폰트 크기 {keyDisplayFontSize}px
-            </Label>
-            <Slider
-              id="key-display-font-size"
-              min={10}
-              max={30}
-              step={1}
-              value={[keyDisplayFontSize]}
-              onValueChange={(value) => setKeyDisplayFontSize(value[0])}
-            />
-          </div>
-          <div className="flex items-center justify-center space-x-2">
-            <Label htmlFor="key-display-background-color">키 표시 배경색</Label>
-            <input
-              type="color"
-              id="key-display-background-color"
-              value={keyDisplayBackgroundColor}
-              onChange={(e) => setKeyDisplayBackgroundColor(e.target.value)}
-              className="block"
-            />
-          </div>
-          <div>
-            <Label htmlFor="key-display-background-opacity">
-              키 표시 배경 불투명도 {keyDisplayBackgroundOpacity.toFixed(2)}
-            </Label>
-            <Slider
-              id="key-display-background-opacity"
-              min={0}
-              max={1}
-              step={0.01}
-              value={[keyDisplayBackgroundOpacity]}
-              onValueChange={(value) =>
-                setKeyDisplayBackgroundOpacity(value[0])
-              }
-            />
-          </div>
-          <div className="flex items-center justify-center space-x-2">
-            <Label htmlFor="key-display-text-color">키 표시 텍스트 색상</Label>
-            <input
-              type="color"
-              id="key-display-text-color"
-              value={keyDisplayTextColor}
-              onChange={(e) => setKeyDisplayTextColor(e.target.value)}
-              className="block"
-            />
-          </div>
-        </div>
+        <hr />
       </div>
+      <Advertisement />
     </>
   );
 }

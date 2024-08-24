@@ -10,6 +10,8 @@ interface Settings {
   keyDisplayFontSize: number;
   keyDisplayBackgroundColor: string;
   keyDisplayTextColor: string;
+  keyDisplayPosition: string;
+  showKeyDisplay: boolean; // 추가된 설정
 }
 
 interface KeyPress {
@@ -34,6 +36,8 @@ export const Overlay: React.FC = () => {
     keyDisplayFontSize: 16,
     keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.7)",
     keyDisplayTextColor: "rgba(255, 255, 255, 1)",
+    keyDisplayPosition: "bottom-right",
+    showKeyDisplay: true, // 기본값 설정
   });
   const [mousePosition, setMousePosition] = useState<{
     x: number;
@@ -66,7 +70,10 @@ export const Overlay: React.FC = () => {
   );
 
   const handleKeyPress = useCallback((keyPress: KeyPress) => {
-    if (keyPress.displayId === settingsRef.current.keyDisplayMonitor) {
+    if (
+      settingsRef.current.showKeyDisplay &&
+      keyPress.displayId === settingsRef.current.keyDisplayMonitor
+    ) {
       setKeyPresses((prev) => {
         const newKeyPresses = [...prev, keyPress];
         setTimeout(() => {
@@ -104,6 +111,21 @@ export const Overlay: React.FC = () => {
     };
   }, []);
 
+  const getPositionClasses = (position: string) => {
+    switch (position) {
+      case "top-left":
+        return "top-4 left-4 items-start";
+      case "top-right":
+        return "top-4 right-4 items-end";
+      case "bottom-left":
+        return "bottom-4 left-4 items-start";
+      case "bottom-right":
+        return "bottom-4 right-4 items-end";
+      default:
+        return "bottom-4 right-4 items-end";
+    }
+  };
+
   return (
     <div className="pointer-events-none fixed inset-0" style={{ zIndex: 9999 }}>
       {mousePosition && settings.showCursorHighlight && (
@@ -122,8 +144,10 @@ export const Overlay: React.FC = () => {
           aria-hidden="true"
         />
       )}
-      {displayId === settings.keyDisplayMonitor && (
-        <div className="fixed bottom-4 right-4 flex flex-col items-end">
+      {settings.showKeyDisplay && displayId === settings.keyDisplayMonitor && (
+        <div
+          className={`fixed ${getPositionClasses(settings.keyDisplayPosition)} flex flex-col`}
+        >
           {keyPresses.map((keyPress) => (
             <div
               key={keyPress.timestamp}
@@ -133,6 +157,9 @@ export const Overlay: React.FC = () => {
                 color: settings.keyDisplayTextColor,
                 fontSize: `${settings.keyDisplayFontSize}px`,
                 animation: `fadeInOut ${settings.keyDisplayDuration}ms ease-in-out`,
+                textAlign: settings.keyDisplayPosition.includes("left")
+                  ? "left"
+                  : "right",
               }}
             >
               {[

@@ -36,8 +36,9 @@ let overlayWindows = [];
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
-    width: 350,
-    height: 750,
+    width: 600,
+    height: 492,
+    // 광고배너가 딱 100px임 지금
     frame: false,
     resizable: false,
     icon: path.join(__dirname, "../../public/icon.png"),
@@ -213,8 +214,9 @@ let currentSettings = {
   keyDisplayMonitor: 0,
   keyDisplayDuration: 2000,
   keyDisplayFontSize: 16,
-  keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.7)",
+  keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.2)",
   keyDisplayTextColor: "rgba(255, 255, 255, 1)",
+  keyDisplayPosition: "bottom-right",
 };
 
 app.whenReady().then(() => {
