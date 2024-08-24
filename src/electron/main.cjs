@@ -131,22 +131,24 @@ function captureKeyboardEvents() {
     'BACK SPACE': 'Backspace', 'CAPS LOCK': 'CapsLock',
     'SPACE': 'Space', 'TAB': 'Tab',
     'UP ARROW': '↑', 'DOWN ARROW': '↓', 'LEFT ARROW': '←', 'RIGHT ARROW': '→',
-    'PERIOD': '.', 'COMMA': ',', 'SEMICOLON': ';', 'SLASH': '/',
+    'PERIOD': '.', 'COMMA': ',', 'SEMICOLON': ';', 'FORWARD SLASH': '/',
     'BACK SLASH': '\\', 'EQUAL': '=', 'MINUS': '-', 'OPEN BRACKET': '[',
     'CLOSE BRACKET': ']', 'QUOTE': "'", 'BACK QUOTE': '`'
   };
 
   function getKeyName(name) {
-    if (name.length === 1 && name >= 'A' && name <= 'Z') {
-      const shouldBeUpperCase = (capsLockOn && !specialKeys.shift) || (!capsLockOn && specialKeys.shift);
-      return shouldBeUpperCase ? name : name.toLowerCase();
+    if (name in keyNameMap) {
+      return keyNameMap[name];
     }
-    return keyNameMap[name] || name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+    if (name.length === 1) {
+      return name;
+    }
+    return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
   }
 
   function sendKeyPress(combination, keyDetails) {
     const currentTime = Date.now();
-    if (combination !== lastCombination || currentTime - lastTimestamp > 500) {
+    if (combination !== lastCombination || currentTime - lastTimestamp > 200) {
       overlayWindows.forEach((window, index) => {
         window.webContents.send('key-press', { ...keyDetails, displayId: index, combination });
         console.log('key-press', { ...keyDetails, combination });
@@ -181,8 +183,14 @@ function captureKeyboardEvents() {
         combination = `${specialKeyCombination.join(' + ')} + ${keyName}`;
       }
 
+      let displayKey = keyName;
+      if (keyName.length === 1 && keyName >= 'A' && keyName <= 'Z') {
+        const shouldBeUpperCase = (capsLockOn && !specialKeys.shift) || (!capsLockOn && specialKeys.shift);
+        displayKey = shouldBeUpperCase ? keyName : keyName.toLowerCase();
+      }
+
       const keyDetails = {
-        key: keyName,
+        key: displayKey,
         code: e.rawKey._nameRaw,
         ctrlKey: specialKeys.ctrl,
         shiftKey: specialKeys.shift,
@@ -192,7 +200,7 @@ function captureKeyboardEvents() {
         timestamp: Date.now()
       };
 
-      sendKeyPress(combination, keyDetails);
+      sendKeyPress(combination.replace(keyName, displayKey), keyDetails);
     }
   });
 }
@@ -254,7 +262,6 @@ app.whenReady().then(() => {
   // Send initial displays data when requested
   ipcMain.on('request-displays', (event) => {
       const displays = getConnectedDisplays();
-      console.log("Sending displays data:", displays);
       mainWindow.webContents.send('displays-updated', displays);
   });
   
