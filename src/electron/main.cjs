@@ -1,5 +1,5 @@
 const path = require("path");
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, globalShortcut } = require("electron");
+const { app, BrowserWindow, BrowserView, screen, ipcMain, Tray, Menu, nativeImage, globalShortcut, shell } = require("electron");
 const fs = require('fs');
 const { GlobalKeyboardListener } = require('node-global-key-listener');
 
@@ -12,8 +12,9 @@ let PORT = process.env.NODE_ENV === 'development' ? 3000 : 1994;
 
 const express = require('express');
 const server = express();
+const isDev = process.env.NODE_ENV === 'development';
 
-if (process.env.NODE_ENV !== 'development') {
+if (!isDev) {
   server.use(express.static(path.join(__dirname, '../../dist')));
   server.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../../dist', 'index.html'));
@@ -37,10 +38,9 @@ let overlayWindows = [];
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 600,
-    height: 492,
-    // 광고배너가 딱 100px임 지금
+    height: 410,
     frame: false,
-    resizable: false,
+    resizable: isDev,
     icon: path.join(__dirname, "../../public/icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -152,7 +152,7 @@ function captureKeyboardEvents() {
     if (combination !== lastCombination || currentTime - lastTimestamp > 200) {
       overlayWindows.forEach((window, index) => {
         window.webContents.send('key-press', { ...keyDetails, displayId: index, combination });
-        console.log('key-press', { ...keyDetails, combination });
+        // console.log('key-press', { ...keyDetails, combination });
       });
       lastCombination = combination;
       lastTimestamp = currentTime;

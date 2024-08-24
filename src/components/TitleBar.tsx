@@ -1,10 +1,11 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-import kersorLogo from "/kersor.svg";
 import { Minus, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+
+import kersorLogo from "/kersor.svg";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
@@ -71,9 +72,12 @@ export default function TitleBar() {
           <div className="flex items-center pl-2">
             <img src={kersorLogo} alt="kersor" className="h-6 w-6" />
             &nbsp;&nbsp;
-            <span className="text-white text-lg">커서</span>
+            <span className="text-lg text-white">커서</span>
           </div>
-          <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties} className="flex items-center">
+          <div
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            className="flex items-center"
+          >
             <Button onClick={minimize} size="icon">
               <Minus className="h-6 w-6" />
             </Button>
@@ -84,6 +88,7 @@ export default function TitleBar() {
           </div>
         </div>
       )}
+      <div className="h-[30px]" />
     </>
   );
 }
