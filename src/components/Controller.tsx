@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import "@/globals.css";
 
+import { Keyboard, MousePointer2 } from "lucide-react";
+
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -132,14 +134,17 @@ export default function Controller() {
         <div className="mb-2 flex items-center justify-center">
           <h2 className="text-xl font-bold">커서 Kersor</h2>
         </div>
-        <hr className="mb-2"/>
+        <hr className="mb-2" />
         <div ref={containerRef} className="relative flex flex-row">
           {/* 커서 설정 */}
           <div
             className="space-y-4 pr-4"
             style={{ width: `${cursorSettingsWidth}%` }}
           >
-            <h3 className="text-center text-lg font-semibold">커서 설정</h3>
+            <h3 className="flex items-center justify-center space-x-2 text-center text-lg font-semibold">
+              <MousePointer2 className="h-4 w-4" />
+              <span>커서 설정</span>
+            </h3>
             <div className="flex items-center justify-center space-x-2">
               <Label htmlFor="cursor-highlight" className="whitespace-nowrap">
                 커서 활성화
@@ -246,7 +251,10 @@ export default function Controller() {
             className="space-y-4 pl-4"
             style={{ width: `${100 - cursorSettingsWidth}%` }}
           >
-            <h3 className="text-center text-lg font-semibold">키 설정</h3>
+            <h3 className="flex items-center justify-center space-x-2 text-center text-lg font-semibold">
+              <Keyboard className="h-4 w-4" />
+              <span>키 설정</span>
+            </h3>
             <div className="flex items-center justify-center space-x-2">
               <Label htmlFor="key-display-active" className="whitespace-nowrap">
                 키 표시 활성화
