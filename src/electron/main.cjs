@@ -1,11 +1,6 @@
 const path = require("path");
-const { app, BrowserWindow, BrowserView, screen, ipcMain, Tray, Menu, nativeImage, globalShortcut, shell } = require("electron");
-const fs = require('fs');
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, globalShortcut } = require("electron");
 const { GlobalKeyboardListener } = require('node-global-key-listener');
-
-const templateDir = __dirname;
-const packageJsonPath = path.join(templateDir, '../../package.json');
-const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
 
 require("dotenv").config();
 let PORT = process.env.NODE_ENV === 'development' ? 3000 : 1994;
@@ -37,7 +32,7 @@ let overlayWindows = [];
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
-    width: 600,
+    width: 450,
     height: 410,
     frame: false,
     resizable: isDev,
@@ -91,8 +86,9 @@ function createOverlayWindows() {
   });
 }
 
+let mouseEventInterval;
 function captureMouseEvents() {
-  setInterval(() => {
+  mouseEventInterval = setInterval(() => {
     const cursorPosition = screen.getCursorScreenPoint();
     const activeDisplay = screen.getDisplayNearestPoint(cursorPosition);
 
@@ -226,14 +222,17 @@ app.whenReady().then(() => {
   captureKeyboardEvents();
 
   const tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "../../public/icon.png")));
-  tray.setToolTip(pkg.build.productName);
+  tray.setToolTip("커서");
   tray.on("double-click", () => mainWindow.show());
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "Open", type: "normal", click: () => mainWindow.show() },
-      { label: "Quit", type: "normal", click: () => app.quit() },
-    ])
-  );
+  const contextMenu = Menu.buildFromTemplate([
+    { label: "Open", type: "normal", click: () => mainWindow.show() },
+    { label: "Quit", type: "normal", click: () => {
+        clearInterval(mouseEventInterval);
+        app.quit();
+      }
+    },
+  ]);
+  tray.setContextMenu(contextMenu);
 
   if (process.env.NODE_ENV === "development") {
     const menu = Menu.buildFromTemplate([
