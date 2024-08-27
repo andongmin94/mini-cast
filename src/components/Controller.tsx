@@ -99,7 +99,7 @@ export default function Controller() {
   return (
     <>
       <TitleBar />
-      <div className="pointer-events-auto overflow-hidden p-4 pb-0">
+      <div className="pointer-events-auto overflow-hidden p-4">
         <Tabs defaultValue="cursor" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="cursor">
