@@ -224,15 +224,15 @@ app.whenReady().then(() => {
   const tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "../../public/icon.png")));
   tray.setToolTip("커서");
   tray.on("double-click", () => mainWindow.show());
-  const contextMenu = Menu.buildFromTemplate([
+  tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Open", type: "normal", click: () => mainWindow.show() },
     { label: "Quit", type: "normal", click: () => {
         clearInterval(mouseEventInterval);
         app.quit();
       }
     },
-  ]);
-  tray.setContextMenu(contextMenu);
+  ]));
+
 
   if (process.env.NODE_ENV === "development") {
     const menu = Menu.buildFromTemplate([
