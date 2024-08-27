@@ -1,5 +1,5 @@
 const path = require("path");
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, globalShortcut } = require("electron");
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, globalShortcut, shell } = require("electron");
 const { GlobalKeyboardListener } = require('node-global-key-listener');
 
 require("dotenv").config();
@@ -32,8 +32,8 @@ let overlayWindows = [];
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
-    width: 450,
-    height: 410,
+    width: 416,
+    height: 320,
     frame: false,
     resizable: isDev,
     icon: path.join(__dirname, "../../public/icon.png"),
@@ -43,6 +43,57 @@ const createWindow = () => {
     },
   });
   mainWindow.loadURL(`http://localhost:${PORT}`);
+
+  // 광고용 윈도우 생성
+  const adWindowWidth = mainWindow.getSize()[0];
+  const adWindowHeight = 120;
+  const adWindow = new BrowserWindow({
+    width: adWindowWidth,
+    height: adWindowHeight, // 광고용 윈도우 높이 설정
+    frame: false,
+    resizable: isDev,
+    skipTaskbar: true,
+    show: false, // 메인 윈도우가 로드된 후에 광고용 윈도우를 보여줌
+    webPreferences: {
+      webSecurity: false,
+    },
+  });
+
+  // 광고용 윈도우의 URL 설정
+  adWindow.loadURL('https://www.andongmin.com//ad/kersor');
+
+  // 메인 윈도우가 로드된 후 광고용 윈도우를 보여줌
+  mainWindow.webContents.on('did-finish-load', () => {
+    const mainBounds = mainWindow.getBounds();
+    adWindow.setBounds({
+      x: mainBounds.x,
+      y: mainBounds.y + mainBounds.height, // 메인 윈도우 아래에 위치
+      width: mainBounds.width,
+      height: adWindowHeight, // 광고용 윈도우 높이 설정
+    });
+    adWindow.show();
+  });
+
+  // 메인 윈도우가 이동할 때 광고용 윈도우의 위치를 업데이트
+  mainWindow.on('move', () => {
+    const mainBounds = mainWindow.getBounds();
+    adWindow.setBounds({
+      x: mainBounds.x,
+      y: mainBounds.y + mainBounds.height, // 메인 윈도우 아래에 위치
+      width: mainBounds.width,
+      height: adWindowHeight, // 광고용 윈도우 높이 설정
+    });
+  });
+
+  // 메인 윈도우가 포커스를 받을 때 광고용 윈도우도 포커스를 받음
+  mainWindow.on('focus', () => {
+    adWindow.setAlwaysOnTop(true);
+  });
+
+  adWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
 };
 
 function getConnectedDisplays() {
