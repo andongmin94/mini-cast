@@ -3,7 +3,7 @@ import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import Controller from "@/components/Controller";
 import { Overlay } from "@/components/overlay-component";
 
-function App() {
+export default function App() {
   return (
     <Router>
       <Routes>
@@ -13,5 +13,3 @@ function App() {
     </Router>
   );
 }
-
-export default App;
