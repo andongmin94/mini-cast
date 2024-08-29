@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Settings {
   cursorFillColor: string;
@@ -25,7 +25,7 @@ interface KeyPress {
   displayId: number;
 }
 
-export const Overlay: React.FC = () => {
+export default function Overlay() {
   const [settings, setSettings] = useState<Settings>({
     cursorFillColor: "rgba(255, 255, 0, 0.5)",
     cursorStrokeColor: "rgba(255, 0, 0, 0.5)",
