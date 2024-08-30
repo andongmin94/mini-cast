@@ -61,7 +61,7 @@ const createWindow = () => {
     },
   });
 
-  adWindow.loadURL('https://www.andongmin.com//ad/kersor');
+  adWindow.loadURL('https://www.andongmin.com/ad/kersor');
 
   const updateAdWindowPosition = () => {
     const mainBounds = mainWindow.getBounds();
@@ -293,13 +293,15 @@ app.whenReady().then(() => {
     });
   } else {
     // 메인 윈도우가 닫힐 때 광고 윈도우도 함께 닫힘
-    mainWindow.on('close', () => {
-      if (!adWindow.isDestroyed()) {
-        adWindow.close();
-      }
-      clearInterval(mouseEventInterval);
-      app.quit();
-    });
+    if (mainWindow) {
+      mainWindow.on('close', () => {
+        if (!adWindow.isDestroyed()) {
+          adWindow.close();
+        }
+        clearInterval(mouseEventInterval);
+        app.quit();
+      });
+    }
   }
   
   app.on("activate", () => {
