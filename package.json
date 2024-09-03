@@ -6,14 +6,14 @@
   "main": "src/electron/main.cjs",
   "build": {
     "appId": "커서",
+    "productName": "커서",
+    "copyright": "Copyright © andongmin",
     "mac": {
       "icon": "public/icon.png"
     },
     "win": {
       "icon": "public/icon.png"
     },
-    "productName": "커서",
-    "copyright": "Copyright © andongmin",
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
