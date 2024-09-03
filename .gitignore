@@ -1,7 +1,9 @@
 # Excepts for git
 node_modules
+dist
 dist_app
 *.local
+package-lock.json
 
 # Logs
 logs

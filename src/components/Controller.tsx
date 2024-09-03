@@ -56,7 +56,7 @@ export default function Controller() {
   const [keyDisplayDuration, setKeyDisplayDuration] = useState(2000);
   const [keyDisplayFontSize, setKeyDisplayFontSize] = useState(16);
   const [keyDisplayBackgroundColor, setKeyDisplayBackgroundColor] = useState("#000000");
-  const [keyDisplayBackgroundOpacity, setKeyDisplayBackgroundOpacity] = useState(0.2);
+  const [keyDisplayBackgroundOpacity, setKeyDisplayBackgroundOpacity] = useState(0.5);
   const [keyDisplayTextColor, setKeyDisplayTextColor] = useState("#FFFFFF");
   const [keyDisplayPosition, setKeyDisplayPosition] = useState("bottom-right");
   const [displays, setDisplays] = useState<Display[]>([]);
