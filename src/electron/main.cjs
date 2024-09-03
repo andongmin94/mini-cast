@@ -34,7 +34,7 @@ let adWindow;
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 416,
-    height: 320,
+    height: 330,
     frame: false,
     resizable: isDev,
     icon: path.join(__dirname, "../../public/icon.png"),
@@ -44,6 +44,30 @@ const createWindow = () => {
     },
   });
   mainWindow.loadURL(`http://localhost:${PORT}`);
+
+  // 우클릭 메뉴 비활성화
+  mainWindow.hookWindowMessage(278, function(e) {
+    mainWindow.setEnabled(false);
+    setTimeout(() => mainWindow.setEnabled(true), 100);
+    return true;
+  });
+
+  // 종료 설정
+  if (process.platform === 'darwin') {
+    mainWindow.on('close', (e) => {
+      if (!app.isQuiting) {
+        e.preventDefault();
+        mainWindow.hide();
+        app.dock.hide();
+      }
+      return false;
+    });
+  } else {
+    mainWindow.on('close', () => {
+      clearInterval(mouseEventInterval);
+      app.quit();
+    });
+  }
 
   // 광고용 윈도우 생성
   const adWindowWidth = mainWindow.getSize()[0];
@@ -282,26 +306,6 @@ app.whenReady().then(() => {
       app.dock.show();
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
-
-    mainWindow.on('close', (e) => {
-      if (!app.isQuiting) {
-        e.preventDefault();
-        mainWindow.hide();
-        app.dock.hide();
-      }
-      return false;
-    });
-  } else {
-    // 메인 윈도우가 닫힐 때 광고 윈도우도 함께 닫힘
-    if (mainWindow) {
-      mainWindow.on('close', () => {
-        if (!adWindow.isDestroyed()) {
-          adWindow.close();
-        }
-        clearInterval(mouseEventInterval);
-        app.quit();
-      });
-    }
   }
   
   app.on("activate", () => {
@@ -312,12 +316,8 @@ app.whenReady().then(() => {
   tray.setToolTip("커서");
   tray.on("double-click", () => mainWindow.show());
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Open", type: "normal", click: () => mainWindow.show() },
-    { label: "Quit", type: "normal", click: () => {
-        clearInterval(mouseEventInterval);
-        app.quit();
-      }
-    },
+    { label: "열기", type: "normal", click: () => mainWindow.show() },
+    { label: "종료", type: "normal", click: () => mainWindow.close()},
   ]));
 
 
