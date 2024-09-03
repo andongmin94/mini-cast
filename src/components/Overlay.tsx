@@ -11,7 +11,7 @@ interface Settings {
   keyDisplayBackgroundColor: string;
   keyDisplayTextColor: string;
   keyDisplayPosition: string;
-  showKeyDisplay: boolean; // 추가된 설정
+  showKeyDisplay: boolean;
 }
 
 interface KeyPress {
@@ -37,7 +37,7 @@ export default function Overlay() {
     keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.7)",
     keyDisplayTextColor: "rgba(255, 255, 255, 1)",
     keyDisplayPosition: "bottom-right",
-    showKeyDisplay: true, // 기본값 설정
+    showKeyDisplay: true,
   });
   const [mousePosition, setMousePosition] = useState<{
     x: number;
@@ -187,7 +187,7 @@ export default function Overlay() {
       )}
     </div>
   );
-};
+}
 
 // CSS animation for fade in and out effect
 const style = document.createElement("style");
