@@ -45,7 +45,7 @@ async function createWindow() {
     keyDisplayDuration: 2000,
     keyDisplayFontSize: 16,
     keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.5)",
-    keyDisplayTextColor: "rgba(255, 255, 255, 1)",
+    keyDisplayTextColor: "#FFFFFF",
     keyDisplayPosition: "bottom-right",
     showKeyDisplay: true,
   });
@@ -88,48 +88,48 @@ async function createWindow() {
   }
 
   // 광고용 윈도우 생성
-  const adWindowWidth = mainWindow.getSize()[0];
-  const adWindowHeight = 120;
-  adWindow = new BrowserWindow({
-    width: adWindowWidth,
-    height: adWindowHeight,
-    frame: false,
-    resizable: false,
-    skipTaskbar: true,
-    show: false,
-    parent: mainWindow,
-    webPreferences: {
-      webSecurity: false,
-    },
-  });
+  // const adWindowWidth = mainWindow.getSize()[0];
+  // const adWindowHeight = 120;
+  // adWindow = new BrowserWindow({
+  //   width: adWindowWidth,
+  //   height: adWindowHeight,
+  //   frame: false,
+  //   resizable: false,
+  //   skipTaskbar: true,
+  //   show: false,
+  //   parent: mainWindow,
+  //   webPreferences: {
+  //     webSecurity: false,
+  //   },
+  // });
 
-  adWindow.loadURL('https://www.andongmin.com/ad/kersor');
+  // adWindow.loadURL('https://www.andongmin.com/ad/kersor');
 
-  const updateAdWindowPosition = () => {
-    const mainBounds = mainWindow.getBounds();
-    adWindow.setBounds({
-      x: mainBounds.x,
-      y: mainBounds.y + mainBounds.height,
-      width: mainBounds.width,
-      height: adWindowHeight,
-    });
-  };
+  // const updateAdWindowPosition = () => {
+  //   const mainBounds = mainWindow.getBounds();
+  //   adWindow.setBounds({
+  //     x: mainBounds.x,
+  //     y: mainBounds.y + mainBounds.height,
+  //     width: mainBounds.width,
+  //     height: adWindowHeight,
+  //   });
+  // };
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    updateAdWindowPosition();
-    adWindow.show();
-  });
+  // mainWindow.webContents.on('did-finish-load', () => {
+  //   updateAdWindowPosition();
+  //   adWindow.show();
+  // });
 
-  mainWindow.on('move', updateAdWindowPosition);
-  mainWindow.on('resize', updateAdWindowPosition);
-  mainWindow.on('show', () => {
-    adWindow.show();
-  })
+  // mainWindow.on('move', updateAdWindowPosition);
+  // mainWindow.on('resize', updateAdWindowPosition);
+  // mainWindow.on('show', () => {
+  //   adWindow.show();
+  // })
 
-  adWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  // adWindow.webContents.setWindowOpenHandler(({ url }) => {
+  //   shell.openExternal(url);
+  //   return { action: 'deny' };
+  // });
 };
 
 function getConnectedDisplays() {
