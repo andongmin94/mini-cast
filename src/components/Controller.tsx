@@ -18,7 +18,20 @@ function hexToRgba(hex: string, alpha: number = 1) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${1 - alpha})`;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function rgbaToHex(rgba: string): { hex: string; opacity: number } {
+  const match = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)/);
+  if (match) {
+    const r = parseInt(match[1]);
+    const g = parseInt(match[2]);
+    const b = parseInt(match[3]);
+    const a = match[4] ? parseFloat(match[4]) : 1;
+    const hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    return { hex, opacity: 1 - a };
+  }
+  return { hex: "#000000", opacity: 0 };
 }
 
 interface Display {
@@ -50,6 +63,38 @@ export default function Controller() {
   const [showKeyDisplay, setShowKeyDisplay] = useState(true);
 
   useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const savedSettings = await electron.get();
+        if (savedSettings) {
+          const { hex: fillHex, opacity: fillOpacity } = rgbaToHex(savedSettings.cursorFillColor);
+          const { hex: strokeHex, opacity: strokeOpacity } = rgbaToHex(savedSettings.cursorStrokeColor);
+          const { hex: bgHex, opacity: bgOpacity } = rgbaToHex(savedSettings.keyDisplayBackgroundColor);
+
+          setCursorFillColor(fillHex);
+          setCursorFillOpacity(fillOpacity);
+          setCursorStrokeColor(strokeHex);
+          setCursorStrokeOpacity(strokeOpacity);
+          setCursorSize(savedSettings.cursorSize);
+          setShowCursorHighlight(savedSettings.showCursorHighlight);
+          setKeyDisplayMonitor(savedSettings.keyDisplayMonitor);
+          setKeyDisplayDuration(savedSettings.keyDisplayDuration);
+          setKeyDisplayFontSize(savedSettings.keyDisplayFontSize);
+          setKeyDisplayBackgroundColor(bgHex);
+          setKeyDisplayBackgroundOpacity(bgOpacity);
+          setKeyDisplayTextColor(savedSettings.keyDisplayTextColor);
+          setKeyDisplayPosition(savedSettings.keyDisplayPosition);
+          setShowKeyDisplay(savedSettings.showKeyDisplay);
+        }
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+      }
+    };
+
+    loadSettings();
+  }, []);
+
+  useEffect(() => {
     const handleDisplaysUpdated = (updatedDisplays: Display[]) => {
       setDisplays(updatedDisplays);
     };
@@ -63,9 +108,9 @@ export default function Controller() {
   }, []);
 
   useEffect(() => {
-    electron.send("update-settings", {
-      cursorFillColor: hexToRgba(cursorFillColor, cursorFillOpacity),
-      cursorStrokeColor: hexToRgba(cursorStrokeColor, cursorStrokeOpacity),
+    const settings = {
+      cursorFillColor: hexToRgba(cursorFillColor, 1 - cursorFillOpacity),
+      cursorStrokeColor: hexToRgba(cursorStrokeColor, 1 - cursorStrokeOpacity),
       cursorSize,
       showCursorHighlight,
       keyDisplayMonitor,
@@ -73,12 +118,14 @@ export default function Controller() {
       keyDisplayFontSize,
       keyDisplayBackgroundColor: hexToRgba(
         keyDisplayBackgroundColor,
-        keyDisplayBackgroundOpacity
+        1 - keyDisplayBackgroundOpacity
       ),
       keyDisplayTextColor,
       keyDisplayPosition,
       showKeyDisplay,
-    });
+    };
+
+    electron.send("update-settings", settings);
   }, [
     cursorFillColor,
     cursorFillOpacity,
@@ -101,7 +148,7 @@ export default function Controller() {
       <TitleBar />
       <div className="pointer-events-auto overflow-hidden p-4">
         <Tabs defaultValue="cursor" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="cursor">
               <MousePointer2 className="mr-2 h-4 w-4" />
               마우스 설정
@@ -109,9 +156,9 @@ export default function Controller() {
             <TabsTrigger value="keyboard">
               <Keyboard className="mr-2 h-4 w-4" />키보드 설정
             </TabsTrigger>
-            <TabsTrigger value="canvas">
+            {/* <TabsTrigger value="canvas">
               <PenTool className="mr-2 h-4 w-4" />캔버스 설정
-            </TabsTrigger>
+            </TabsTrigger> */}
           </TabsList>
           <TabsContent value="cursor" className="space-y-4">
             <div className="flex items-center justify-center space-x-2">
