@@ -294,10 +294,11 @@ app.whenReady().then(() => {
   captureMouseEvents();
   captureKeyboardEvents();
 
+  // 기본 생성 세팅
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
   });
-
+  // macOS-specific settings
   if (process.platform === 'darwin') {
     app.on('before-quit', () => {
       tray.destroy();
@@ -307,11 +308,12 @@ app.whenReady().then(() => {
       app.dock.show();
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
+  } else {
+    // 모든 플랫폼에 적용되는 activate 이벤트 핸들러 (macOS 제외)
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
   }
-  
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
 
   const tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "../../public/icon.png")));
   tray.setToolTip("커서");
