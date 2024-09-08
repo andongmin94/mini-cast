@@ -89,7 +89,7 @@ async function createWindow() {
 
   // 광고용 윈도우 생성
   const adWindowWidth = mainWindow.getSize()[0];
-  const adWindowHeight = 120;
+  const adWindowHeight = 121;
   adWindow = new BrowserWindow({
     width: adWindowWidth,
     height: adWindowHeight,
