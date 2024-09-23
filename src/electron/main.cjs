@@ -191,7 +191,7 @@ function captureMouseEvents() {
         window.webContents.send('mouse-move', null);
       }
     });
-  }, 16);
+  }, 8);
 }
 
 function captureKeyboardEvents() {
