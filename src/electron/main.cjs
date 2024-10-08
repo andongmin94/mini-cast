@@ -103,7 +103,7 @@ async function createWindow() {
     },
   });
 
-  adWindow.loadURL('https://www.andongmin.com/ad/kersor');
+  adWindow.loadURL('https://andongmin.com/ad/kersor');
 
   const updateAdWindowPosition = () => {
     const mainBounds = mainWindow.getBounds();
