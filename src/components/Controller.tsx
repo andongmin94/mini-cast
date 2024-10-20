@@ -51,6 +51,7 @@ export default function Controller() {
   const [cursorStrokeColor, setCursorStrokeColor] = useState("#FF0000");
   const [cursorStrokeOpacity, setCursorStrokeOpacity] = useState(0.5);
   const [cursorSize, setCursorSize] = useState(30);
+  const [cursorStrokeSize, setCursorStrokeSize] = useState(3);
   const [showCursorHighlight, setShowCursorHighlight] = useState(true);
   const [keyDisplayMonitor, setKeyDisplayMonitor] = useState(0);
   const [keyDisplayDuration, setKeyDisplayDuration] = useState(2000);
@@ -65,7 +66,7 @@ export default function Controller() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const savedSettings = await electron.get();
+        const savedSettings = await electron.getSettings();
         if (savedSettings) {
           const { hex: fillHex, opacity: fillOpacity } = rgbaToHex(savedSettings.cursorFillColor);
           const { hex: strokeHex, opacity: strokeOpacity } = rgbaToHex(savedSettings.cursorStrokeColor);
@@ -76,6 +77,7 @@ export default function Controller() {
           setCursorStrokeColor(strokeHex);
           setCursorStrokeOpacity(strokeOpacity);
           setCursorSize(savedSettings.cursorSize);
+          setCursorStrokeSize(savedSettings.cursorStrokeSize);
           setShowCursorHighlight(savedSettings.showCursorHighlight);
           setKeyDisplayMonitor(savedSettings.keyDisplayMonitor);
           setKeyDisplayDuration(savedSettings.keyDisplayDuration);
@@ -112,6 +114,7 @@ export default function Controller() {
       cursorFillColor: hexToRgba(cursorFillColor, 1 - cursorFillOpacity),
       cursorStrokeColor: hexToRgba(cursorStrokeColor, 1 - cursorStrokeOpacity),
       cursorSize,
+      cursorStrokeSize,
       showCursorHighlight,
       keyDisplayMonitor,
       keyDisplayDuration,
@@ -132,6 +135,7 @@ export default function Controller() {
     cursorStrokeColor,
     cursorStrokeOpacity,
     cursorSize,
+    cursorStrokeSize,
     showCursorHighlight,
     keyDisplayMonitor,
     keyDisplayDuration,
@@ -240,6 +244,20 @@ export default function Controller() {
                     onValueChange={(value) => setCursorSize(value[0])}
                   />
                   <span>{cursorSize}px</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Label htmlFor="cursor-stroke-size" className="whitespace-nowrap">
+                    마우스 획 크기
+                  </Label>
+                  <Slider
+                    id="cursor-stroke-size"
+                    min={0}
+                    max={30}
+                    step={1}
+                    value={[cursorStrokeSize]}
+                    onValueChange={(value) => setCursorStrokeSize(value[0])}
+                  />
+                  <span>{cursorStrokeSize}px</span>
                 </div>
               </div>
             </div>
