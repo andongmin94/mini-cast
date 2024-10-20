@@ -40,6 +40,7 @@ async function createWindow() {
     cursorFillColor: "rgba(255, 255, 0, 0.5)",
     cursorStrokeColor: "rgba(255, 0, 0, 0.5)",
     cursorSize: 30,
+    cursorStrokeSize: 3,
     showCursorHighlight: true,
     keyDisplayMonitor: 0,
     keyDisplayDuration: 2000,
@@ -249,6 +250,11 @@ function captureKeyboardEvents() {
     }
 
     const keyName = getKeyName(e.name);
+    if (e.name === 'MOUSE LEFT' || e.name === 'MOUSE MIDDLE' || e.name === 'MOUSE RIGHT') {
+      overlayWindows.forEach((window) => {
+        window.webContents.send(e.name + ' ' + e.state);
+      });
+    };
 
     if (isSpecialKey && e.name !== 'CAPS LOCK') {
       specialKeys[keyName.toLowerCase()] = e.state === 'DOWN';
