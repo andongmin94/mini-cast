@@ -1,6 +1,6 @@
 # End User License Agreement (EULA)
 
-This End User License Agreement (hereinafter referred to as the "Agreement") is a legal contract between you (the "End User") and andongmin (the "Developer"). This Agreement governs the access to and use of the software application "Kersor" (the "Software").
+This End User License Agreement (hereinafter referred to as the "Agreement") is a legal contract between you (the "End User") and andongmin (the "Developer"). This Agreement governs the access to and use of the software application "mini-cast" (the "Software").
 
 ## 1. Grant of License
 The Developer grants the End User a non-exclusive, non-transferable, and revocable right to view the source code of the Software solely for the purpose of review or educational purposes. The End User is expressly prohibited from using, copying, modifying, merging, publishing, distributing, sublicensing, or selling the Software, or creating derivative works based on the Software.

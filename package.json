@@ -1,12 +1,12 @@
 {
-  "name": "kersor",
+  "name": "mini-cast",
   "version": "0.0.1",
   "type": "module",
   "author": "안동민",
   "main": "src/electron/main.cjs",
   "build": {
-    "appId": "커서",
-    "productName": "커서",
+    "appId": "미니캐스트",
+    "productName": "미니캐스트",
     "copyright": "Copyright © andongmin",
     "mac": {
       "icon": "public/icon.png"
@@ -17,7 +17,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "uninstallDisplayName": "커서"
+      "uninstallDisplayName": "미니캐스트"
     },
     "files": [
       "node_modules/**/*",

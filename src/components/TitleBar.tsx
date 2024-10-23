@@ -5,7 +5,7 @@ import { Minus, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import kersorLogo from "/kersor.svg";
+import MiniCastLogo from "/mini-cast.svg";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
@@ -70,9 +70,9 @@ export default function TitleBar() {
           style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
         >
           <div className="flex items-center pl-2">
-            <img src={kersorLogo} alt="kersor" className="size-6" />
+            <img src={MiniCastLogo} alt="mini-cast" className="size-6" />
             &nbsp;&nbsp;
-            <span className="text-lg text-white">커서</span>
+            <span className="text-lg text-white">미니캐스트</span>
           </div>
           <div
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
