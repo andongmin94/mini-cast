@@ -2,7 +2,7 @@
 
 |진행상태|구현내용|
 | ------ | ------ | 
-| :white_check_mark: |커서 하이라이팅|
+| :white_check_mark: |미니캐스트 하이라이팅|
 | :white_check_mark: |키보드 오버레이|
 | :white_check_mark: |다중 모니터 설정|
 | :white_check_mark: |광고 배너|
