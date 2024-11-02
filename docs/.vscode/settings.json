@@ -1,9 +1,10 @@
 {
-    "files.exclude": {
-        ".gitignore": true,
-        "public/fonts": true,
-        "vite.config.js": true,
-        ".vitepress/theme/components": true,
-        ".vitepress/tsconfig.json": true
-    }
+  "files.exclude": {
+    ".vscode": true,
+    ".gitignore": true,
+    "public/fonts": true,
+    "vite.config.js": true,
+    ".vitepress/theme/components": true,
+    ".vitepress/tsconfig.json": true
+  }
 }
