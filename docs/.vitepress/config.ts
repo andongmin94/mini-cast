@@ -39,8 +39,13 @@ export default defineConfig({
     logo: "/mini-cast.svg",
 
     editLink: {
-      pattern: "https://github.com/andongmin94/mini-cast/edit/main/docs",
-      text: "Suggest changes to this page",
+      pattern: "mailto:andongmin94@gmail.com",
+      text: "가이드 수정 제안하기",
+    },
+
+    docFooter: {
+      prev: '이전 페이지',
+      next: '다음 페이지'
     },
 
     footer: {
