@@ -154,7 +154,7 @@ function createOverlayWindows() {
       height: display.bounds.height,
       transparent: true,
       frame: false,
-      fullscreen: true,
+      focusable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
       webPreferences: {
@@ -170,7 +170,7 @@ function createOverlayWindows() {
       overlayWindow.webContents.send('update-settings', currentSettings);
     });
     
-    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    overlayWindow.setIgnoreMouseEvents(true);
   });
 }
 
