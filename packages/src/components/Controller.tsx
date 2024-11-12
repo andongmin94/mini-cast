@@ -46,9 +46,9 @@ interface Display {
 }
 
 export default function Controller() {
-  const [cursorFillColor, setCursorFillColor] = useState("#FFFF00");
+  const [cursorFillColor, setCursorFillColor] = useState("#0064FF");
   const [cursorFillOpacity, setCursorFillOpacity] = useState(0.5);
-  const [cursorStrokeColor, setCursorStrokeColor] = useState("#FF0000");
+  const [cursorStrokeColor, setCursorStrokeColor] = useState("#202632");
   const [cursorStrokeOpacity, setCursorStrokeOpacity] = useState(0.5);
   const [cursorSize, setCursorSize] = useState(30);
   const [cursorStrokeSize, setCursorStrokeSize] = useState(3);

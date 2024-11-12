@@ -37,8 +37,8 @@ async function createWindow() {
   const { default: Store } = await import('electron-store');
   store = new Store();
   currentSettings = store.get('settings', {
-    cursorFillColor: "rgba(255, 255, 0, 0.5)",
-    cursorStrokeColor: "rgba(255, 0, 0, 0.5)",
+    cursorFillColor: "rgba(0, 100, 255, 0.5)",
+    cursorStrokeColor: "rgba(32, 38, 50, 0.5)",
     cursorSize: 30,
     cursorStrokeSize: 3,
     showCursorHighlight: true,
