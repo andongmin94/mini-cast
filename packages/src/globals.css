@@ -83,4 +83,8 @@
     -ms-user-select: none;
     user-select: none;
   }
+
+  body * {
+    @apply focus:ring-0 focus:ring-offset-0 !important;
+  }
 }
