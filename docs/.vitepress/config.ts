@@ -55,7 +55,7 @@ export default defineConfig({
 
     nav: [
       { text: "미니캐스트 가이드", link: "/guide", activeMatch: "/guide" },
-      { text: "미니캐스트 개발자", link: "/maintainer" },
+      { text: "미니캐스트 개발자", link: "/maintainer" }
     ],
 
     sidebar: {
@@ -79,6 +79,15 @@ export default defineConfig({
               text: "캔버스 설정",
               link: "/guide/canvas",
             },
+          ],
+        },
+        {
+          text: "릴리즈 노트",
+          items: [
+            {
+              text: "v0.0.1",
+              link: "/guide/release/v0.0.1",
+            }
           ],
         }
       ],

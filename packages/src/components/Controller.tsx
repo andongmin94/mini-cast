@@ -414,7 +414,7 @@ export default function Controller() {
                     setKeyDisplayMonitor(parseInt(value))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="focus:ring-0 focus:ring-offset-0">
                     <SelectValue placeholder="모니터 선택" />
                   </SelectTrigger>
                   <SelectContent>
@@ -441,7 +441,7 @@ export default function Controller() {
                   value={keyDisplayPosition}
                   onValueChange={setKeyDisplayPosition}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="focus:ring-0 focus:ring-offset-0">
                     <SelectValue placeholder="위치 선택" />
                   </SelectTrigger>
                   <SelectContent>
