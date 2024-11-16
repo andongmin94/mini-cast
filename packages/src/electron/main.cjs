@@ -53,7 +53,7 @@ async function createWindow() {
 
   mainWindow = new BrowserWindow({
     width: 416,
-    height: 330,
+    height: 345,
     frame: false,
     resizable: isDev,
     icon: path.join(__dirname, "../../public/icon.png"),
