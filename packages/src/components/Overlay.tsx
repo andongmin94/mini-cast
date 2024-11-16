@@ -111,7 +111,7 @@ export default function Overlay() {
       electron.removeListener("key-press", keyPressListener);
       electron.removeListener("init", initListener);
     };
-  }, []);
+  }, [handleSettingsUpdate, handleMouseMove, handleKeyPress, handleInit]); // 의존성 추가
 
   const getPositionClasses = (position: string) => {
     switch (position) {

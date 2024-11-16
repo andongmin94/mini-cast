@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import "@/globals.css";
 
-import { Keyboard, MousePointer2, PenTool } from "lucide-react";
+import { Keyboard, MousePointer2 } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
 import {
@@ -169,7 +169,7 @@ export default function Controller() {
 
       <div className="pointer-events-auto overflow-hidden p-4">
         <Tabs defaultValue="cursor" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="cursor">
               <MousePointer2 className="mr-2 h-4 w-4" />
               마우스 설정
@@ -178,10 +178,10 @@ export default function Controller() {
               <Keyboard className="mr-2 h-4 w-4" />
               키보드 설정
             </TabsTrigger>
-            <TabsTrigger value="canvas">
+            {/* <TabsTrigger value="canvas">
               <PenTool className="mr-2 h-4 w-4" />
               캔버스 설정
-            </TabsTrigger>
+            </TabsTrigger> */}
           </TabsList>
           <TabsContent value="cursor" className="space-y-4">
             <div className="flex items-center justify-center space-x-2">
@@ -414,7 +414,7 @@ export default function Controller() {
                     setKeyDisplayMonitor(parseInt(value))
                   }
                 >
-                  <SelectTrigger className="focus:ring-0 focus:ring-offset-0">
+                  <SelectTrigger>
                     <SelectValue placeholder="모니터 선택" />
                   </SelectTrigger>
                   <SelectContent>
@@ -441,7 +441,7 @@ export default function Controller() {
                   value={keyDisplayPosition}
                   onValueChange={setKeyDisplayPosition}
                 >
-                  <SelectTrigger className="focus:ring-0 focus:ring-offset-0">
+                  <SelectTrigger>
                     <SelectValue placeholder="위치 선택" />
                   </SelectTrigger>
                   <SelectContent>
