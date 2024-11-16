@@ -17,6 +17,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TitleBar from "@/components/TitleBar";
 
+import packageJson from "../../package.json";
+
 function hexToRgba(hex: string, alpha: number = 1) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -164,6 +166,7 @@ export default function Controller() {
   return (
     <>
       <TitleBar />
+
       <div className="pointer-events-auto overflow-hidden p-4">
         <Tabs defaultValue="cursor" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
@@ -225,7 +228,7 @@ export default function Controller() {
                 </div>
               </div>
               <div className="space-y-2">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 pb-3">
                   <Label
                     htmlFor="cursor-fill-opacity"
                     className="whitespace-nowrap"
@@ -242,7 +245,7 @@ export default function Controller() {
                   />
                   <span>{cursorFillOpacity.toFixed(2)}</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 pb-3">
                   <Label
                     htmlFor="cursor-stroke-opacity"
                     className="whitespace-nowrap"
@@ -259,7 +262,7 @@ export default function Controller() {
                   />
                   <span>{cursorStrokeOpacity.toFixed(2)}</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 pb-3">
                   <Label htmlFor="cursor-size" className="whitespace-nowrap">
                     마우스 크기
                   </Label>
@@ -273,7 +276,7 @@ export default function Controller() {
                   />
                   <span>{cursorSize}px</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 pb-3">
                   <Label
                     htmlFor="cursor-stroke-size"
                     className="whitespace-nowrap"
@@ -452,6 +455,10 @@ export default function Controller() {
             </div>
           </TabsContent>
         </Tabs>
+      </div>
+
+      <div className="pointer-events-none mr-1 flex justify-end text-xs">
+        v{packageJson.version}
       </div>
     </>
   );
