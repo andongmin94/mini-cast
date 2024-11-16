@@ -203,7 +203,7 @@ function captureKeyboardEvents() {
     alt: false,
     meta: false
   };
-  let capsLockOn = false;
+  // let capsLockOn = false;
   let lastCombination = '';
   let lastTimestamp = 0;
 
@@ -245,9 +245,9 @@ function captureKeyboardEvents() {
   gkl.addListener((e) => {
     const isSpecialKey = ['LEFT CTRL', 'RIGHT CTRL', 'LEFT SHIFT', 'RIGHT SHIFT', 'LEFT ALT', 'RIGHT ALT', 'LEFT META', 'RIGHT META', 'CAPS LOCK'].includes(e.name);
     
-    if (e.name === 'CAPS LOCK' && e.state === 'DOWN') {
-      capsLockOn = !capsLockOn;
-    }
+    // if (e.name === 'CAPS LOCK' && e.state === 'DOWN') {
+    //   capsLockOn = !capsLockOn;
+    // }
 
     const keyName = getKeyName(e.name);
     if (e.name === 'MOUSE LEFT' || e.name === 'MOUSE MIDDLE' || e.name === 'MOUSE RIGHT') {
@@ -273,23 +273,46 @@ function captureKeyboardEvents() {
       }
 
       let displayKey = keyName;
-      if (keyName.length === 1 && keyName >= 'A' && keyName <= 'Z') {
-        const shouldBeUpperCase = (capsLockOn && !specialKeys.shift) || (!capsLockOn && specialKeys.shift);
-        displayKey = shouldBeUpperCase ? keyName : keyName.toLowerCase();
+      // // if (keyName.length === 1 && keyName >= 'A' && keyName <= 'Z') {
+      // //   const shouldBeUpperCase = (capsLockOn && !specialKeys.shift) || (!capsLockOn && specialKeys.shift);
+      // //   displayKey = shouldBeUpperCase ? keyName : keyName.toLowerCase();
+      // // }
+
+      // const keyDetails = {
+      //   key: displayKey,
+      //   code: e.rawKey._nameRaw,
+      //   ctrlKey: specialKeys.ctrl,
+      //   shiftKey: specialKeys.shift,
+      //   altKey: specialKeys.alt,
+      //   metaKey: specialKeys.meta,
+      //   // capsLock: capsLockOn,
+      //   timestamp: Date.now()
+      // };
+
+      // sendKeyPress(combination.replace(keyName, displayKey), keyDetails);
+
+      // 단일 알파벳 키인지 확인하는 함수
+      function isSingleAlphabet(key) {
+        return /^[a-zA-Z]$/.test(key) && 
+              !specialKeys.ctrl && 
+              !specialKeys.shift && 
+              !specialKeys.alt && 
+              !specialKeys.meta;
       }
 
-      const keyDetails = {
-        key: displayKey,
-        code: e.rawKey._nameRaw,
-        ctrlKey: specialKeys.ctrl,
-        shiftKey: specialKeys.shift,
-        altKey: specialKeys.alt,
-        metaKey: specialKeys.meta,
-        capsLock: capsLockOn,
-        timestamp: Date.now()
-      };
-
-      sendKeyPress(combination.replace(keyName, displayKey), keyDetails);
+      // keyDetails 생성 전에 필터링
+      if (!isSingleAlphabet(displayKey)) {
+        const keyDetails = {
+          key: displayKey,
+          code: e.rawKey._nameRaw,
+          ctrlKey: specialKeys.ctrl,
+          shiftKey: specialKeys.shift,
+          altKey: specialKeys.alt,
+          metaKey: specialKeys.meta,
+          timestamp: Date.now()
+        };
+        sendKeyPress(combination.replace(keyName, displayKey), keyDetails);
+      }
     }
   });
 }
