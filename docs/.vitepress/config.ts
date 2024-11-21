@@ -43,6 +43,12 @@ export default defineConfig({
       text: "가이드 수정 제안하기",
     },
 
+    sidebarMenuLabel: "메뉴",
+
+    returnToTopLabel: "위로 가기",
+
+    darkModeSwitchLabel: "다크 모드",
+
     docFooter: {
       prev: '이전 페이지',
       next: '다음 페이지'
