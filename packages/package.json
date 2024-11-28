@@ -8,12 +8,10 @@
     "appId": "미니캐스트",
     "productName": "미니캐스트",
     "copyright": "Copyright © andongmin",
-    "mac": {
-      "icon": "public/icon.png"
-    },
-    "win": {
-      "icon": "public/icon.png"
-    },
+    "artifactName": "${productName}.${ext}",
+    "icon": "public/icon.png",
+    "mac": { "target": [ "dir" ] },
+    "win": { "target": [ "portable" ] },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
