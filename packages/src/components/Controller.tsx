@@ -4,6 +4,18 @@ import "@/globals.css";
 
 import { Keyboard, MousePointer2 } from "lucide-react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -163,11 +175,29 @@ export default function Controller() {
     showKeyDisplay,
   ]);
 
+  const resetConfig = () => {
+    setCursorFillColor("#0064FF");
+    setCursorFillOpacity(0.5);
+    setCursorStrokeColor("#202632");
+    setCursorStrokeOpacity(0.5);
+    setCursorSize(30);
+    setCursorStrokeSize(3);
+    setShowCursorHighlight(true);
+    setKeyDisplayMonitor(0);
+    setKeyDisplayDuration(2000);
+    setKeyDisplayFontSize(16);
+    setKeyDisplayBackgroundColor("#000000");
+    setKeyDisplayBackgroundOpacity(0.5);
+    setKeyDisplayTextColor("#FFFFFF");
+    setKeyDisplayPosition("bottom-right");
+    setShowKeyDisplay(true);
+  };
+
   return (
     <>
       <TitleBar />
 
-      <div className="pointer-events-auto overflow-hidden p-4">
+      <div className="pointer-events-auto h-[280px] overflow-hidden p-4">
         <Tabs defaultValue="cursor" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="cursor">
@@ -457,7 +487,24 @@ export default function Controller() {
         </Tabs>
       </div>
 
-      <div className="pointer-events-none mr-1 flex justify-end text-xs">
+      <div className="pointer-events-auto mr-1 flex items-end justify-between text-xs">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" className="w-10 h-6 ml-2 mb-2">리셋</Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="mt-5 max-w-[355px] rounded-md p-4">
+            <AlertDialogHeader>
+              <AlertDialogTitle>정말로 리셋하시겠습니까?</AlertDialogTitle>
+              <AlertDialogDescription>
+                모든 설정이 초기화됩니다.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>취소</AlertDialogCancel>
+              <AlertDialogAction onClick={resetConfig}>리셋</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         v{packageJson.version}
       </div>
     </>
