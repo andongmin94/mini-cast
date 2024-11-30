@@ -17,12 +17,14 @@ if (!isDev) {
   server.get('/overlay', (req, res) => {
     res.sendFile(path.join(__dirname, '../../dist', 'index.html'));
   });
-  server.listen(PORT, () => {}).on('error', (err) => {
+  // 서버 시작
+  server.listen(PORT, 'localhost', () => {}).on('error', (err) => {
+    // 포트가 이미 사용 중인 경우 다른 포트로 재시도
     if (err.code === 'EADDRINUSE') {
-      PORT += 1;
+      PORT += 1; // 포트 번호 증가
       setTimeout(() => {
-        server.listen(PORT);
-      }, 1000);
+        server.listen(PORT, 'localhost');
+      }, 1000); // 1초 후에 다시 시도
     }
   });
 }
