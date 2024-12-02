@@ -5,7 +5,7 @@ title: 미니캐스트
 titleTemplate: 키보드 & 마우스 오버레이
 
 hero:
-  name: 미니캐스트
+  name: 미니캐스트 v0.0.1
   text: 키보드 & 마우스 오버레이
   tagline: 쓰기 쉽게, 보기 쉽게
   image:
@@ -13,9 +13,21 @@ hero:
     alt: mini-cast
   actions:
     - theme: brand
-      text: 미니캐스트 v0.0.1 다운로드
-      link: https://github.com/andongmin94/andongmin94/releases/download/mini-cast-v0.0.1/Setup.0.0.1.exe
-    - theme: alt
       text: 미니캐스트 가이드
       link: /guide/
+    - theme: alt
+      text: (준비 중) 사용 방법 (Youtube)
+
+features:
+  - icon:
+     src: windows-brands-solid.svg
+     width: 43.75px
+    title: Windows 다운로드
+    linkText: 미니캐스트.exe
+    link: https://github.com/andongmin94/andongmin94/releases/download/mini-cast-v0.0.1/Setup.0.0.1.exe
+  - icon:
+     src: apple-brands-solid.svg
+     width: 37.5px
+    title: (준비 중) Mac 다운로드
+    linkText: 미니캐스트.dmg
 ---
