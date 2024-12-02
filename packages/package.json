@@ -8,7 +8,7 @@
     "appId": "미니캐스트",
     "productName": "미니캐스트",
     "copyright": "Copyright © andongmin",
-    "artifactName": "${productName}.${ext}",
+    "artifactName": "MiniCast.${ext}",
     "icon": "public/icon.png",
     "mac": { "target": [ "dir" ] },
     "win": { "target": [ "portable" ] },
