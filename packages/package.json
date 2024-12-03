@@ -5,10 +5,10 @@
   "author": "안동민",
   "main": "src/electron/main.cjs",
   "build": {
-    "appId": "미니캐스트",
-    "productName": "미니캐스트",
+    "appId": "MiniCast",
+    "productName": "MiniCast",
     "copyright": "Copyright © andongmin",
-    "artifactName": "MiniCast.${ext}",
+    "artifactName": "${productName}.${ext}",
     "icon": "public/icon.png",
     "mac": { "target": [ "dir" ] },
     "win": { "target": [ "portable" ] },
