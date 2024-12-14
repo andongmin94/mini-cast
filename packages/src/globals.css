@@ -101,3 +101,19 @@
     @apply focus:ring-0 focus:ring-offset-0 !important;
   }
 }
+
+.color-picker {
+  -webkit-appearance: none;
+  width: 2rem;
+  height: 2rem;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.color-picker::-webkit-color-swatch {
+  border-radius: 10%;
+}
+
+.color-picker::-webkit-color-swatch-wrapper {
+  border-radius: 10%;
+}

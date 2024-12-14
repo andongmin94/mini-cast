@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import "@/globals.css";
 
 import { Keyboard, MousePointer2 } from "lucide-react";
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -202,7 +201,7 @@ export default function Controller() {
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="cursor">
               <MousePointer2 className="mr-2 h-4 w-4" />
-              마우스 설정
+              커서 설정
             </TabsTrigger>
             <TabsTrigger value="keyboard">
               <Keyboard className="mr-2 h-4 w-4" />
@@ -216,7 +215,7 @@ export default function Controller() {
           <TabsContent value="cursor" className="space-y-4">
             <div className="flex items-center justify-center space-x-2">
               <Label htmlFor="cursor-highlight" className="whitespace-nowrap">
-                마우스 활성화
+                커서 활성화
               </Label>
               <Switch
                 id="cursor-highlight"
@@ -226,34 +225,34 @@ export default function Controller() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-center gap-4">
                   <Label
                     htmlFor="cursor-fill-color"
                     className="whitespace-nowrap"
                   >
-                    마우스 칠 색상
+                    칠 색상
                   </Label>
                   <input
                     type="color"
                     id="cursor-fill-color"
                     value={cursorFillColor}
                     onChange={(e) => setCursorFillColor(e.target.value)}
-                    className="h-8 w-8"
+                    className="color-picker rounded-md px-1 py-0.5"
                   />
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-center gap-4">
                   <Label
                     htmlFor="cursor-stroke-color"
                     className="whitespace-nowrap"
                   >
-                    마우스 획 색상
+                    획 색상
                   </Label>
                   <input
                     type="color"
                     id="cursor-stroke-color"
                     value={cursorStrokeColor}
                     onChange={(e) => setCursorStrokeColor(e.target.value)}
-                    className="h-8 w-8"
+                    className="color-picker rounded-md px-1 py-0.5"
                   />
                 </div>
               </div>
@@ -263,7 +262,7 @@ export default function Controller() {
                     htmlFor="cursor-fill-opacity"
                     className="whitespace-nowrap"
                   >
-                    칠 투명도
+                    칠 투명
                   </Label>
                   <Slider
                     id="cursor-fill-opacity"
@@ -280,7 +279,7 @@ export default function Controller() {
                     htmlFor="cursor-stroke-opacity"
                     className="whitespace-nowrap"
                   >
-                    획 투명도
+                    획 투명
                   </Label>
                   <Slider
                     id="cursor-stroke-opacity"
@@ -294,7 +293,7 @@ export default function Controller() {
                 </div>
                 <div className="flex items-center space-x-2 pb-3">
                   <Label htmlFor="cursor-size" className="whitespace-nowrap">
-                    마우스 크기
+                    칠 크기
                   </Label>
                   <Slider
                     id="cursor-size"
@@ -311,7 +310,7 @@ export default function Controller() {
                     htmlFor="cursor-stroke-size"
                     className="whitespace-nowrap"
                   >
-                    마우스 획 크기
+                    획 크기
                   </Label>
                   <Slider
                     id="cursor-stroke-size"
@@ -339,12 +338,12 @@ export default function Controller() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-center gap-4">
                   <Label
                     htmlFor="key-display-background-color"
                     className="whitespace-nowrap"
                   >
-                    키보드 배경색
+                    배경 색상
                   </Label>
                   <input
                     type="color"
@@ -353,22 +352,22 @@ export default function Controller() {
                     onChange={(e) =>
                       setKeyDisplayBackgroundColor(e.target.value)
                     }
-                    className="h-8 w-8"
-                  />
+                    className="color-picker rounded-md px-1 py-0.5"
+/>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-center gap-4">
                   <Label
                     htmlFor="key-display-text-color"
                     className="whitespace-nowrap"
                   >
-                    키보드 텍스트 색상
+                    폰트 색상
                   </Label>
                   <input
                     type="color"
                     id="key-display-text-color"
                     value={keyDisplayTextColor}
                     onChange={(e) => setKeyDisplayTextColor(e.target.value)}
-                    className="h-8 w-8"
+                    className="color-picker rounded-md px-1 py-0.5"
                   />
                 </div>
               </div>
@@ -378,7 +377,7 @@ export default function Controller() {
                     htmlFor="key-display-duration"
                     className="whitespace-nowrap"
                   >
-                    지속시간
+                    지속 시간
                   </Label>
                   <Slider
                     id="key-display-duration"
@@ -414,7 +413,7 @@ export default function Controller() {
                     htmlFor="key-display-background-opacity"
                     className="whitespace-nowrap"
                   >
-                    배경 투명도
+                    배경 투명
                   </Label>
                   <Slider
                     id="key-display-background-opacity"
@@ -444,7 +443,7 @@ export default function Controller() {
                     setKeyDisplayMonitor(parseInt(value))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="hover:bg-accent">
                     <SelectValue placeholder="모니터 선택" />
                   </SelectTrigger>
                   <SelectContent>
@@ -471,7 +470,7 @@ export default function Controller() {
                   value={keyDisplayPosition}
                   onValueChange={setKeyDisplayPosition}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="hover:bg-accent">
                     <SelectValue placeholder="위치 선택" />
                   </SelectTrigger>
                   <SelectContent>
