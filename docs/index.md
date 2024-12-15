@@ -5,7 +5,7 @@ title: 미니캐스트
 titleTemplate: 키보드 & 마우스 오버레이
 
 hero:
-  name: 미니캐스트 v0.0.2
+  name: 미니캐스트 v0.0.3
   text: 키보드 & 마우스 오버레이
   tagline: 쓰기 쉽게, 보기 쉽게
   image:
@@ -24,8 +24,8 @@ features:
      light: /windows-black.svg
      width: 100px
     title: Windows 다운로드
-    linkText: MiniCast.exe (78.2 MB)
-    link: https://github.com/andongmin94/andongmin94/releases/download/mini-cast-v0.0.2/MiniCast.exe
+    linkText: MiniCast.exe (351 MB)
+    link: https://github.com/andongmin94/andongmin94/releases/download/mini-cast-v0.0.3/MiniCast.exe
   - icon:
      dark: /apple-white.svg
      light: /apple-black.svg

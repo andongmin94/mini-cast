@@ -91,6 +91,10 @@ export default defineConfig({
           text: "릴리즈 노트",
           items: [
             {
+              text: "v0.0.3",
+              link: "/guide/release/v0.0.3",
+            },
+            {
               text: "v0.0.2",
               link: "/guide/release/v0.0.2",
             },
