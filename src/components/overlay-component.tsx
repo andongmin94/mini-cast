@@ -69,7 +69,7 @@ export const Overlay: React.FC = () => {
   useEffect(() => {
     electron.on('update-settings', handleSettingsUpdate);
     electron.on('mouse-move', handleMouseMove);
-    electron.on('mouse-click', handleMouseClick);
+    electron.on('mouse-click',handleMouseClick);
 
     return () => {
       electron.removeListener('update-settings', handleSettingsUpdate);
