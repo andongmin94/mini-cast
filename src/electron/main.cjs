@@ -62,7 +62,8 @@ function createOverlayWindows() {
       transparent: true,
       frame: false,
       fullscreen: true,
-      focusable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
