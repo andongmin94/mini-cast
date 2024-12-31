@@ -1,5 +1,5 @@
 const path = require("path");
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, globalShortcut } = require("electron");
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage } = require("electron");
 const fs = require('fs');
 
 const templateDir = __dirname;
@@ -191,8 +191,4 @@ ipcMain.on('simulate-click', () => {
       window.webContents.send('mouse-click', localPosition);
     }
   });
-});
-
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
 });
