@@ -77,35 +77,35 @@ function createOverlayWindows() {
       overlayWindow.webContents.send('update-settings', currentSettings);
     });
     
-    // overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
   });
 }
 
 function captureMouseEvents() {
   setInterval(() => {
     const cursorPosition = screen.getCursorScreenPoint();
-    const display = screen.getDisplayNearestPoint(cursorPosition);
+    const activeDisplay = screen.getDisplayNearestPoint(cursorPosition);
 
-    overlayWindows.forEach((window) => {
-      if (isPointInDisplay(cursorPosition, display)) {
+    overlayWindows.forEach((window, index) => {
+      const display = screen.getAllDisplays()[index];
+      if (display.id === activeDisplay.id) {
         const localPosition = {
           x: cursorPosition.x - display.bounds.x,
           y: cursorPosition.y - display.bounds.y
         };
         window.webContents.send('mouse-move', localPosition);
+      } else {
+        window.webContents.send('mouse-move', null);
       }
     });
   }, 16); // 약 60fps
 }
 
 let currentSettings = {
-  cursorColor: "#000000",
+  cursorFillColor: "rgba(0, 0, 0, 0.2)",
+  cursorStrokeColor: "rgba(0, 0, 0, 1)",
   cursorSize: 24,
   showCursorHighlight: true,
-  showClickHighlight: true,
-  clickColor: "#000000",
-  clickSize: 20,
-  clickDuration: 1000,
 };
 
 function isPointInDisplay(point, display) {
@@ -173,22 +173,5 @@ ipcMain.on('update-settings', (event, newSettings) => {
   currentSettings = { ...currentSettings, ...newSettings };
   overlayWindows.forEach(window => {
     window.webContents.send('update-settings', currentSettings);
-  });
-});
-
-ipcMain.on('simulate-click', () => {
-  console.log('Simulated click received');
-  const cursorPosition = screen.getCursorScreenPoint();
-  const display = screen.getDisplayNearestPoint(cursorPosition);
-
-  overlayWindows.forEach((window) => {
-    if (isPointInDisplay(cursorPosition, display)) {
-      const localPosition = {
-        x: cursorPosition.x - display.bounds.x,
-        y: cursorPosition.y - display.bounds.y
-      };
-      console.log('Sending click to overlay:', localPosition);
-      window.webContents.send('mouse-click', localPosition);
-    }
   });
 });
