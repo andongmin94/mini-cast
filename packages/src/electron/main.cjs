@@ -427,8 +427,9 @@ ipcMain.on('update-settings', (event, newSettings) => {
   });
 });
 
-ipcMain.handle('get-settings', () => {
-  return currentSettings;
+ipcMain.handle('get-value', (event, key) => {
+  const value = store.get(key);
+  return value;
 });
 
 app.on('will-quit', () => {
