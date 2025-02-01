@@ -14,8 +14,6 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import TitleBar from "@/components/TitleBar";
 
-import Advertisement from "./Advertisement";
-
 function hexToRgba(hex: string, alpha: number = 1) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -130,11 +128,11 @@ export default function Controller() {
   return (
     <>
       <TitleBar />
-      <div className="pointer-events-auto overflow-hidden p-4 pb-0 pt-12">
+      <div className="pointer-events-auto overflow-hidden p-4 pb-0">
         <div className="mb-2 flex items-center justify-center">
           <h2 className="text-xl font-bold">커서 Kersor</h2>
         </div>
-        <hr />
+        <hr className="mb-2"/>
         <div ref={containerRef} className="relative flex flex-row">
           {/* 커서 설정 */}
           <div
@@ -405,9 +403,7 @@ export default function Controller() {
             </div>
           </div>
         </div>
-        <hr />
       </div>
-      <Advertisement />
     </>
   );
 }
