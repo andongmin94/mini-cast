@@ -49,45 +49,44 @@ const createWindow = () => {
   const adWindowHeight = 120;
   const adWindow = new BrowserWindow({
     width: adWindowWidth,
-    height: adWindowHeight, // 광고용 윈도우 높이 설정
+    height: adWindowHeight,
     frame: false,
-    resizable: isDev,
+    resizable: false,
     skipTaskbar: true,
-    show: false, // 메인 윈도우가 로드된 후에 광고용 윈도우를 보여줌
+    show: false,
+    parent: mainWindow, // 메인 윈도우를 부모로 설정
     webPreferences: {
       webSecurity: false,
     },
   });
 
-  // 광고용 윈도우의 URL 설정
   adWindow.loadURL('https://www.andongmin.com//ad/kersor');
 
-  // 메인 윈도우가 로드된 후 광고용 윈도우를 보여줌
-  mainWindow.webContents.on('did-finish-load', () => {
+  const updateAdWindowPosition = () => {
     const mainBounds = mainWindow.getBounds();
     adWindow.setBounds({
       x: mainBounds.x,
-      y: mainBounds.y + mainBounds.height, // 메인 윈도우 아래에 위치
+      y: mainBounds.y + mainBounds.height,
       width: mainBounds.width,
-      height: adWindowHeight, // 광고용 윈도우 높이 설정
+      height: adWindowHeight,
     });
+  };
+
+  // 메인 윈도우가 로드된 후 광고용 윈도우를 보여줌
+  mainWindow.webContents.on('did-finish-load', () => {
+    updateAdWindowPosition();
     adWindow.show();
   });
 
   // 메인 윈도우가 이동할 때 광고용 윈도우의 위치를 업데이트
-  mainWindow.on('move', () => {
-    const mainBounds = mainWindow.getBounds();
-    adWindow.setBounds({
-      x: mainBounds.x,
-      y: mainBounds.y + mainBounds.height, // 메인 윈도우 아래에 위치
-      width: mainBounds.width,
-      height: adWindowHeight, // 광고용 윈도우 높이 설정
-    });
-  });
+  mainWindow.on('move', updateAdWindowPosition);
+  mainWindow.on('resize', updateAdWindowPosition);
 
-  // 메인 윈도우가 포커스를 받을 때 광고용 윈도우도 포커스를 받음
-  mainWindow.on('focus', () => {
-    adWindow.setAlwaysOnTop(true);
+  // 메인 윈도우가 닫힐 때 광고 윈도우도 함께 닫힘
+  mainWindow.on('close', () => {
+    if (!adWindow.isDestroyed()) {
+      adWindow.close();
+    }
   });
 
   adWindow.webContents.setWindowOpenHandler(({ url }) => {
