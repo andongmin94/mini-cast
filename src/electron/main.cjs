@@ -29,6 +29,7 @@ if (!isDev) {
 
 let mainWindow;
 let overlayWindows = [];
+let adWindow;
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -38,7 +39,7 @@ const createWindow = () => {
     resizable: isDev,
     icon: path.join(__dirname, "../../public/icon.png"),
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "preload.cjs"),
       webSecurity: false,
     },
   });
@@ -47,7 +48,7 @@ const createWindow = () => {
   // 광고용 윈도우 생성
   const adWindowWidth = mainWindow.getSize()[0];
   const adWindowHeight = 120;
-  const adWindow = new BrowserWindow({
+  adWindow = new BrowserWindow({
     width: adWindowWidth,
     height: adWindowHeight,
     frame: false,
@@ -81,13 +82,9 @@ const createWindow = () => {
   // 메인 윈도우가 이동할 때 광고용 윈도우의 위치를 업데이트
   mainWindow.on('move', updateAdWindowPosition);
   mainWindow.on('resize', updateAdWindowPosition);
-
-  // 메인 윈도우가 닫힐 때 광고 윈도우도 함께 닫힘
-  mainWindow.on('close', () => {
-    if (!adWindow.isDestroyed()) {
-      adWindow.close();
-    }
-  });
+  mainWindow.on('show', () => {
+    adWindow.show();
+  })
 
   adWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -120,7 +117,7 @@ function createOverlayWindows() {
       alwaysOnTop: true,
       skipTaskbar: true,
       webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
+        preload: path.join(__dirname, 'preload.cjs'),
         contextIsolation: true,
         nodeIntegration: false,
       },
@@ -271,6 +268,44 @@ app.whenReady().then(() => {
   captureMouseEvents();
   captureKeyboardEvents();
 
+  // 기본 생성 세팅
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+  // macOS-specific settings
+  if (process.platform === 'darwin') {
+    app.on('before-quit', () => {
+      tray.destroy();
+    });
+
+    app.on('activate', () => {
+      app.dock.show();
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+
+    mainWindow.on('close', (e) => {
+      if (!app.isQuiting) {
+        e.preventDefault();
+        mainWindow.hide();
+        app.dock.hide();
+      }
+      return false;
+    });
+  } else {
+    // 메인 윈도우가 닫힐 때 광고 윈도우도 함께 닫힘
+    mainWindow.on('close', () => {
+      if (!adWindow.isDestroyed()) {
+        adWindow.close();
+      }
+      clearInterval(mouseEventInterval);
+      app.quit();
+    });
+  }
+  
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+
   const tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "../../public/icon.png")));
   tray.setToolTip("커서");
   tray.on("double-click", () => mainWindow.show());
@@ -284,7 +319,7 @@ app.whenReady().then(() => {
   ]));
 
 
-  if (process.env.NODE_ENV === "development") {
+  if (isDev) {
     const menu = Menu.buildFromTemplate([
       {
         label: "File",
@@ -339,8 +374,12 @@ app.whenReady().then(() => {
   });
 });
 
-ipcMain.on("hidden", () => mainWindow.hide());
 ipcMain.on("minimize", () => mainWindow.minimize());
+ipcMain.on("hidden", () => {
+    adWindow.hide();
+    mainWindow.hide();
+  }
+);
 
 ipcMain.on('update-settings', (event, newSettings) => {
   currentSettings = { ...currentSettings, ...newSettings };
