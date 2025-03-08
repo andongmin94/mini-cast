@@ -30,8 +30,26 @@ if (!isDev) {
 let mainWindow;
 let overlayWindows = [];
 let adWindow;
+let store;
+let currentSettings;
 
-const createWindow = () => {
+async function createWindow() {
+  const { default: Store } = await import('electron-store');
+  store = new Store();
+  currentSettings = store.get('settings', {
+    cursorFillColor: "rgba(255, 255, 0, 0.5)",
+    cursorStrokeColor: "rgba(255, 0, 0, 0.5)",
+    cursorSize: 30,
+    showCursorHighlight: true,
+    keyDisplayMonitor: 0,
+    keyDisplayDuration: 2000,
+    keyDisplayFontSize: 16,
+    keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.5)",
+    keyDisplayTextColor: "rgba(255, 255, 255, 1)",
+    keyDisplayPosition: "bottom-right",
+    showKeyDisplay: true,
+  });
+
   mainWindow = new BrowserWindow({
     width: 416,
     height: 330,
@@ -79,7 +97,7 @@ const createWindow = () => {
     resizable: false,
     skipTaskbar: true,
     show: false,
-    parent: mainWindow, // 메인 윈도우를 부모로 설정
+    parent: mainWindow,
     webPreferences: {
       webSecurity: false,
     },
@@ -97,13 +115,11 @@ const createWindow = () => {
     });
   };
 
-  // 메인 윈도우가 로드된 후 광고용 윈도우를 보여줌
   mainWindow.webContents.on('did-finish-load', () => {
     updateAdWindowPosition();
     adWindow.show();
   });
 
-  // 메인 윈도우가 이동할 때 광고용 윈도우의 위치를 업데이트
   mainWindow.on('move', updateAdWindowPosition);
   mainWindow.on('resize', updateAdWindowPosition);
   mainWindow.on('show', () => {
@@ -175,7 +191,7 @@ function captureMouseEvents() {
         window.webContents.send('mouse-move', null);
       }
     });
-  }, 16); // 약 60fps
+  }, 16);
 }
 
 function captureKeyboardEvents() {
@@ -219,7 +235,6 @@ function captureKeyboardEvents() {
     if (combination !== lastCombination || currentTime - lastTimestamp > 200) {
       overlayWindows.forEach((window, index) => {
         window.webContents.send('key-press', { ...keyDetails, displayId: index, combination });
-        // console.log('key-press', { ...keyDetails, combination });
       });
       lastCombination = combination;
       lastTimestamp = currentTime;
@@ -273,30 +288,16 @@ function captureKeyboardEvents() {
   });
 }
 
-let currentSettings = {
-  cursorFillColor: "rgba(255, 255, 0, 0.5)",
-  cursorStrokeColor: "rgba(255, 0, 0, 0.5)",
-  cursorSize: 30,
-  showCursorHighlight: true,
-  keyDisplayMonitor: 0,
-  keyDisplayDuration: 2000,
-  keyDisplayFontSize: 16,
-  keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.2)",
-  keyDisplayTextColor: "rgba(255, 255, 255, 1)",
-  keyDisplayPosition: "bottom-right",
-};
-
 app.whenReady().then(() => {
   createWindow();
   createOverlayWindows();
   captureMouseEvents();
   captureKeyboardEvents();
 
-  // 기본 생성 세팅
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
   });
-  // macOS-specific settings
+
   if (process.platform === 'darwin') {
     app.on('before-quit', () => {
       tray.destroy();
@@ -316,10 +317,15 @@ app.whenReady().then(() => {
   tray.setToolTip("커서");
   tray.on("double-click", () => mainWindow.show());
   tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "초기화하면서 종료", type: "normal", click: () => {
+        // 저장소 리셋
+        store.clear();
+        mainWindow.close();
+      }
+    },
     { label: "열기", type: "normal", click: () => mainWindow.show() },
     { label: "종료", type: "normal", click: () => mainWindow.close()},
   ]));
-
 
   if (isDev) {
     const menu = Menu.buildFromTemplate([
@@ -347,14 +353,11 @@ app.whenReady().then(() => {
     Menu.setApplicationMenu(menu);
   }
 
-  // Send initial displays data when requested
   ipcMain.on('request-displays', (event) => {
       const displays = getConnectedDisplays();
       mainWindow.webContents.send('displays-updated', displays);
   });
-  
 
-  // Display change events
   screen.on('display-added', () => {
     const displays = getConnectedDisplays();
     mainWindow.webContents.send('displays-updated', displays);
@@ -385,9 +388,14 @@ ipcMain.on("hidden", () => {
 
 ipcMain.on('update-settings', (event, newSettings) => {
   currentSettings = { ...currentSettings, ...newSettings };
+  store.set('settings', currentSettings);
   overlayWindows.forEach(window => {
     window.webContents.send('update-settings', currentSettings);
   });
+});
+
+ipcMain.handle('get-settings', () => {
+  return currentSettings;
 });
 
 app.on('will-quit', () => {
