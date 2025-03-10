@@ -34,8 +34,8 @@ export default function Overlay() {
     keyDisplayMonitor: 0,
     keyDisplayDuration: 2000,
     keyDisplayFontSize: 16,
-    keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.7)",
-    keyDisplayTextColor: "rgba(255, 255, 255, 1)",
+    keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.5)",
+    keyDisplayTextColor: "#FFFFFF",
     keyDisplayPosition: "bottom-right",
     showKeyDisplay: true,
   });
