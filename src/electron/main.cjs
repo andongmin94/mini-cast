@@ -381,7 +381,7 @@ app.whenReady().then(() => {
 
 ipcMain.on("minimize", () => mainWindow.minimize());
 ipcMain.on("hidden", () => {
-    adWindow.hide();
+    if (adWindow) adWindow.hide();
     mainWindow.hide();
   }
 );
