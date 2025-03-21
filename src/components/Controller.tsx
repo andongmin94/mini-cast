@@ -148,7 +148,7 @@ export default function Controller() {
       <TitleBar />
       <div className="pointer-events-auto overflow-hidden p-4">
         <Tabs defaultValue="cursor" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="cursor">
               <MousePointer2 className="mr-2 h-4 w-4" />
               마우스 설정
@@ -156,9 +156,9 @@ export default function Controller() {
             <TabsTrigger value="keyboard">
               <Keyboard className="mr-2 h-4 w-4" />키보드 설정
             </TabsTrigger>
-            {/* <TabsTrigger value="canvas">
+            <TabsTrigger value="canvas">
               <PenTool className="mr-2 h-4 w-4" />캔버스 설정
-            </TabsTrigger> */}
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="cursor" className="space-y-4">
             <div className="flex items-center justify-center space-x-2">
