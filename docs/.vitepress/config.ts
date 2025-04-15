@@ -1,15 +1,107 @@
-import { defineConfig } from "vitepress";
-import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
+import { defineConfig, UserConfig } from "vitepress";
 import { buildEnd } from "./buildEnd.config";
+import { fetchLatestRelease, fetchAllReleases } from "./getReleaseData";
+import { updateIndexMd } from "./updateIndexFile";
+import fs from "node:fs/promises";
+import path from "node:path";
 
-const ogDescription = "GUI Library for Desktop App Development";
-const ogImage = "https://mini-cast.andongmin.com/mini-cast.svg";
+
 const ogTitle = "미니캐스트";
+const ogDescription = "쓰기 쉽게, 보기 쉽게";
 const ogUrl = "https://mini-cast.andongmin.com";
+const ogImage = "https://mini-cast.andongmin.com/mini-cast.svg";
 
-export default defineConfig({
+async function generateReleaseNotes(releases: any) {
+  const releaseDir = path.resolve(__dirname, "../guide/release");
+
+  try {
+    // 디렉토리 존재 확인 및 생성
+    try {
+      await fs.access(releaseDir);
+    } catch {
+      await fs.mkdir(releaseDir, { recursive: true });
+      console.log(`📁 릴리즈 문서 디렉토리 생성: ${releaseDir}`);
+    }
+
+    // 각 릴리즈에 대한 문서 생성
+    for (const release of releases) {
+      const version = release.version;
+      const filePath = path.join(releaseDir, `${version}.md`);
+
+      // 릴리즈 노트 내용 포맷팅 (GitHub의 마크다운을 VitePress 호환 마크다운으로 변환)
+      let content = `# ${version}\n\n`;
+
+      // GitHub 릴리즈 본문을 파싱하여 추가
+      if (release.body) {
+        content += release.body
+          .replace(/\r\n/g, "\n") // 줄바꿈 통일
+          .trim();
+      } else {
+        content += `릴리즈 노트 내용이 없습니다.`;
+      }
+
+      // 파일이 없거나 내용이 다른 경우만 쓰기
+      let shouldWrite = true;
+      try {
+        const existingContent = await fs.readFile(filePath, "utf-8");
+        if (existingContent.trim() === content.trim()) {
+          shouldWrite = false;
+        }
+      } catch {
+        // 파일이 없으면 무시하고 새로 생성
+      }
+
+      if (shouldWrite) {
+        await fs.writeFile(filePath, content);
+        console.log(`📝 릴리즈 문서 생성: ${version}`);
+      }
+    }
+
+    console.log("✅ 모든 릴리즈 문서가 업데이트되었습니다");
+  } catch (error) {
+    console.error("❌ 릴리즈 문서 생성 실패:", error);
+  }
+}
+
+const config = async (): Promise<UserConfig> => {
+  const isProd = process.env.NODE_ENV === "production";
+  console.log(`현재 모드: ${isProd ? "빌드" : "개발"}`);
+
+  let latestRelease;
+  let allReleases = [];
+  let releaseItems = [];
+
+  if (isProd) {
+    // 빌드 모드에서만 GitHub API 호출
+    console.log("🔍 GitHub에서 최신 릴리즈 정보 가져오는 중...");
+    latestRelease = await fetchLatestRelease();
+    if (latestRelease) console.log(`📦 최신 릴리즈 정보: 버전 ${latestRelease.version}, 파일 크기 ${latestRelease.fileSize}MB`);
+
+    // index.md 파일 업데이트
+    if (latestRelease) await updateIndexMd(latestRelease);
+
+    // 모든 릴리즈 정보 가져오기
+    console.log("📚 모든 릴리즈 정보 가져오는 중...");
+    allReleases = await fetchAllReleases();
+    console.log(`🔢 총 ${allReleases.length}개의 릴리즈 정보를 가져왔습니다`);
+
+    // 릴리즈 문서 자동 생성
+    await generateReleaseNotes(allReleases);
+  } else {
+    // 개발용 더미 릴리즈 목록
+    allReleases = [{ version: "v0.0.0" }];
+
+    console.log("🧪 개발 모드: API 호출 대신 더미 데이터 사용");
+  }
+
+  // 사이드바 설정 부분을 동적으로 생성
+  releaseItems = allReleases.map((release: { version: any }) => ({
+    text: release.version,
+    link: `/guide/release/${release.version}`,
+  }));
+  return {
   title: "미니캐스트",
-  description: "GUI Library for Desktop App Development",
+  description: "쓰기 쉽게, 보기 쉽게",
 
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: "/mini-cast.svg" }],
@@ -89,21 +181,8 @@ export default defineConfig({
         },
         {
           text: "릴리즈 노트",
-          items: [
-            {
-              text: "v0.0.3",
-              link: "/guide/release/v0.0.3",
-            },
-            {
-              text: "v0.0.2",
-              link: "/guide/release/v0.0.2",
-            },
-            {
-              text: "v0.0.1",
-              link: "/guide/release/v0.0.1",
-            }
-          ],
-        }
+          items: releaseItems, // 동적으로 생성된 릴리즈 항목
+        },
       ],
     },
 
@@ -111,7 +190,7 @@ export default defineConfig({
       level: [2, 3],
     },
   },
-  transformPageData(pageData) {
+  transformPageData(pageData: any) {
     const canonicalUrl = `${ogUrl}/${pageData.relativePath}`
       .replace(/\/index\.md$/, "/")
       .replace(/\.md$/, "/");
@@ -122,8 +201,8 @@ export default defineConfig({
     ]);
     return pageData;
   },
-  markdown: {
-    codeTransformers: [transformerTwoslash()],
-  },
   buildEnd,
-});
+};
+};
+
+export default defineConfig(await config());
