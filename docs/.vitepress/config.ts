@@ -5,7 +5,6 @@ import { updateIndexMd } from "./updateIndexFile";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-
 const ogTitle = "미니캐스트";
 const ogDescription = "쓰기 쉽게, 보기 쉽게";
 const ogUrl = "https://mini-cast.andongmin.com";
@@ -75,7 +74,10 @@ const config = async (): Promise<UserConfig> => {
     // 빌드 모드에서만 GitHub API 호출
     console.log("🔍 GitHub에서 최신 릴리즈 정보 가져오는 중...");
     latestRelease = await fetchLatestRelease();
-    if (latestRelease) console.log(`📦 최신 릴리즈 정보: 버전 ${latestRelease.version}, 파일 크기 ${latestRelease.fileSize}MB`);
+    if (latestRelease)
+      console.log(
+        `📦 최신 릴리즈 정보: 버전 ${latestRelease.version}, 파일 크기 ${latestRelease.fileSize}MB`
+      );
 
     // index.md 파일 업데이트
     if (latestRelease) await updateIndexMd(latestRelease);
@@ -100,109 +102,109 @@ const config = async (): Promise<UserConfig> => {
     link: `/guide/release/${release.version}`,
   }));
   return {
-  title: "미니캐스트",
-  description: "쓰기 쉽게, 보기 쉽게",
+    title: "미니캐스트",
+    description: "쓰기 쉽게, 보기 쉽게",
 
-  head: [
-    ["link", { rel: "icon", type: "image/svg+xml", href: "/mini-cast.svg" }],
-    [
-      "link",
-      { rel: "alternate", type: "application/rss+xml", href: "/blog.rss" },
-    ],
-    ["link", { rel: "organization", href: "https://github.com/andongmin94" }],
-    ["meta", { property: "og:type", content: "website" }],
-    ["meta", { property: "og:title", content: ogTitle }],
-    ["meta", { property: "og:image", content: ogImage }],
-    ["meta", { property: "og:url", content: ogUrl }],
-    ["meta", { property: "og:description", content: ogDescription }],
-    ["meta", { name: "theme-color", content: "#646cff" }],
-    [
-      "script",
-      {
-        src: "https://cdn.usefathom.com/script.js",
-        "data-site": "CBDFBSLI",
-        "data-spa": "auto",
-        defer: "",
-      },
-    ],
-  ],
-
-  themeConfig: {
-    logo: "/mini-cast.svg",
-
-    editLink: {
-      pattern: "mailto:andongmin94@gmail.com",
-      text: "가이드 수정 제안하기",
-    },
-
-    sidebarMenuLabel: "메뉴",
-
-    returnToTopLabel: "위로 가기",
-
-    darkModeSwitchLabel: "다크 모드",
-
-    docFooter: {
-      prev: '이전 페이지',
-      next: '다음 페이지'
-    },
-
-    footer: {
-      message: `Released under the EULA License`,
-      copyright: "Copyright © 2024 안동민",
-    },
-
-    nav: [
-      { text: "미니캐스트 가이드", link: "/guide", activeMatch: "/guide" },
-      { text: "미니캐스트 개발자", link: "/maintainer" }
-    ],
-
-    sidebar: {
-      "/guide/": [
+    head: [
+      ["link", { rel: "icon", type: "image/svg+xml", href: "/mini-cast.svg" }],
+      [
+        "link",
+        { rel: "alternate", type: "application/rss+xml", href: "/blog.rss" },
+      ],
+      ["link", { rel: "organization", href: "https://github.com/andongmin94" }],
+      ["meta", { property: "og:type", content: "website" }],
+      ["meta", { property: "og:title", content: ogTitle }],
+      ["meta", { property: "og:image", content: ogImage }],
+      ["meta", { property: "og:url", content: ogUrl }],
+      ["meta", { property: "og:description", content: ogDescription }],
+      ["meta", { name: "theme-color", content: "#646cff" }],
+      [
+        "script",
         {
-          text: "미니캐스트 가이드",
-          items: [
-            {
-              text: "미니캐스트 시작하기",
-              link: "/guide/",
-            },
-            {
-              text: "마우스 설정",
-              link: "/guide/mouse",
-            },
-            {
-              text: "키보드 설정",
-              link: "/guide/keyboard",
-            },
-            {
-              text: "캔버스 설정",
-              link: "/guide/canvas",
-            },
-          ],
-        },
-        {
-          text: "릴리즈 노트",
-          items: releaseItems, // 동적으로 생성된 릴리즈 항목
+          src: "https://cdn.usefathom.com/script.js",
+          "data-site": "CBDFBSLI",
+          "data-spa": "auto",
+          defer: "",
         },
       ],
-    },
+    ],
 
-    outline: {
-      level: [2, 3],
+    themeConfig: {
+      logo: "/mini-cast.svg",
+
+      editLink: {
+        pattern: "mailto:andongmin94@gmail.com",
+        text: "가이드 수정 제안하기",
+      },
+
+      sidebarMenuLabel: "메뉴",
+
+      returnToTopLabel: "위로 가기",
+
+      darkModeSwitchLabel: "다크 모드",
+
+      docFooter: {
+        prev: "이전 페이지",
+        next: "다음 페이지",
+      },
+
+      footer: {
+        message: `Released under the EULA License`,
+        copyright: "Copyright © 2024 안동민",
+      },
+
+      nav: [
+        { text: "미니캐스트 가이드", link: "/guide", activeMatch: "/guide" },
+        { text: "미니캐스트 개발자", link: "/maintainer" },
+      ],
+
+      sidebar: {
+        "/guide/": [
+          {
+            text: "미니캐스트 가이드",
+            items: [
+              {
+                text: "미니캐스트 시작하기",
+                link: "/guide/",
+              },
+              {
+                text: "마우스 설정",
+                link: "/guide/mouse",
+              },
+              {
+                text: "키보드 설정",
+                link: "/guide/keyboard",
+              },
+              {
+                text: "캔버스 설정",
+                link: "/guide/canvas",
+              },
+            ],
+          },
+          {
+            text: "릴리즈 노트",
+            items: releaseItems, // 동적으로 생성된 릴리즈 항목
+          },
+        ],
+      },
+
+      outline: {
+        level: [2, 3],
+      },
     },
-  },
-  transformPageData(pageData: any) {
-    const canonicalUrl = `${ogUrl}/${pageData.relativePath}`
-      .replace(/\/index\.md$/, "/")
-      .replace(/\.md$/, "/");
-    pageData.frontmatter.head ??= [];
-    pageData.frontmatter.head.unshift([
-      "link",
-      { rel: "canonical", href: canonicalUrl },
-    ]);
-    return pageData;
-  },
-  buildEnd,
-};
+    transformPageData(pageData: any) {
+      const canonicalUrl = `${ogUrl}/${pageData.relativePath}`
+        .replace(/\/index\.md$/, "/")
+        .replace(/\.md$/, "/");
+      pageData.frontmatter.head ??= [];
+      pageData.frontmatter.head.unshift([
+        "link",
+        { rel: "canonical", href: canonicalUrl },
+      ]);
+      return pageData;
+    },
+    buildEnd,
+  };
 };
 
 export default defineConfig(await config());
