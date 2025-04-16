@@ -4,6 +4,7 @@ interface Settings {
   cursorFillColor: string;
   cursorStrokeColor: string;
   cursorSize: number;
+  cursorStrokeSize: number;
   showCursorHighlight: boolean;
   keyDisplayMonitor: number;
   keyDisplayDuration: number;
@@ -30,6 +31,7 @@ export default function Overlay() {
     cursorFillColor: "rgba(255, 255, 0, 0.5)",
     cursorStrokeColor: "rgba(255, 0, 0, 0.5)",
     cursorSize: 30,
+    cursorStrokeSize: 3,
     showCursorHighlight: true,
     keyDisplayMonitor: 0,
     keyDisplayDuration: 2000,
@@ -126,6 +128,28 @@ export default function Overlay() {
     }
   };
 
+  const [leftClick, setLeftClick] = useState(false);
+  const [middleClick, setMiddleClick] = useState(false);
+  const [rightClick, setRightClick] = useState(false);
+
+  useEffect(() => {
+    electron.on("MOUSE LEFT DOWN", () => setLeftClick(true));
+    electron.on("MOUSE LEFT UP", () => setLeftClick(false));
+    electron.on("MOUSE MIDDLE DOWN", () => setMiddleClick(true));
+    electron.on("MOUSE MIDDLE UP", () => setMiddleClick(false));
+    electron.on("MOUSE RIGHT DOWN", () => setRightClick(true));
+    electron.on("MOUSE RIGHT UP", () => setRightClick(false));
+
+    return () => {
+      electron.removeListener("MOUSE LEFT DOWN", () => setLeftClick(true));
+      electron.removeListener("MOUSE LEFT UP", () => setLeftClick(false));
+      electron.removeListener("MOUSE MIDDLE DOWN", () => setMiddleClick(true));
+      electron.removeListener("MOUSE MIDDLE UP", () => setMiddleClick(false));
+      electron.removeListener("MOUSE RIGHT DOWN", () => setRightClick(true));
+      electron.removeListener("MOUSE RIGHT UP", () => setRightClick(false));
+    };
+  }, []);
+
   return (
     <div className="pointer-events-none fixed inset-0" style={{ zIndex: 9999 }}>
       {mousePosition && settings.showCursorHighlight && (
@@ -137,7 +161,10 @@ export default function Overlay() {
             width: settings.cursorSize,
             height: settings.cursorSize,
             backgroundColor: settings.cursorFillColor,
-            border: `2px solid ${settings.cursorStrokeColor}`,
+            border:
+              leftClick || middleClick || rightClick
+                ? `${Math.min(settings.cursorStrokeSize, settings.cursorSize / 2)}px solid ${settings.cursorStrokeColor}`
+                : "none",
             transform: "translate(-50%, -50%)",
             transition: "width 0.1s, height 0.1s",
           }}
@@ -149,54 +176,48 @@ export default function Overlay() {
           className={`fixed ${getPositionClasses(settings.keyDisplayPosition)} flex flex-col`}
         >
           {keyPresses.map((keyPress) => (
-            <div
-              key={keyPress.timestamp}
-              className="mb-2 rounded px-3 py-1"
-              style={{
-                backgroundColor: settings.keyDisplayBackgroundColor,
-                color: settings.keyDisplayTextColor,
-                fontSize: `${settings.keyDisplayFontSize}px`,
-                animation: `fadeInOut ${settings.keyDisplayDuration}ms ease-in-out`,
-                textAlign: settings.keyDisplayPosition.includes("left")
-                  ? "left"
-                  : "right",
-              }}
-            >
-              {[
-                keyPress.ctrlKey && "Ctrl",
-                keyPress.shiftKey && "Shift",
-                keyPress.altKey && "Alt",
-                keyPress.metaKey && "Meta",
-                keyPress.key === "Mouse left"
-                  ? "좌클릭"
-                  : keyPress.key === "Mouse right"
-                    ? "우클릭"
-                    : keyPress.key === "Mouse middle"
-                      ? "휠"
-                      : keyPress.key !== "Control" &&
-                        keyPress.key !== "Shift" &&
-                        keyPress.key !== "Alt" &&
-                        keyPress.key !== "Meta" &&
-                        keyPress.key,
-              ]
-                .filter(Boolean)
-                .join(" + ")}
-            </div>
+            <>
+              {keyPress.key !== "Mouse left" &&
+                keyPress.key !== "Mouse right" &&
+                keyPress.key !== "Mouse middle" && (
+                  <div
+                    key={keyPress.timestamp}
+                    className="mb-2 rounded px-3 py-1"
+                    style={{
+                      backgroundColor: settings.keyDisplayBackgroundColor,
+                      color: settings.keyDisplayTextColor,
+                      fontSize: `${settings.keyDisplayFontSize}px`,
+                      animation: `${settings.keyDisplayDuration}ms ease-in-out`,
+                      textAlign: settings.keyDisplayPosition.includes("left")
+                        ? "left"
+                        : "right",
+                    }}
+                  >
+                    {[
+                      keyPress.ctrlKey && "Ctrl",
+                      keyPress.shiftKey && "Shift",
+                      keyPress.altKey && "Alt",
+                      keyPress.metaKey && "Meta",
+                      keyPress.key === "Mouse left"
+                        ? "좌클릭"
+                        : keyPress.key === "Mouse right"
+                          ? "우클릭"
+                          : keyPress.key === "Mouse middle"
+                            ? "휠"
+                            : keyPress.key !== "Control" &&
+                              keyPress.key !== "Shift" &&
+                              keyPress.key !== "Alt" &&
+                              keyPress.key !== "Meta" &&
+                              keyPress.key,
+                    ]
+                      .filter(Boolean)
+                      .join(" + ")}
+                  </div>
+                )}
+            </>
           ))}
         </div>
       )}
     </div>
   );
 }
-
-// CSS animation for fade in and out effect
-const style = document.createElement("style");
-style.textContent = `
-  @keyframes fadeInOut {
-    0% { opacity: 0; transform: translateY(20px); }
-    10% { opacity: 1; transform: translateY(0); }
-    90% { opacity: 1; transform: translateY(0); }
-    100% { opacity: 0; transform: translateY(-20px); }
-  }
-`;
-document.head.appendChild(style);
