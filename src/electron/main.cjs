@@ -104,7 +104,7 @@ async function createWindow() {
     },
   });
 
-  adWindow.loadURL('https://andongmin.com/ad/kersor');
+  adWindow.loadURL('https://andongmin.com/ad/mini-cast');
 
   const updateAdWindowPosition = () => {
     const mainBounds = mainWindow.getBounds();
@@ -322,7 +322,7 @@ app.whenReady().then(() => {
   }
 
   const tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "../../public/icon.png")));
-  tray.setToolTip("커서");
+  tray.setToolTip("미니캐스트");
   tray.on("double-click", () => mainWindow.show());
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "초기화하면서 종료", type: "normal", click: () => {
