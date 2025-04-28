@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24">
+  <defs>
+    <style>
+      .cls-1 {
+        stroke-width: 2px;
+      }
+
+      .cls-1, .cls-2, .cls-3 {
+        fill: none;
+      }
+
+      .cls-1, .cls-2, .cls-4 {
+        stroke: #202632;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .cls-5 {
+        fill: #fff;
+      }
+
+      .cls-4 {
+        fill: url(#_무제_그라디언트_230);
+      }
+    </style>
+    <linearGradient id="_무제_그라디언트_230" data-name="무제 그라디언트 230" x1="9.38" y1="8.85" x2="18.67" y2="18.14" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="aqua"/>
+      <stop offset=".12" stop-color="#00f6ff"/>
+      <stop offset=".32" stop-color="#0df"/>
+      <stop offset=".57" stop-color="#00b5ff"/>
+      <stop offset=".87" stop-color="#007fff"/>
+      <stop offset="1" stop-color="#0064ff"/>
+    </linearGradient>
+  </defs>
+  <g id="_레이어_1-2" data-name="레이어 1">
+    <rect class="cls-5" x="2.43" y="1.89" width="17.86" height="17.86" rx="1.36" ry="1.36"/>
+    <path class="cls-2" d="M20.36,10V4c0-1.1-.9-2-2-2H4.36c-1.1,0-2,.9-2,2v14c0,1.1.9,2,2,2h6"/>
+    <path class="cls-1" d="M15.04,5.05H5.26"/>
+    <path class="cls-1" d="M17.29,11.05H5.26"/>
+    <path class="cls-1" d="M13.72,16.95H5.26"/>
+    <path class="cls-2" d="M2.36,12v6c0,1.1.9,2,2,2h14c1.1,0,2-.9,2-2V4c0-1.1-.9-2-2-2h-6"/>
+    <path class="cls-4" d="M9.23,9.56c-.14-.34.03-.73.37-.86.16-.06.33-.06.49,0l12.01,4.67c.34.13.51.52.38.86-.07.19-.23.33-.42.39l-4.6,1.43c-.42.13-.75.46-.88.88l-1.42,4.6c-.11.35-.48.55-.84.44-.19-.06-.35-.21-.42-.39l-4.67-12.01Z"/>
+    <rect class="cls-3" width="24" height="24"/>
+  </g>
+</svg>
