@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+
 import "@/globals.css";
+
 import { Keyboard, MousePointer2, PenTool } from "lucide-react";
+
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -22,13 +25,16 @@ function hexToRgba(hex: string, alpha: number = 1) {
 }
 
 function rgbaToHex(rgba: string): { hex: string; opacity: number } {
-  const match = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)/);
+  const match = rgba.match(
+    /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)/,
+  );
   if (match) {
     const r = parseInt(match[1]);
     const g = parseInt(match[2]);
     const b = parseInt(match[3]);
     const a = match[4] ? parseFloat(match[4]) : 1;
-    const hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    const hex =
+      "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
     return { hex, opacity: 1 - a };
   }
   return { hex: "#000000", opacity: 0 };
@@ -56,8 +62,10 @@ export default function Controller() {
   const [keyDisplayMonitor, setKeyDisplayMonitor] = useState(0);
   const [keyDisplayDuration, setKeyDisplayDuration] = useState(2000);
   const [keyDisplayFontSize, setKeyDisplayFontSize] = useState(16);
-  const [keyDisplayBackgroundColor, setKeyDisplayBackgroundColor] = useState("#000000");
-  const [keyDisplayBackgroundOpacity, setKeyDisplayBackgroundOpacity] = useState(0.5);
+  const [keyDisplayBackgroundColor, setKeyDisplayBackgroundColor] =
+    useState("#000000");
+  const [keyDisplayBackgroundOpacity, setKeyDisplayBackgroundOpacity] =
+    useState(0.5);
   const [keyDisplayTextColor, setKeyDisplayTextColor] = useState("#FFFFFF");
   const [keyDisplayPosition, setKeyDisplayPosition] = useState("bottom-right");
   const [displays, setDisplays] = useState<Display[]>([]);
@@ -68,9 +76,15 @@ export default function Controller() {
       try {
         const savedSettings = await electron.getSettings();
         if (savedSettings) {
-          const { hex: fillHex, opacity: fillOpacity } = rgbaToHex(savedSettings.cursorFillColor);
-          const { hex: strokeHex, opacity: strokeOpacity } = rgbaToHex(savedSettings.cursorStrokeColor);
-          const { hex: bgHex, opacity: bgOpacity } = rgbaToHex(savedSettings.keyDisplayBackgroundColor);
+          const { hex: fillHex, opacity: fillOpacity } = rgbaToHex(
+            savedSettings.cursorFillColor,
+          );
+          const { hex: strokeHex, opacity: strokeOpacity } = rgbaToHex(
+            savedSettings.cursorStrokeColor,
+          );
+          const { hex: bgHex, opacity: bgOpacity } = rgbaToHex(
+            savedSettings.keyDisplayBackgroundColor,
+          );
 
           setCursorFillColor(fillHex);
           setCursorFillOpacity(fillOpacity);
@@ -121,7 +135,7 @@ export default function Controller() {
       keyDisplayFontSize,
       keyDisplayBackgroundColor: hexToRgba(
         keyDisplayBackgroundColor,
-        1 - keyDisplayBackgroundOpacity
+        1 - keyDisplayBackgroundOpacity,
       ),
       keyDisplayTextColor,
       keyDisplayPosition,
@@ -158,10 +172,12 @@ export default function Controller() {
               마우스 설정
             </TabsTrigger>
             <TabsTrigger value="keyboard">
-              <Keyboard className="mr-2 h-4 w-4" />키보드 설정
+              <Keyboard className="mr-2 h-4 w-4" />
+              키보드 설정
             </TabsTrigger>
             <TabsTrigger value="canvas">
-              <PenTool className="mr-2 h-4 w-4" />캔버스 설정
+              <PenTool className="mr-2 h-4 w-4" />
+              캔버스 설정
             </TabsTrigger>
           </TabsList>
           <TabsContent value="cursor" className="space-y-4">
@@ -178,7 +194,10 @@ export default function Controller() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="cursor-fill-color" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="cursor-fill-color"
+                    className="whitespace-nowrap"
+                  >
                     마우스 칠 색상
                   </Label>
                   <input
@@ -190,7 +209,10 @@ export default function Controller() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="cursor-stroke-color" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="cursor-stroke-color"
+                    className="whitespace-nowrap"
+                  >
                     마우스 획 색상
                   </Label>
                   <input
@@ -204,7 +226,10 @@ export default function Controller() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
-                  <Label htmlFor="cursor-fill-opacity" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="cursor-fill-opacity"
+                    className="whitespace-nowrap"
+                  >
                     칠 투명도
                   </Label>
                   <Slider
@@ -218,7 +243,10 @@ export default function Controller() {
                   <span>{cursorFillOpacity.toFixed(2)}</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Label htmlFor="cursor-stroke-opacity" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="cursor-stroke-opacity"
+                    className="whitespace-nowrap"
+                  >
                     획 투명도
                   </Label>
                   <Slider
@@ -246,7 +274,10 @@ export default function Controller() {
                   <span>{cursorSize}px</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Label htmlFor="cursor-stroke-size" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="cursor-stroke-size"
+                    className="whitespace-nowrap"
+                  >
                     마우스 획 크기
                   </Label>
                   <Slider
@@ -276,19 +307,27 @@ export default function Controller() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="key-display-background-color" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="key-display-background-color"
+                    className="whitespace-nowrap"
+                  >
                     키보드 배경색
                   </Label>
                   <input
                     type="color"
                     id="key-display-background-color"
                     value={keyDisplayBackgroundColor}
-                    onChange={(e) => setKeyDisplayBackgroundColor(e.target.value)}
+                    onChange={(e) =>
+                      setKeyDisplayBackgroundColor(e.target.value)
+                    }
                     className="h-8 w-8"
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="key-display-text-color" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="key-display-text-color"
+                    className="whitespace-nowrap"
+                  >
                     키보드 텍스트 색상
                   </Label>
                   <input
@@ -302,7 +341,10 @@ export default function Controller() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
-                  <Label htmlFor="key-display-duration" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="key-display-duration"
+                    className="whitespace-nowrap"
+                  >
                     지속시간
                   </Label>
                   <Slider
@@ -313,10 +355,15 @@ export default function Controller() {
                     value={[keyDisplayDuration]}
                     onValueChange={(value) => setKeyDisplayDuration(value[0])}
                   />
-                  <span className="whitespace-nowrap">{(keyDisplayDuration / 1000).toFixed(1)}초</span>
+                  <span className="whitespace-nowrap">
+                    {(keyDisplayDuration / 1000).toFixed(1)}초
+                  </span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Label htmlFor="key-display-font-size" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="key-display-font-size"
+                    className="whitespace-nowrap"
+                  >
                     폰트 크기
                   </Label>
                   <Slider
@@ -330,7 +377,10 @@ export default function Controller() {
                   <span>{keyDisplayFontSize}px</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Label htmlFor="key-display-background-opacity" className="whitespace-nowrap">
+                  <Label
+                    htmlFor="key-display-background-opacity"
+                    className="whitespace-nowrap"
+                  >
                     배경 투명도
                   </Label>
                   <Slider
@@ -339,7 +389,9 @@ export default function Controller() {
                     max={1}
                     step={0.01}
                     value={[keyDisplayBackgroundOpacity]}
-                    onValueChange={(value) => setKeyDisplayBackgroundOpacity(value[0])}
+                    onValueChange={(value) =>
+                      setKeyDisplayBackgroundOpacity(value[0])
+                    }
                   />
                   <span>{keyDisplayBackgroundOpacity.toFixed(2)}</span>
                 </div>
@@ -347,12 +399,17 @@ export default function Controller() {
             </div>
             <div className="flex justify-around space-x-4">
               <div className="flex flex-col space-y-2">
-                <Label htmlFor="key-display-monitor" className="whitespace-nowrap text-center">
+                <Label
+                  htmlFor="key-display-monitor"
+                  className="whitespace-nowrap text-center"
+                >
                   활성 모니터
                 </Label>
                 <Select
                   value={keyDisplayMonitor.toString()}
-                  onValueChange={(value) => setKeyDisplayMonitor(parseInt(value))}
+                  onValueChange={(value) =>
+                    setKeyDisplayMonitor(parseInt(value))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="모니터 선택" />
@@ -371,10 +428,16 @@ export default function Controller() {
                 </Select>
               </div>
               <div className="flex flex-col space-y-2">
-                <Label htmlFor="key-display-position" className="whitespace-nowrap text-center">
+                <Label
+                  htmlFor="key-display-position"
+                  className="whitespace-nowrap text-center"
+                >
                   표시 위치
                 </Label>
-                <Select value={keyDisplayPosition} onValueChange={setKeyDisplayPosition}>
+                <Select
+                  value={keyDisplayPosition}
+                  onValueChange={setKeyDisplayPosition}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="위치 선택" />
                   </SelectTrigger>
