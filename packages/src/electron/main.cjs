@@ -375,7 +375,7 @@ app.whenReady().then(() => {
             accelerator: "F12",
             click: () => {
               mainWindow.webContents.toggleDevTools();
-              overlayWindows[0].webContents.toggleDevTools();
+              // overlayWindows[0].webContents.toggleDevTools();
             },
           },
         ],
