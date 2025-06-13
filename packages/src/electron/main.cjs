@@ -170,8 +170,8 @@ function createOverlayWindows() {
       overlayWindow.webContents.send('update-settings', currentSettings);
     });
     
-    overlayWindow.setIgnoreMouseEvents(true);
-  });
+    // 클릭만 전달
+    overlayWindow.setIgnoreMouseEvents(true, { forward: false, maySendUponClick: true })});
 }
 
 let mouseEventInterval;
