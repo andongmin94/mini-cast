@@ -53,7 +53,7 @@ async function createWindow() {
 
   mainWindow = new BrowserWindow({
     width: 416,
-    height: 345,
+    height: 352,
     frame: false,
     resizable: isDev,
     icon: path.join(__dirname, "../../public/icon.png"),
@@ -348,12 +348,12 @@ app.whenReady().then(() => {
   tray.setToolTip("미니캐스트");
   tray.on("double-click", () => mainWindow.show());
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "초기화하면서 종료", type: "normal", click: () => {
-        // 저장소 리셋
-        store.clear();
-        mainWindow.close();
-      }
-    },
+    // { label: "초기화하면서 종료", type: "normal", click: () => {
+    //     // 저장소 리셋
+    //     store.clear();
+    //     mainWindow.close();
+    //   }
+    // },
     { label: "열기", type: "normal", click: () => mainWindow.show() },
     { label: "종료", type: "normal", click: () => mainWindow.close()},
   ]));
