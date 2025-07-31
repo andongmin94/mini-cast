@@ -10,11 +10,11 @@
     "copyright": "Copyright © andongmin",
     "artifactName": "${productName}.${ext}",
     "icon": "public/icon.png",
+    "compression": "store",
     "mac": { "target": [ "dir" ] },
     "win": { "target": [ "portable" ] },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
       "uninstallDisplayName": "미니캐스트"
     },
     "files": [
