@@ -1,4 +1,5 @@
 import { app, BrowserWindow, shell, screen } from 'electron';
+import { mouseEventInterval } from './func.js';
 import path from 'path';
 
 let mainWindow: BrowserWindow | null;
@@ -13,7 +14,7 @@ let mainWindow: BrowserWindow | null;
  */
 
 let overlayWindows: BrowserWindow[] = [];
-let adWindow: BrowserWindow;
+export let adWindow: BrowserWindow;
 
 export async function createWindow(port: number, isDev: boolean, __dirname: string, closeSplash: () => void) {
   mainWindow = new BrowserWindow({
@@ -57,7 +58,7 @@ export async function createWindow(port: number, isDev: boolean, __dirname: stri
     });
   }
 
-  // 창 닫기 이벤트 처리
+  // 종료 설정
   mainWindow.on('close', (e) => {
     if (process.platform === 'darwin') {
       // macOS: 사용자가 명시적으로 종료(Cmd+Q 등)하지 않으면 숨김
@@ -66,6 +67,10 @@ export async function createWindow(port: number, isDev: boolean, __dirname: stri
       app.dock?.hide(); // Dock 에서도 숨김
     }
     // 다른 OS 에서는 window-all-closed 에서 앱 종료 처리
+    else {
+      clearInterval(mouseEventInterval);
+      app.quit();
+    }
   });
 
   mainWindow.on('closed', () => {

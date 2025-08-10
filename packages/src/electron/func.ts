@@ -1,9 +1,10 @@
 import { screen } from 'electron';
 import { GlobalKeyboardListener } from 'node-global-key-listener';
 
+export let mouseEventInterval:any;
 export function captureMouseEvents(getOverlayWindows: any) {
   const overlayWindows = getOverlayWindows();
-  setInterval(() => {
+  mouseEventInterval = setInterval(() => {
     const cursorPosition = screen.getCursorScreenPoint();
     const activeDisplay = screen.getDisplayNearestPoint(cursorPosition);
 
