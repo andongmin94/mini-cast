@@ -1,8 +1,9 @@
 # Excepts for git
 node_modules
-dist
 dist_app
+dist
 *.local
+
 package-lock.json
 
 # Logs
@@ -15,6 +16,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Editor directories and files
+.vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
