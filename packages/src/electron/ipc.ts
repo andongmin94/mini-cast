@@ -19,17 +19,19 @@ export function setupIpcHandlers(getMainWindow: MainWindowGetter, getOverlayWind
 
   ipcMain.on('maximize', () => {
     const mw = getMainWindow();
-    if (mw) {
-      mw.isMaximized() ? mw.restore() : mw.maximize();
+    if (mw && mw.isMinimized()) {
+      mw.restore();
+    } else {
+      mw?.maximize();
     }
   });
 
   // 여기에 다른 IPC 핸들러 추가 가능
-  ipcMain.on('request-displays', (event) => {
+  ipcMain.on('request-displays', () => {
       const displays = getConnectedDisplays();
       getMainWindow()?.webContents.send('displays-updated', displays);
   });
-  ipcMain.on('update-settings', (event, newSettings) => {
+  ipcMain.on('update-settings', (_event, newSettings) => {
   currentSettings = { ...currentSettings, ...newSettings };
   const store = getStore();
   store.set('settings', currentSettings);
