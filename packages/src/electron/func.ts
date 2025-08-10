@@ -1,11 +1,9 @@
 import { screen } from 'electron';
 import { GlobalKeyboardListener } from 'node-global-key-listener';
 
-let mouseEventInterval;
-
 export function captureMouseEvents(getOverlayWindows: any) {
   const overlayWindows = getOverlayWindows();
-  mouseEventInterval = setInterval(() => {
+  setInterval(() => {
     const cursorPosition = screen.getCursorScreenPoint();
     const activeDisplay = screen.getDisplayNearestPoint(cursorPosition);
 
@@ -27,7 +25,7 @@ export function captureMouseEvents(getOverlayWindows: any) {
 export function captureKeyboardEvents(getOverlayWindows: any) {
     const overlayWindows = getOverlayWindows();
   const gkl = new GlobalKeyboardListener();
-  let specialKeys:any = {
+  const specialKeys:any = {
     ctrl: false,
     shift: false,
     alt: false,
@@ -102,7 +100,7 @@ export function captureKeyboardEvents(getOverlayWindows: any) {
         combination = `${specialKeyCombination.join(' + ')} + ${keyName}`;
       }
 
-      let displayKey = keyName;
+      const displayKey = keyName;
       // // if (keyName.length === 1 && keyName >= 'A' && keyName <= 'Z') {
       // //   const shouldBeUpperCase = (capsLockOn && !specialKeys.shift) || (!capsLockOn && specialKeys.shift);
       // //   displayKey = shouldBeUpperCase ? keyName : keyName.toLowerCase();

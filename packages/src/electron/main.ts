@@ -16,8 +16,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDev = process.env.NODE_ENV === 'development';
 const { default: Store } = await import('electron-store'); // 1. 여기에 정적 import를 추가합니다.
-let store = new Store();
-let currentSettings = {
+const store = new Store();
+const currentSettings = {
   cursorFillColor: "rgba(0, 100, 255, 0.5)",
   cursorStrokeColor: "rgba(32, 38, 50, 0.5)",
   cursorSize: 30,
