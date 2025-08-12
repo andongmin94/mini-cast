@@ -1,50 +1,36 @@
-import { ipcMain } from 'electron';
-import { getConnectedDisplays } from './func.js';
-import { adWindow } from './window.js';
+import { ipcMain } from "electron";
 
-/**
- * 개발 환경용 메뉴 설정
- * @param {Function} getMainWindow - 메인 윈도우 객체를 반환하는 함수
- */
-interface MainWindowGetter {
-  (): Electron.BrowserWindow | null; // 메인 윈도우 객체를 반환하는 함수
-}
-export function setupIpcHandlers(getMainWindow: MainWindowGetter, getOverlayWindows: () => Electron.BrowserWindow[], getStore:any, currentSettings: any) {
-  ipcMain.on('hidden', () => {
+import { getConnectedDisplays } from "./func.js";
+import { adWindow, getMainWindow, getOverlayWindows } from "./window.js";
+
+export function setupIpcHandlers(getStore: any, currentSettings: any) {
+  const mainWindow = getMainWindow();
+
+  ipcMain.on("hidden", () => {
     if (adWindow) adWindow.hide();
-    getMainWindow()?.hide();
+    mainWindow?.hide();
   });
 
-  ipcMain.on('minimize', () => {
-    getMainWindow()?.minimize();
-  });
-
-  ipcMain.on('maximize', () => {
-    const mw = getMainWindow();
-    if (mw && mw.isMinimized()) {
-      mw.restore();
-    } else {
-      mw?.maximize();
-    }
+  ipcMain.on("minimize", () => {
+    mainWindow?.minimize();
   });
 
   // 여기에 다른 IPC 핸들러 추가 가능
-  ipcMain.on('request-displays', () => {
-      const displays = getConnectedDisplays();
-      getMainWindow()?.webContents.send('displays-updated', displays);
+  ipcMain.on("request-displays", () => {
+    const displays = getConnectedDisplays();
+    mainWindow?.webContents.send("displays-updated", displays);
   });
-  ipcMain.on('update-settings', (_event, newSettings) => {
-  currentSettings = { ...currentSettings, ...newSettings };
-  const store = getStore();
-  store.set('settings', currentSettings);
-  getOverlayWindows().forEach(window => {
-    window.webContents.send('update-settings', currentSettings);
-  });
-});
 
-  ipcMain.handle('get-value', (event, key) => {
-  const store = getStore();
-  const value = store.get(key);
-  return value;
-});
+  ipcMain.on("update-settings", (_event, newSettings) => {
+    currentSettings = { ...currentSettings, ...newSettings };
+    getStore().set("settings", currentSettings);
+    getOverlayWindows().forEach((window) => {
+      window.webContents.send("update-settings", currentSettings);
+    });
+  });
+
+  ipcMain.handle("get-value", (event, key) => {
+    const value = getStore().get(key);
+    return value;
+  });
 }
