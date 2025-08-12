@@ -11,7 +11,6 @@ import {
 } from "./func.js";
 import { setupIpcHandlers } from "./ipc.js";
 import { determinePort } from "./serve.js";
-// 모듈 임포트
 import { closeSplash, createSplash } from "./splash.js";
 import { createTray, destroyTray } from "./tray.js";
 import { createOverlayWindows, createWindow, getMainWindow } from "./window.js";
@@ -19,8 +18,8 @@ import { createOverlayWindows, createWindow, getMainWindow } from "./window.js";
 // --- 기본 설정 ---
 export const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const isDev = process.env.NODE_ENV === "development";
+export const store = () => new Store();
 
-const store = new Store();
 export const currentSettings = {
   cursorFillColor: "rgba(0, 100, 255, 0.5)",
   cursorStrokeColor: "rgba(32, 38, 50, 0.5)",
@@ -74,7 +73,7 @@ if (!app.requestSingleInstanceLock()) {
           captureMouseEvents();
           captureKeyboardEvents();
           createTray(); // 트레이 생성
-          setupIpcHandlers(() => store, currentSettings); // IPC 핸들러 설정
+          setupIpcHandlers(currentSettings); // IPC 핸들러 설정
 
           screen.on("display-added", () => {
             const displays = getConnectedDisplays();
