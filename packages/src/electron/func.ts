@@ -1,11 +1,10 @@
 import { screen } from "electron";
 import { GlobalKeyboardListener } from "node-global-key-listener";
 
-import { getOverlayWindows } from "./window.js";
+import { overlayWindows } from "./window.js";
 
 export let mouseEventInterval: any;
 export function captureMouseEvents() {
-  const overlayWindows = getOverlayWindows();
   mouseEventInterval = setInterval(() => {
     const cursorPosition = screen.getCursorScreenPoint();
     const activeDisplay = screen.getDisplayNearestPoint(cursorPosition);
@@ -26,7 +25,6 @@ export function captureMouseEvents() {
 }
 
 export function captureKeyboardEvents() {
-  const overlayWindows = getOverlayWindows();
   const gkl = new GlobalKeyboardListener();
   const specialKeys: any = {
     ctrl: false,
