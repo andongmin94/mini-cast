@@ -5,9 +5,9 @@ import { mouseEventInterval } from "./func.js";
 import { __dirname, currentSettings, isDev } from "./main.js"; // isDev를 main.ts에서 가져옴
 import { closeSplash } from "./splash.js";
 
-let mainWindow: BrowserWindow | null;
-let overlayWindows: BrowserWindow[] = [];
+export let mainWindow: BrowserWindow | null;
 export let adWindow: BrowserWindow;
+export let overlayWindows: BrowserWindow[] = [];
 
 export async function createWindow(port: number) {
   mainWindow = new BrowserWindow({
@@ -123,10 +123,6 @@ export async function createWindow(port: number) {
   });
 }
 
-export function getMainWindow() {
-  return mainWindow;
-}
-
 export function createOverlayWindows(PORT: number) {
   overlayWindows.forEach((window) => window.close());
   overlayWindows = [];
@@ -159,8 +155,4 @@ export function createOverlayWindows(PORT: number) {
     // 클릭만 전달
     overlayWindow.setIgnoreMouseEvents(true, { forward: false });
   });
-}
-
-export function getOverlayWindows() {
-  return overlayWindows;
 }
