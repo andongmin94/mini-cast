@@ -197,9 +197,9 @@ export default function Controller() {
     <>
       <TitleBar />
 
-      <div className="pointer-events-auto h-[280px] overflow-hidden p-4">
+      <div className="pointer-events-auto z-999 h-[280px] overflow-hidden p-4">
         <Tabs defaultValue="cursor" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="z-999 grid w-full grid-cols-2">
             <TabsTrigger value="cursor">
               <MousePointer2 className="mr-2 h-4 w-4" />
               커서 설정
@@ -509,6 +509,14 @@ export default function Controller() {
         </AlertDialog>
         v{packageJson.version}
       </div>
+      <div className="fixed bottom-0 left-0 h-[121px] w-full">
+        <iframe
+          src="https://andongmin.com/ad/mini-cast"
+          className="h-full w-full border-0"
+          sandbox="allow-scripts allow-same-origin"
+        />
+      </div>
+      <div className="pb-[121px]"> {/* 기존 컨텐츠 래퍼 */}</div>
     </>
   );
 }

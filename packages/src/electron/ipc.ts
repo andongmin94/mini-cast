@@ -2,11 +2,10 @@ import { ipcMain } from "electron";
 
 import { getConnectedDisplays } from "./func.js";
 import { store } from "./main.js";
-import { adWindow, mainWindow, overlayWindows } from "./window.js";
+import { mainWindow, overlayWindows } from "./window.js";
 
 export function setupIpcHandlers(currentSettings: any) {
   ipcMain.on("hidden", () => {
-    if (adWindow) adWindow.hide();
     mainWindow?.hide();
   });
 
