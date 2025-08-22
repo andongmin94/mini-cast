@@ -117,7 +117,7 @@ const config = async (): Promise<UserConfig> => {
       ["meta", { property: "og:image", content: ogImage }],
       ["meta", { property: "og:url", content: ogUrl }],
       ["meta", { property: "og:description", content: ogDescription }],
-      ["meta", { name: "theme-color", content: "#646cff" }],
+      ["meta", { name: "theme-color", content: "#1170ff" }],
       [
         "script",
         {
@@ -150,7 +150,7 @@ const config = async (): Promise<UserConfig> => {
 
       footer: {
         message: `Released under the EULA License`,
-        copyright: "Copyright © 2024 안동민",
+        copyright: "Copyright © 2025 안동민",
       },
 
       nav: [
