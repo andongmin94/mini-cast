@@ -12,8 +12,8 @@ noninfringement. In no event shall the author be liable for any claim, damages, 
 in an action of contract, tort, or otherwise, arising from, out of, or in connection with the App or the 
 source code, or the use or other dealings in the App.
 
+<hr />
 
-─────────────────────────────────────────────
 (국문)
 
 저작권 (c) 2025 andongmin
