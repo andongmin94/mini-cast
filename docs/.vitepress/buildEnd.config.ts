@@ -15,7 +15,7 @@ export const buildEnd = async (config: SiteConfig) => {
     language: "ko",
     image: "https://mini-cast.andongmin.com/mini-cast.svg",
     favicon: "https://mini-cast.andongmin.com/mini-cast.svg",
-    copyright: "Copyright © 2024 andongmin",
+    copyright: "Copyright © 2025 andongmin",
   });
 
   const posts = await createContentLoader("blog/*.md", {
