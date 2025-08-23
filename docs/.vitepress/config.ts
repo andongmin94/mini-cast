@@ -190,6 +190,7 @@ const config = async (): Promise<UserConfig> => {
 
       outline: {
         level: [2, 3],
+        label: "목차"    // ← 추가: 원하는 한글로 변경
       },
     },
     transformPageData(pageData: any) {
