@@ -137,6 +137,10 @@ const config = async (): Promise<UserConfig> => {
         text: "가이드 수정 제안하기",
       },
 
+      socialLinks: [
+        { icon: "github", link: "https://github.com/andongmin94/frontron" },
+      ],
+
       sidebarMenuLabel: "메뉴",
 
       returnToTopLabel: "위로 가기",
@@ -190,7 +194,7 @@ const config = async (): Promise<UserConfig> => {
 
       outline: {
         level: [2, 3],
-        label: "목차"    // ← 추가: 원하는 한글로 변경
+        label: "목차", // ← 추가: 원하는 한글로 변경
       },
     },
     transformPageData(pageData: any) {
