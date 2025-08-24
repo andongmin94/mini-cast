@@ -87,7 +87,7 @@ export default function Controller() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const savedSettings = await electron.getSettings();
+        const savedSettings = await electron.get("settings");
         if (savedSettings) {
           const { hex: fillHex, opacity: fillOpacity } = rgbaToHex(
             savedSettings.cursorFillColor,
