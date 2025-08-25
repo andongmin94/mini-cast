@@ -76,13 +76,13 @@ if (!app.requestSingleInstanceLock()) {
 
           screen.on("display-added", () => {
             const displays = getConnectedDisplays();
-            mainWindow?.webContents.send("displays-updated", displays);
+            mainWindow.webContents.send("displays-updated", displays);
             createOverlayWindows(port);
           });
 
           screen.on("display-removed", () => {
             const displays = getConnectedDisplays();
-            mainWindow?.webContents.send("displays-updated", displays);
+            mainWindow.webContents.send("displays-updated", displays);
             createOverlayWindows(port);
           });
         } catch (error) {
