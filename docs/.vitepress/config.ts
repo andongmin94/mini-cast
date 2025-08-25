@@ -133,7 +133,7 @@ const config = async (): Promise<UserConfig> => {
       logo: "/mini-cast.svg",
 
       editLink: {
-        pattern: "mailto:andongmin94@gmail.com",
+        pattern: "https://github.com/andongmin94/mini-cast/issues",
         text: "가이드 수정 제안하기",
       },
 
