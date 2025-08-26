@@ -89,8 +89,3 @@ interface CanvasShape {
 | `canvas-renderer.tsx` | 캔버스 React 컴포넌트 |
 | `canvas-ipc.ts` | IPC 채널 (도구 변경/드로잉 동기화) |
 | `canvas-utils.ts` | 좌표 변환, 단순화 알고리즘 |
-
-## 다음으로 보기
-- [마우스 설정](./mouse.md)
-- [키보드 설정](./keyboard.md)
-- [시작하기](./index.md)

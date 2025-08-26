@@ -67,8 +67,3 @@
 - IPC 브로드캐스트: `src/electron/ipc.ts`
 - 렌더 표시 로직: `src/components/Overlay.tsx`
 - 설정 저장/로드: `electron-store` (`main.ts` / `Controller.tsx`)
-
-## 다음으로 보기
-- [마우스 설정](./mouse.md)
-- [캔버스 설정](./canvas.md)
-- [시작하기](./index.md)
