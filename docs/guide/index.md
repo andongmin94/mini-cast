@@ -11,8 +11,9 @@
 ## 설치
 
 ### Windows (Portable)
-1. Releases 페이지에서 `MiniCast.exe` 다운로드
-2. 원하는 폴더에 두고 바로 실행 (설치 과정 X)
+1. Releases 페이지에서 `MiniCast.exe`(무설치) 또는 `MiniCast.msi`(설치형) 다운로드
+2. 무설치: 원하는 폴더에 두고 바로 실행 (설치 과정 X)
+   설치형(MSI): 설치 진행 후 바탕화면에서 실행
 3. 실행 후 트레이(시스템 트레이) 아이콘이 생성되며 Controller 창이 표시됩니다.
 
 ### macOS (준비 중)
