@@ -1,6 +1,6 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import { app, globalShortcut, Menu, screen } from "electron";
+import { app, globalShortcut, Menu, screen, shell } from "electron";
 import Store from "electron-store";
 
 import { setupDevMenu } from "./dev.js";
@@ -142,3 +142,20 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.unregisterAll();
   });
 } // 싱글 인스턴스 Lock 블록 끝
+
+// --- 외부 링크를 기본 브라우저로 열기 ---
+app.on('web-contents-created', (_event, contents) => {
+  contents.setWindowOpenHandler(({ url }) => {
+    // 외부 링크는 기본 브라우저로 오픈
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  // 기존 a 태그 클릭도 외부 브라우저로
+  contents.on('will-navigate', (event, url) => {
+    if (url !== contents.getURL()) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+});
