@@ -1,6 +1,6 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import { app, globalShortcut, Menu, screen, shell } from "electron";
+import { app, Menu, screen, shell } from "electron";
 import Store from "electron-store";
 
 import { setupDevMenu } from "./dev.js";
@@ -137,9 +137,6 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", () => {
     // 앱 종료 전 처리 (예: 트레이 아이콘 제거)
     destroyTray();
-  });
-  app.on("will-quit", () => {
-    globalShortcut.unregisterAll();
   });
 } // 싱글 인스턴스 Lock 블록 끝
 
