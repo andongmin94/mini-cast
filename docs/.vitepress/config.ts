@@ -8,7 +8,7 @@ import path from "node:path";
 const ogTitle = "미니캐스트";
 const ogDescription = "쓰기 쉽게, 보기 쉽게";
 const ogUrl = "https://mini-cast.andongmin.com";
-const ogImage = "https://mini-cast.andongmin.com/mini-cast.svg";
+const ogImage = "https://mini-cast.andongmin.com/logo.png";
 
 async function generateReleaseNotes(releases: any) {
   const releaseDir = path.resolve(__dirname, "../guide/release");
@@ -106,7 +106,7 @@ const config = async (): Promise<UserConfig> => {
     description: "쓰기 쉽게, 보기 쉽게",
 
     head: [
-      ["link", { rel: "icon", type: "image/svg+xml", href: "/mini-cast.svg" }],
+      ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.png" }],
       [
         "link",
         { rel: "alternate", type: "application/rss+xml", href: "/blog.rss" },
@@ -130,7 +130,7 @@ const config = async (): Promise<UserConfig> => {
     ],
 
     themeConfig: {
-      logo: "/mini-cast.svg",
+      logo: "/logo.png",
 
       editLink: {
         pattern: "https://mail.google.com/mail/?view=cm&fs=1&to=andongmin94@gmail.com&su=미니캐스트%20문의&body=",
