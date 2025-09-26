@@ -135,7 +135,7 @@ export function createOverlayWindows(PORT: number, __dirname: string, currentSet
   const displays = screen.getAllDisplays();
   
   displays.forEach((display, index) => {
-    let overlayWindow = new BrowserWindow({
+    const overlayWindow = new BrowserWindow({
       x: display.bounds.x,
       y: display.bounds.y,
       width: display.bounds.width,

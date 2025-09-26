@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import "@/globals.css";
 
 import { Keyboard, MousePointer2 } from "lucide-react";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -353,7 +354,7 @@ export default function Controller() {
                       setKeyDisplayBackgroundColor(e.target.value)
                     }
                     className="color-picker rounded-md px-1 py-0.5"
-/>
+                  />
                 </div>
                 <div className="flex items-center justify-center gap-4">
                   <Label
@@ -433,7 +434,7 @@ export default function Controller() {
               <div className="flex flex-col space-y-2">
                 <Label
                   htmlFor="key-display-monitor"
-                  className="whitespace-nowrap text-center"
+                  className="text-center whitespace-nowrap"
                 >
                   활성 모니터
                 </Label>
@@ -462,7 +463,7 @@ export default function Controller() {
               <div className="flex flex-col space-y-2">
                 <Label
                   htmlFor="key-display-position"
-                  className="whitespace-nowrap text-center"
+                  className="text-center whitespace-nowrap"
                 >
                   표시 위치
                 </Label>
@@ -489,7 +490,9 @@ export default function Controller() {
       <div className="pointer-events-auto mr-1 flex items-end justify-between text-xs">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="destructive" className="w-10 h-6 ml-2 mb-2">리셋</Button>
+            <Button variant="destructive" className="mb-2 ml-2 h-6 w-10">
+              리셋
+            </Button>
           </AlertDialogTrigger>
           <AlertDialogContent className="mt-5 max-w-[355px] rounded-md p-4">
             <AlertDialogHeader>
