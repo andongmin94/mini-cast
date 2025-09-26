@@ -26,7 +26,7 @@
 ## 전역 후킹 & 필터
 라이브러리: `node-global-key-listener`
 
-처리 흐름:
+처리 흐름
 1. DOWN 이벤트 수신 → 조합키 상태 맵(ctrl/shift/alt/meta) 업데이트
 2. 특수키 여부 검사 (조합키 자체면 표시하지 않음)
 3. 조합 문자열 구성 (예: Ctrl + Shift + K)
