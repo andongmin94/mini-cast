@@ -9,7 +9,7 @@ hero:
   text: 키보드 & 마우스 오버레이
   tagline: 쓰기 쉽게, 보기 쉽게
   image:
-    src: /logo.png
+    src: /logo.svg
     alt: mini-cast
   actions:
     - theme: brand
