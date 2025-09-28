@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { getConnectedDisplays } from './func.js';
+import { adWindow } from './window.js';
 
 /**
  * 개발 환경용 메뉴 설정
@@ -10,6 +11,7 @@ interface MainWindowGetter {
 }
 export function setupIpcHandlers(getMainWindow: MainWindowGetter, getOverlayWindows: () => Electron.BrowserWindow[], getStore:any, currentSettings: any) {
   ipcMain.on('hidden', () => {
+    if (adWindow) adWindow.hide();
     getMainWindow()?.hide();
   });
 
