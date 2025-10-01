@@ -18,7 +18,7 @@ export function createTray(getMainWindow: MainWindowGetter, __dirname: string) {
         return;
     }
     tray = new Tray(icon);
-    tray.setToolTip('Frontron');
+    tray.setToolTip('Mini Cast');
 
     tray.on('double-click', () => {
       mainWindow?.show();
