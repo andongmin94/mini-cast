@@ -1,9 +1,10 @@
 import { ipcMain } from "electron";
 
 import { getConnectedDisplays } from "./func.js";
+import { store } from "./main.js";
 import { adWindow, getMainWindow, getOverlayWindows } from "./window.js";
 
-export function setupIpcHandlers(getStore: any, currentSettings: any) {
+export function setupIpcHandlers(currentSettings: any) {
   const mainWindow = getMainWindow();
 
   ipcMain.on("hidden", () => {
@@ -23,14 +24,14 @@ export function setupIpcHandlers(getStore: any, currentSettings: any) {
 
   ipcMain.on("update-settings", (_event, newSettings) => {
     currentSettings = { ...currentSettings, ...newSettings };
-    getStore().set("settings", currentSettings);
+    (store() as any).set("settings", currentSettings);
     getOverlayWindows().forEach((window) => {
       window.webContents.send("update-settings", currentSettings);
     });
   });
 
   ipcMain.handle("get-value", (event, key) => {
-    const value = getStore().get(key);
+    const value = (store() as any).get(key);
     return value;
   });
 }
