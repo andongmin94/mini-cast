@@ -97,13 +97,13 @@ npm run app
 # - electron: 개발 모드로 실행
 ```
 
-오직 UI (웹)만 보고 싶다면:
+오직 UI (웹)만 보고 싶다면
 ```bash
 npm run dev
 ```
 
 ## 빌드 / 패키징
-Windows 휴대용(Portable) 실행 파일 생성:
+Windows 휴대용(Portable) 실행 파일 생성
 ```bash
 npm run build
 # 결과물: dist_app/ 에 실행 파일 (MiniCast.exe 등)
@@ -149,7 +149,7 @@ npm run build
 - 현재 hero 의 다운로드 링크/버전 값은 릴리스 자동화 후 스크립트로 동기화 권장
 
 ## 기여 방법
-추후 CONTRIBUTING.md 제공 예정. 우선 아래 프로세스 권장:
+추후 CONTRIBUTING.md 제공 예정. 우선 아래 프로세스 권장
 1. Issue 생성 (버그/기능 제안)
 2. Fork & 브랜치 생성 (feat/..., fix/...)
 3. 커밋 컨벤션: 간결한 한글 또는 영어 (예: fix: overlay click pass-through)
