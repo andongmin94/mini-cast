@@ -14,9 +14,7 @@ source code, or the use or other dealings in the App.
 
 <hr />
 
-(국문)
-
-저작권 (c) 2025 andongmin
+저작권 (c) 2025 안동민
 
 본 애플리케이션(이하 "앱")은 누구나 무료로 사용할 수 있습니다.
 
