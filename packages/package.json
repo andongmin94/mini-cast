@@ -1,6 +1,6 @@
 {
   "name": "mini-cast",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "type": "module",
   "author": "안동민",
   "main": "dist/electron/main.js",
