@@ -32,7 +32,7 @@ export async function createWindow(port: number) {
 
   // --- 플랫폼별 우클릭 메뉴 비활성화 시도 ---
   if (process.platform === "win32") {
-    mainWindow.on("system-context-menu", (event:any) => {
+    mainWindow.on("system-context-menu", (event: any) => {
       event.preventDefault();
     });
   } else {
