@@ -27,7 +27,7 @@ export function setupIpcHandlers(currentSettings: any) {
     });
   });
 
-  ipcMain.handle("get-value", (event: any, key: any) => {
+  ipcMain.handle("get-value", (_event: any, key: any) => {
     const value = (store() as any).get(key);
     return value;
   });
