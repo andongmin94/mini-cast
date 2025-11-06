@@ -99,7 +99,8 @@ if (!app.requestSingleInstanceLock()) {
         }
       }, 2000);
 
-      if (isDev) setupDevMenu(); // 개발 메뉴 설정
+      if (isDev)
+        setupDevMenu(); // 개발 메뉴 설정
       else Menu.setApplicationMenu(null); // 프로덕션 메뉴 제거
     } catch (error) {
       console.error("Failed to initialize app:", error);
@@ -111,9 +112,7 @@ if (!app.requestSingleInstanceLock()) {
   // --- 앱 생명주기 이벤트 핸들러 ---
   app.on("window-all-closed", () => {
     // macOS 제외하고 모든 창 닫히면 앱 종료
-    if (process.platform !== "darwin") {
-      app.quit();
-    }
+    if (process.platform !== "darwin") app.quit();
   });
 
   app.on("activate", () => {
