@@ -131,17 +131,17 @@ export function captureKeyboardEvents() {
       if (specialKeyCombination.length > 0)
         combination = `${specialKeyCombination.join(" + ")} + ${keyName}`;
 
-      // 단일 알파벳이면 안 띄우기
-      const keyDetails = {
-        key: keyName,
-        code: e.rawKey ? e.rawKey._nameRaw : "",
-        ctrlKey: specialKeys.ctrl,
-        shiftKey: specialKeys.shift,
-        altKey: specialKeys.alt,
-        metaKey: specialKeys.meta,
-        timestamp: Date.now(),
-      };
-      sendKeyPress(combination, keyDetails);
+      // // 단일 알파벳 띄우기
+      // const keyDetails = {
+      //   key: keyName,
+      //   code: e.rawKey ? e.rawKey._nameRaw : "",
+      //   ctrlKey: specialKeys.ctrl,
+      //   shiftKey: specialKeys.shift,
+      //   altKey: specialKeys.alt,
+      //   metaKey: specialKeys.meta,
+      //   timestamp: Date.now(),
+      // };
+      // sendKeyPress(combination, keyDetails);
 
       // 단일 알파벳 키인지 확인하는 함수
       function isSingleAlphabet(key: any) {
