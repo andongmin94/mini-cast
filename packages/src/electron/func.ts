@@ -69,11 +69,9 @@ export function captureKeyboardEvents() {
   };
 
   function getKeyName(name: any) {
-    if (Object.prototype.hasOwnProperty.call(keyNameMap, name)) {
+    if (Object.prototype.hasOwnProperty.call(keyNameMap, name))
       return keyNameMap[name as keyof typeof keyNameMap];
-    }
-    if (name.length === 1) {
-      return name;
+    if (name.length === 1) return name;
     return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
   }
 
@@ -94,9 +92,7 @@ export function captureKeyboardEvents() {
 
   gkl.addListener((e) => {
     const rawName = (e.name ?? "").trim();
-    if (!rawName) {
-      return;
-    }
+    if (!rawName) return;
 
     const isSpecialKey = [
       "LEFT CTRL",
@@ -110,10 +106,6 @@ export function captureKeyboardEvents() {
       "CAPS LOCK",
     ].includes(rawName);
 
-    // if (e.name === 'CAPS LOCK' && e.state === 'DOWN') {
-    //   capsLockOn = !capsLockOn;
-    // }
-
     const keyName = getKeyName(rawName);
     if (
       rawName === "MOUSE LEFT" ||
@@ -125,9 +117,8 @@ export function captureKeyboardEvents() {
       });
     }
 
-    if (isSpecialKey && rawName !== "CAPS LOCK") {
+    if (isSpecialKey && rawName !== "CAPS LOCK")
       specialKeys[keyName.toLowerCase()] = e.state === "DOWN";
-    }
 
     if (e.state === "DOWN" && !isSpecialKey) {
       const specialKeyCombination = [];
@@ -137,28 +128,20 @@ export function captureKeyboardEvents() {
       if (specialKeys.meta) specialKeyCombination.push("Meta");
 
       let combination = keyName;
-      if (specialKeyCombination.length > 0) {
+      if (specialKeyCombination.length > 0)
         combination = `${specialKeyCombination.join(" + ")} + ${keyName}`;
-      }
 
-      const displayKey = keyName;
-      // // if (keyName.length === 1 && keyName >= 'A' && keyName <= 'Z') {
-      // //   const shouldBeUpperCase = (capsLockOn && !specialKeys.shift) || (!capsLockOn && specialKeys.shift);
-      // //   displayKey = shouldBeUpperCase ? keyName : keyName.toLowerCase();
-      // // }
-
-      // const keyDetails = {
-      //   key: displayKey,
-      //   code: e.rawKey._nameRaw,
-      //   ctrlKey: specialKeys.ctrl,
-      //   shiftKey: specialKeys.shift,
-      //   altKey: specialKeys.alt,
-      //   metaKey: specialKeys.meta,
-      //   // capsLock: capsLockOn,
-      //   timestamp: Date.now()
-      // };
-
-      // sendKeyPress(combination.replace(keyName, displayKey), keyDetails);
+      // 단일 알파벳이면 안 띄우기
+      const keyDetails = {
+        key: keyName,
+        code: e.rawKey ? e.rawKey._nameRaw : "",
+        ctrlKey: specialKeys.ctrl,
+        shiftKey: specialKeys.shift,
+        altKey: specialKeys.alt,
+        metaKey: specialKeys.meta,
+        timestamp: Date.now(),
+      };
+      sendKeyPress(combination, keyDetails);
 
       // 단일 알파벳 키인지 확인하는 함수
       function isSingleAlphabet(key: any) {
@@ -172,9 +155,9 @@ export function captureKeyboardEvents() {
       }
 
       // keyDetails 생성 전에 필터링
-      if (!isSingleAlphabet(displayKey)) {
+      if (!isSingleAlphabet(keyName)) {
         const keyDetails = {
-          key: displayKey,
+          key: keyName,
           code: e.rawKey ? e.rawKey._nameRaw : "",
           ctrlKey: specialKeys.ctrl,
           shiftKey: specialKeys.shift,
@@ -182,7 +165,7 @@ export function captureKeyboardEvents() {
           metaKey: specialKeys.meta,
           timestamp: Date.now(),
         };
-        sendKeyPress(combination.replace(keyName, displayKey), keyDetails);
+        sendKeyPress(combination, keyDetails);
       }
     }
   });
