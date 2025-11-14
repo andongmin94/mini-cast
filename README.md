@@ -62,14 +62,14 @@
 ## 디렉터리 구조 (요약)
 ```
 mini-cast/
- ├─ docs/              # VitePress 기반 문서 (사이트 hero 등)
- └─ packages/          # 실제 앱 (Electron + React)
-     ├─ public/        # 아이콘, 폰트, 정적 자원
+ ├─ docs/               # VitePress 기반 문서 (사이트 hero 등)
+ └─ packages/           # 실제 앱 (Electron + React)
+     ├─ public/         # 아이콘, 폰트, 정적 자원
      ├─ src/
-     │   ├─ electron/  # 메인 프로세스 로직 (창, IPC, 입력 캡처 등)
-     │   ├─ components/# React 컴포넌트 (Controller, Overlay, UI primitives)
-     │   ├─ hooks/     # 커스텀 훅
-     │   └─ lib/       # 공용 유틸
+     │   ├─ electron/   # 메인 프로세스 로직 (창, IPC, 입력 캡처 등)
+     │   ├─ components/ # React 컴포넌트 (Controller, Overlay, UI primitives)
+     │   ├─ hooks/      # 커스텀 훅
+     │   └─ lib/        # 공용 유틸
      └─ package.json
 ```
 
