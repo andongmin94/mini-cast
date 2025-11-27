@@ -138,7 +138,7 @@ const config = async (): Promise<UserConfig> => {
       },
 
       socialLinks: [
-        { icon: "github", link: "https://github.com/andongmin94/frontron" },
+        { icon: "github", link: "https://github.com/andongmin94/mini-cast" },
       ],
 
       sidebarMenuLabel: "메뉴",
