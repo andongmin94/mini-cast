@@ -5,8 +5,8 @@ import { mouseEventInterval } from "./func.js";
 import { __dirname, currentSettings, isDev } from "./main.js"; // isDev를 main.ts에서 가져옴
 import { closeSplash } from "./splash.js";
 
-export let mainWindow: BrowserWindow | null;
-export let overlayWindows: BrowserWindow[] = [];
+export let mainWindow: any;
+export let overlayWindows: any[] = [];
 
 export async function createWindow(port: number) {
   mainWindow = new BrowserWindow({
@@ -44,14 +44,14 @@ export async function createWindow(port: number) {
       return true;
     });
   } else {
-    mainWindow.webContents.on("context-menu", (event) => {
+    mainWindow.webContents.on("context-menu", (event: any) => {
       console.log("Main process context-menu event triggered on macOS/Linux");
       event.preventDefault();
     });
   }
 
   // 종료 설정
-  mainWindow.on("close", (e) => {
+  mainWindow.on("close", (e: any) => {
     if (process.platform === "darwin") {
       // macOS: 사용자가 명시적으로 종료(Cmd+Q 등)하지 않으면 숨김
       e.preventDefault();
@@ -75,7 +75,7 @@ export function createOverlayWindows(PORT: number) {
   overlayWindows = [];
   const displays = screen.getAllDisplays();
 
-  displays.forEach((display, index) => {
+  displays.forEach((display: any, index: any) => {
     const overlayWindow = new BrowserWindow({
       x: display.bounds.x,
       y: display.bounds.y,
