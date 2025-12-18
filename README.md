@@ -1,3 +1,11 @@
+<div align="center">
+
+<a href="https://mini-cast.andongmin.com">
+<img src="https://mini-cast.andongmin.com/mini-cast.svg" alt="logo" height="200" />
+</a>
+
+</div>
+
 # 미니캐스트 (MiniCast)
 
 키보드 & 마우스 입력을 실시간으로 화면에 시각화(오버레이)하여 강의, 라이브 스트리밍, 발표에 도움을 주는 데스크톱 애플리케이션입니다.
