@@ -67,7 +67,7 @@
 - **차트/기타**: recharts, embla-carousel-react 등 (향후 확장 가능성)
 - **품질 도구**: ESLint, Prettier (Tailwind 플러그인 + import sort), TypeScript strict
 
-## 디렉터리 구조 (요약)
+## 프로젝트 구조 (요약)
 ```
 mini-cast/
  ├─ docs/               # VitePress 기반 문서 (사이트 hero 등)
