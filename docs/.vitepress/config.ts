@@ -8,7 +8,7 @@ import path from "node:path";
 const ogTitle = "미니캐스트";
 const ogDescription = "쓰기 쉽게, 보기 쉽게";
 const ogUrl = "https://mini-cast.andongmin.com";
-const ogImage = "https://mini-cast.andongmin.com/logo.svg";
+const ogImage = "https://mini-cast.andongmin.com/logo.png";
 
 async function generateReleaseNotes(releases: any) {
   const releaseDir = path.resolve(__dirname, "../guide/release");
@@ -106,7 +106,7 @@ const config = async (): Promise<UserConfig> => {
     description: "쓰기 쉽게, 보기 쉽게",
 
     head: [
-      ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.svg" }],
+      ["link", { rel: "icon", type: "image/png", href: "/logo.png" }],
       [
         "link",
         { rel: "alternate", type: "application/rss+xml", href: "/blog.rss" },
