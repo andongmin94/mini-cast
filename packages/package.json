@@ -4,11 +4,11 @@
   "type": "module",
   "author": "안동민",
   "main": "dist/electron/main.js",
+  "description": "키보드 & 마우스 오버레이",
   "build": {
     "appId": "MiniCast",
     "productName": "MiniCast",
     "copyright": "Copyright © andongmin",
-    "artifactName": "${productName}.${ext}",
     "icon": "public/icon.png",
     "compression": "store",
     "mac": {
@@ -18,12 +18,15 @@
     },
     "win": {
       "target": [
+        "msi",
         "portable"
       ]
     },
-    "nsis": {
-      "oneClick": true,
-      "uninstallDisplayName": "미니캐스트"
+    "msi": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}.${ext}"
     },
     "files": [
       "node_modules/**/*",
