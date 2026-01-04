@@ -1,7 +1,7 @@
 # Excepts for git
 node_modules
-dist_app
 dist
+output
 *.local
 
 package-lock.json
