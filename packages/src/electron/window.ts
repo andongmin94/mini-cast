@@ -15,7 +15,7 @@ export async function createWindow(port: number) {
     height: 352 + 121,
     frame: false,
     resizable: isDev,
-    icon: path.join(__dirname, "../../public/icon.png"),
+    icon: path.join(__dirname, "../../public/icon.ico"),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
