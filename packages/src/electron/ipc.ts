@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { app, ipcMain } from "electron";
 
 import { getConnectedDisplays } from "./func.js";
 import { store } from "./main.js";
@@ -28,6 +28,25 @@ export function setupIpcHandlers(currentSettings: any) {
   });
 
   ipcMain.handle("get-value", (_event: any, key: any) => {
+    if (key === "runtimeInfo") {
+      const hasPortableContext = Boolean(
+        process.env.PORTABLE_EXECUTABLE_FILE ||
+        process.env.PORTABLE_EXECUTABLE_DIR,
+      );
+      const installMode =
+        process.platform === "win32" && hasPortableContext
+          ? "portable"
+          : process.platform === "win32" && app.isPackaged
+            ? "msi"
+            : "unknown";
+
+      return {
+        installMode,
+        platform: process.platform,
+        arch: process.arch,
+      };
+    }
+
     const value = (store() as any).get(key);
     return value;
   });
