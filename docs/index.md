@@ -19,23 +19,23 @@ hero:
       text: (준비 중) 사용 방법 (Youtube)
 
 features:
-  # WINDOWS_DOWNLOADS_START (자동 생성 영역: updateIndexFile.ts 가 덮어씀)
+  # WINDOWS_DOWNLOADS_START (자동 생성 영역: release.ts)
 
   - icon:
       dark: /windows-white.svg
       light: /windows-black.svg
       width: 100px
     title: Windows 다운로드
-    linkText: 무설치판 (412 MB)
-    link: https://github.com/andongmin94/mini-cast/releases/download/v0.0.0/MiniCast.exe
+    linkText: 무설치판 (452 MB)
+    link: https://github.com/andongmin94/mini-cast/releases/download/v0.1.9/MiniCast.exe
 
   - icon:
       dark: /windows-white.svg
       light: /windows-black.svg
       width: 100px
     title: Windows 다운로드
-    linkText: .msi 설치형 (411 MB)
-    link: https://github.com/andongmin94/mini-cast/releases/download/v0.0.0/MiniCast-0.0.0-x64.msi
+    linkText: .msi 설치판 (452 MB)
+    link: https://github.com/andongmin94/mini-cast/releases/download/v0.1.9/MiniCast-0.1.9-x64.msi
 
 # WINDOWS_DOWNLOADS_END
 
