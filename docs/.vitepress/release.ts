@@ -16,7 +16,6 @@ export interface ReleaseData {
   publishedAt?: string;
   assets?: {
     exe: AssetInfo | null;
-    msi: AssetInfo | null;
   };
 }
 
@@ -51,10 +50,7 @@ export async function fetchLatestRelease(): Promise<ReleaseData | undefined> {
     const data = await response.json();
     const assets = data.assets || [];
     const exe = mapAsset(assets.find((a: any) => a.name.endsWith(".exe")));
-    const msi = mapAsset(
-      assets.find((a: any) => a.name.endsWith(".msi") && /x64/i.test(a.name))
-    );
-    const primary = exe || msi || { url: "", sizeMB: 0 };
+    const primary = exe || { url: "", sizeMB: 0 };
 
     return {
       version: normalizeVersion(data.tag_name),
@@ -62,7 +58,7 @@ export async function fetchLatestRelease(): Promise<ReleaseData | undefined> {
       fileSize: primary.sizeMB,
       body: data.body || "",
       publishedAt: data.published_at,
-      assets: { exe, msi },
+      assets: { exe },
     };
   } catch (error) {
     console.error("Failed to fetch latest release:", error);
@@ -118,18 +114,6 @@ function buildWindowsBlocks(releaseData: ReleaseData): string {
     title: Windows 다운로드
     linkText: 무설치판 (${assets.exe.sizeMB} MB)
     link: ${assets.exe.url}`
-    );
-  }
-
-  if (assets.msi) {
-    blocks.push(
-`  - icon:
-      dark: /windows-white.svg
-      light: /windows-black.svg
-      width: 100px
-    title: Windows 다운로드
-    linkText: .msi 설치판 (${assets.msi.sizeMB} MB)
-    link: ${assets.msi.url}`
     );
   }
 

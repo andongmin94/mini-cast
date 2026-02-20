@@ -27,8 +27,8 @@ features:
       light: /windows-black.svg
       width: 100px
     title: Windows 다운로드
-    linkText: 무설치판 (12 MB)
-    link: https://github.com/andongmin94/mini-cast/releases/download/v0.2.2/MiniCast.exe
+    linkText: .exe 다운로드 (0 MB)
+    link: https://github.com/andongmin94/mini-cast/releases/download/v0.0.0/MiniCast.exe
 
 # WINDOWS_DOWNLOADS_END
 
