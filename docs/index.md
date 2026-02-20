@@ -16,7 +16,8 @@ hero:
       text: 미니캐스트 가이드
       link: /guide/
     - theme: alt
-      text: (준비 중) 사용 방법 (Youtube)
+      text: GitHub Releases
+      link: https://github.com/andongmin94/mini-cast/releases
 
 features:
   # WINDOWS_DOWNLOADS_START (자동 생성 영역: release.ts)
@@ -26,23 +27,15 @@ features:
       light: /windows-black.svg
       width: 100px
     title: Windows 다운로드
-    linkText: 무설치판 (452 MB)
-    link: https://github.com/andongmin94/mini-cast/releases/download/v0.1.9/MiniCast.exe
-
-  - icon:
-      dark: /windows-white.svg
-      light: /windows-black.svg
-      width: 100px
-    title: Windows 다운로드
-    linkText: .msi 설치판 (452 MB)
-    link: https://github.com/andongmin94/mini-cast/releases/download/v0.1.9/MiniCast-0.1.9-x64.msi
+    linkText: 무설치판 (12 MB)
+    link: https://github.com/andongmin94/mini-cast/releases/download/v0.2.2/MiniCast.exe
 
 # WINDOWS_DOWNLOADS_END
 
   - icon:
-     dark: /apple-white.svg
-     light: /apple-black.svg
-     width: 100px
+      dark: /apple-white.svg
+      light: /apple-black.svg
+      width: 100px
     title: (준비 중) Mac 다운로드
     linkText: MiniCast.dmg
 ---
