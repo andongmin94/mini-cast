@@ -346,7 +346,7 @@ fn windows_display_indices_by_bounds() -> HashMap<Bounds, u32> {
 }
 
 fn monitor_display_name(display_index: u32) -> String {
-    format!("Monitor {}", display_index)
+    format!("\u{BAA8}\u{B2C8}\u{D130} {}", display_index)
 }
 
 #[cfg(target_os = "windows")]
@@ -458,7 +458,7 @@ fn start_windows_key_fallback_worker(app: &AppHandle) {
     thread::spawn(move || {
         let mut previous_down = HashSet::<i32>::new();
         let keys = fallback_polled_keys();
-        let poll_interval = Duration::from_millis(4);
+        let poll_interval = Duration::from_millis(1);
         let emit_silence_threshold_ms = 120;
 
         loop {
@@ -729,7 +729,7 @@ fn recreate_overlay_windows(
             overlay_label(index),
             WebviewUrl::App("overlay.html".into()),
         )
-        .title("MiniCast Overlay")
+        .title("미니캐스트 오버레이")
         .transparent(true)
         .background_color(Color(0, 0, 0, 0))
         .decorations(false)
@@ -1218,7 +1218,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), String> {
 
     let mut builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
-        .tooltip("MiniCast")
+        .tooltip("미니캐스트")
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray: &TrayIcon, event: TrayIconEvent| {
             if let TrayIconEvent::Click {
@@ -1298,7 +1298,7 @@ fn start_input_workers(app: &AppHandle, state: &AppState) {
     let app_for_cursor = app.clone();
     thread::spawn(move || {
         let resync_interval = Duration::from_millis(16);
-        let min_emit_interval = Duration::from_millis(2);
+        let min_emit_interval = Duration::from_millis(1);
         let keepalive_interval = Duration::from_millis(100);
         let mut last_z_order_sync = Instant::now();
         let mut last_cursor_px: Option<(i32, i32)> = None;

@@ -1,6 +1,6 @@
 {
-  "name": "mini_cast",
-  "version": "0.2.0",
+  "name": "mini-cast",
+  "version": "0.2.2",
   "type": "module",
   "author": "andongmin",
   "description": "MiniCast Tauri migration package",
@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "version:sync-release": "node ./scripts/bump-version-from-release.mjs",
+    "tauri:build": "npm run version:sync-release && tauri build",
     "lint": "eslint src && prettier --write ."
   },
   "dependencies": {

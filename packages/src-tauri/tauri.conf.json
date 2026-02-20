@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MiniCast",
+  "productName": "미니캐스트",
   "mainBinaryName": "MiniCast",
-  "version": "0.2.0",
-  "identifier": "com.andongmin.minicast",
+  "version": "0.2.2",
+  "identifier": "com.andongmin.mini-cast",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
@@ -14,9 +14,9 @@
     "windows": [
       {
         "label": "main",
-        "title": "MiniCast",
+        "title": "미니캐스트",
         "width": 416,
-        "height": 473,
+        "height": 352,
         "resizable": true,
         "fullscreen": false,
         "decorations": false,
