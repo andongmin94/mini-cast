@@ -3,6 +3,8 @@ node_modules
 dist
 output
 *.local
+src-tauri/target
+src-tauri/gen
 
 package-lock.json
 

@@ -2,13 +2,13 @@ import "@/globals.css";
 
 import { Keyboard, MousePointer2 } from "lucide-react";
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdBanner from "@/components/controller/AdBanner";
 import ControllerFooter from "@/components/controller/ControllerFooter";
 import CursorSettingsTab from "@/components/controller/CursorSettingsTab";
 import KeyboardSettingsTab from "@/components/controller/KeyboardSettingsTab";
 import { useControllerSettings } from "@/components/controller/useControllerSettings";
 import TitleBar from "@/components/TitleBar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import packageJson from "../../package.json";
 
@@ -33,7 +33,10 @@ export default function Controller() {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="cursor">
-            <CursorSettingsTab settings={settings} onSettingChange={setSetting} />
+            <CursorSettingsTab
+              settings={settings}
+              onSettingChange={setSetting}
+            />
           </TabsContent>
           <TabsContent value="keyboard">
             <KeyboardSettingsTab

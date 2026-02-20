@@ -8,3 +8,13 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface NativeBridge {
+  send(channel: string, data?: unknown): Promise<unknown>;
+  invoke(channel: string, data?: unknown): Promise<unknown>;
+  on(channel: string, func: (...args: unknown[]) => void): void;
+  get(key: string): Promise<unknown>;
+  removeListener(channel: string, func: (...args: unknown[]) => void): void;
+}
+
+declare const nativeBridge: NativeBridge;

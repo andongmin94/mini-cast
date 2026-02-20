@@ -1,8 +1,8 @@
-import { type OverlaySettings } from "@/components/settings/types";
 import {
   type MouseButtons,
   type MousePosition,
 } from "@/components/overlay/types";
+import { type OverlaySettings } from "@/components/settings/types";
 
 interface CursorLayerProps {
   settings: OverlaySettings;
@@ -23,8 +23,8 @@ export default function CursorLayer({
     <div
       className="pointer-events-none absolute rounded-full"
       style={{
-        left: mousePosition.x,
-        top: mousePosition.y,
+        left: 0,
+        top: 0,
         width: settings.cursorSize,
         height: settings.cursorSize,
         backgroundColor: settings.cursorFillColor,
@@ -32,8 +32,9 @@ export default function CursorLayer({
           mouseButtons.left || mouseButtons.middle || mouseButtons.right
             ? `${Math.min(settings.cursorStrokeSize, settings.cursorSize / 2)}px solid ${settings.cursorStrokeColor}`
             : "none",
-        transform: "translate(-50%, -50%)",
-        transition: "width 0.1s, height 0.1s",
+        transform: `translate3d(${mousePosition.x - settings.cursorSize / 2}px, ${mousePosition.y - settings.cursorSize / 2}px, 0)`,
+        transition: "width 0.06s, height 0.06s",
+        willChange: "transform, width, height",
       }}
       aria-hidden="true"
     />

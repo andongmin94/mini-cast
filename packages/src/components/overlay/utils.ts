@@ -1,8 +1,10 @@
-import { type KeyDisplayPosition } from "@/components/settings/types";
 import { type KeyPress } from "@/components/overlay/types";
+import { type KeyDisplayPosition } from "@/components/settings/types";
 
 function isMouseKey(key: string) {
-  return key === "Mouse left" || key === "Mouse right" || key === "Mouse middle";
+  return (
+    key === "Mouse left" || key === "Mouse right" || key === "Mouse middle"
+  );
 }
 
 export function shouldRenderKeyPress(keyPress: KeyPress) {
@@ -33,10 +35,10 @@ export function formatKeyPressText(keyPress: KeyPress) {
         : keyPress.key === "Mouse middle"
           ? "휠"
           : keyPress.key !== "Control" &&
-              keyPress.key !== "Shift" &&
-              keyPress.key !== "Alt" &&
-              keyPress.key !== "Meta" &&
-              keyPress.key;
+            keyPress.key !== "Shift" &&
+            keyPress.key !== "Alt" &&
+            keyPress.key !== "Meta" &&
+            keyPress.key;
 
   return [
     keyPress.ctrlKey && "Ctrl",

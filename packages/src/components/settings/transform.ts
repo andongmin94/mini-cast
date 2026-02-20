@@ -93,17 +93,21 @@ export function toControllerSettings(
     cursorStrokeSize:
       source.cursorStrokeSize ?? DEFAULT_CONTROLLER_SETTINGS.cursorStrokeSize,
     showCursorHighlight:
-      source.showCursorHighlight ?? DEFAULT_CONTROLLER_SETTINGS.showCursorHighlight,
+      source.showCursorHighlight ??
+      DEFAULT_CONTROLLER_SETTINGS.showCursorHighlight,
     keyDisplayMonitor:
       source.keyDisplayMonitor ?? DEFAULT_CONTROLLER_SETTINGS.keyDisplayMonitor,
     keyDisplayDuration:
-      source.keyDisplayDuration ?? DEFAULT_CONTROLLER_SETTINGS.keyDisplayDuration,
+      source.keyDisplayDuration ??
+      DEFAULT_CONTROLLER_SETTINGS.keyDisplayDuration,
     keyDisplayFontSize:
-      source.keyDisplayFontSize ?? DEFAULT_CONTROLLER_SETTINGS.keyDisplayFontSize,
+      source.keyDisplayFontSize ??
+      DEFAULT_CONTROLLER_SETTINGS.keyDisplayFontSize,
     keyDisplayBackgroundColor: background.hex,
     keyDisplayBackgroundOpacity: background.opacity,
     keyDisplayTextColor:
-      source.keyDisplayTextColor ?? DEFAULT_CONTROLLER_SETTINGS.keyDisplayTextColor,
+      source.keyDisplayTextColor ??
+      DEFAULT_CONTROLLER_SETTINGS.keyDisplayTextColor,
     keyDisplayPosition: isKeyDisplayPosition(source.keyDisplayPosition)
       ? source.keyDisplayPosition
       : DEFAULT_CONTROLLER_SETTINGS.keyDisplayPosition,

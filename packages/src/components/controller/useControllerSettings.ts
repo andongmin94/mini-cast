@@ -2,29 +2,32 @@ import { useCallback, useEffect, useState } from "react";
 
 import { DEFAULT_CONTROLLER_SETTINGS } from "@/components/settings/defaults";
 import {
-  type ControllerSettings,
-  type Display,
-} from "@/components/settings/types";
-import {
   toControllerSettings,
   toOverlaySettings,
 } from "@/components/settings/transform";
+import {
+  type ControllerSettings,
+  type Display,
+} from "@/components/settings/types";
 
 export function useControllerSettings() {
   const [settings, setSettings] = useState<ControllerSettings>(
     DEFAULT_CONTROLLER_SETTINGS,
   );
   const [displays, setDisplays] = useState<Display[]>([]);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const savedSettings = await electron.get("settings");
+        const savedSettings = await nativeBridge.get("settings");
         if (savedSettings) {
           setSettings(toControllerSettings(savedSettings));
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
+      } finally {
+        setSettingsLoaded(true);
       }
     };
 
@@ -36,17 +39,21 @@ export function useControllerSettings() {
       setDisplays(updatedDisplays);
     };
 
-    electron.on("displays-updated", handleDisplaysUpdated);
-    electron.send("request-displays");
+    nativeBridge.on("displays-updated", handleDisplaysUpdated);
+    nativeBridge.send("request-displays");
 
     return () => {
-      electron.removeListener("displays-updated", handleDisplaysUpdated);
+      nativeBridge.removeListener("displays-updated", handleDisplaysUpdated);
     };
   }, []);
 
   useEffect(() => {
-    electron.send("update-settings", toOverlaySettings(settings));
-  }, [settings]);
+    if (!settingsLoaded) {
+      return;
+    }
+
+    nativeBridge.send("update-settings", toOverlaySettings(settings));
+  }, [settings, settingsLoaded]);
 
   const setSetting = useCallback(
     <K extends keyof ControllerSettings>(

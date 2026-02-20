@@ -39,7 +39,9 @@ export default function CursorSettingsTab({
               type="color"
               id="cursor-fill-color"
               value={settings.cursorFillColor}
-              onChange={(e) => onSettingChange("cursorFillColor", e.target.value)}
+              onChange={(e) =>
+                onSettingChange("cursorFillColor", e.target.value)
+              }
               className="color-picker rounded-md px-1 py-0.5"
             />
           </div>
@@ -76,7 +78,10 @@ export default function CursorSettingsTab({
             <span>{settings.cursorFillOpacity.toFixed(2)}</span>
           </div>
           <div className="flex items-center space-x-2 pb-3">
-            <Label htmlFor="cursor-stroke-opacity" className="whitespace-nowrap">
+            <Label
+              htmlFor="cursor-stroke-opacity"
+              className="whitespace-nowrap"
+            >
               획 투명
             </Label>
             <Slider

@@ -49,7 +49,7 @@ function normalizeRuntimeInfo(payload: unknown): RuntimeUpdateInfo {
 
 async function getRuntimeInfo() {
   try {
-    const payload = (await electron.get("runtimeInfo")) as unknown;
+    const payload = (await nativeBridge.get("runtimeInfo")) as unknown;
     return normalizeRuntimeInfo(payload);
   } catch {
     return DEFAULT_RUNTIME_INFO;

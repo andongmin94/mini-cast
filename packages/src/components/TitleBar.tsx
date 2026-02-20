@@ -58,14 +58,14 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
 export default function TitleBar() {
   const minimize = () => {
-    electron.send("minimize");
+    nativeBridge.send("minimize");
   };
   const hidden = () => {
-    electron.send("hidden");
+    nativeBridge.send("hidden");
   };
   return (
     <>
-      {typeof electron !== "undefined" && (
+      {typeof nativeBridge !== "undefined" && (
         <div
           className="fixed flex w-full justify-between bg-neutral-800"
           style={{ WebkitAppRegion: "drag" } as React.CSSProperties}

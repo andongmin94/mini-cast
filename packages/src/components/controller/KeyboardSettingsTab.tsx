@@ -1,7 +1,3 @@
-import {
-  type ControllerSettings,
-  type Display,
-} from "@/components/settings/types";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -12,6 +8,10 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import {
+  type ControllerSettings,
+  type Display,
+} from "@/components/settings/types";
 
 interface KeyboardSettingsTabProps {
   settings: ControllerSettings;
@@ -59,7 +59,10 @@ export default function KeyboardSettingsTab({
             />
           </div>
           <div className="flex items-center justify-center gap-4">
-            <Label htmlFor="key-display-text-color" className="whitespace-nowrap">
+            <Label
+              htmlFor="key-display-text-color"
+              className="whitespace-nowrap"
+            >
               폰트 색상
             </Label>
             <input
@@ -93,7 +96,10 @@ export default function KeyboardSettingsTab({
             </span>
           </div>
           <div className="flex items-center space-x-2">
-            <Label htmlFor="key-display-font-size" className="whitespace-nowrap">
+            <Label
+              htmlFor="key-display-font-size"
+              className="whitespace-nowrap"
+            >
               폰트 크기
             </Label>
             <Slider

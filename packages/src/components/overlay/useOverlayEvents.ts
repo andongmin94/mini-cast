@@ -1,24 +1,33 @@
 import { useEffect, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { DEFAULT_OVERLAY_SETTINGS } from "@/components/settings/defaults";
-import { type OverlaySettings } from "@/components/settings/types";
 import {
   type KeyPress,
   type MouseButtons,
   type MousePosition,
   type OverlayViewModel,
 } from "@/components/overlay/types";
+import { DEFAULT_OVERLAY_SETTINGS } from "@/components/settings/defaults";
+import { type OverlaySettings } from "@/components/settings/types";
 
 interface InitEventData {
   id: number;
 }
 
 export function useOverlayEvents(): OverlayViewModel {
-  const [settings, setSettings] =
-    useState<OverlaySettings>(DEFAULT_OVERLAY_SETTINGS);
-  const [mousePosition, setMousePosition] = useState<MousePosition | null>(null);
+  const initialDisplayId = (() => {
+    const match = getCurrentWindow().label.match(/^overlay-(\d+)$/);
+    return match ? Number(match[1]) : 0;
+  })();
+
+  const [settings, setSettings] = useState<OverlaySettings>(
+    DEFAULT_OVERLAY_SETTINGS,
+  );
+  const [mousePosition, setMousePosition] = useState<MousePosition | null>(
+    null,
+  );
   const [keyPresses, setKeyPresses] = useState<KeyPress[]>([]);
-  const [displayId, setDisplayId] = useState(0);
+  const [displayId, setDisplayId] = useState(initialDisplayId);
   const [mouseButtons, setMouseButtons] = useState<MouseButtons>({
     left: false,
     middle: false,
@@ -58,16 +67,17 @@ export function useOverlayEvents(): OverlayViewModel {
       setDisplayId(data.id);
     };
 
-    electron.on("update-settings", settingsListener);
-    electron.on("mouse-move", mouseMoveListener);
-    electron.on("key-press", keyPressListener);
-    electron.on("init", initListener);
+    nativeBridge.on("update-settings", settingsListener);
+    nativeBridge.on("mouse-move", mouseMoveListener);
+    nativeBridge.on("key-press", keyPressListener);
+    nativeBridge.on("init", initListener);
+    nativeBridge.send("overlay-ready");
 
     return () => {
-      electron.removeListener("update-settings", settingsListener);
-      electron.removeListener("mouse-move", mouseMoveListener);
-      electron.removeListener("key-press", keyPressListener);
-      electron.removeListener("init", initListener);
+      nativeBridge.removeListener("update-settings", settingsListener);
+      nativeBridge.removeListener("mouse-move", mouseMoveListener);
+      nativeBridge.removeListener("key-press", keyPressListener);
+      nativeBridge.removeListener("init", initListener);
     };
   }, []);
 
@@ -103,20 +113,20 @@ export function useOverlayEvents(): OverlayViewModel {
         right: false,
       }));
 
-    electron.on("MOUSE LEFT DOWN", leftDown);
-    electron.on("MOUSE LEFT UP", leftUp);
-    electron.on("MOUSE MIDDLE DOWN", middleDown);
-    electron.on("MOUSE MIDDLE UP", middleUp);
-    electron.on("MOUSE RIGHT DOWN", rightDown);
-    electron.on("MOUSE RIGHT UP", rightUp);
+    nativeBridge.on("mouse-left-down", leftDown);
+    nativeBridge.on("mouse-left-up", leftUp);
+    nativeBridge.on("mouse-middle-down", middleDown);
+    nativeBridge.on("mouse-middle-up", middleUp);
+    nativeBridge.on("mouse-right-down", rightDown);
+    nativeBridge.on("mouse-right-up", rightUp);
 
     return () => {
-      electron.removeListener("MOUSE LEFT DOWN", leftDown);
-      electron.removeListener("MOUSE LEFT UP", leftUp);
-      electron.removeListener("MOUSE MIDDLE DOWN", middleDown);
-      electron.removeListener("MOUSE MIDDLE UP", middleUp);
-      electron.removeListener("MOUSE RIGHT DOWN", rightDown);
-      electron.removeListener("MOUSE RIGHT UP", rightUp);
+      nativeBridge.removeListener("mouse-left-down", leftDown);
+      nativeBridge.removeListener("mouse-left-up", leftUp);
+      nativeBridge.removeListener("mouse-middle-down", middleDown);
+      nativeBridge.removeListener("mouse-middle-up", middleUp);
+      nativeBridge.removeListener("mouse-right-down", rightDown);
+      nativeBridge.removeListener("mouse-right-up", rightUp);
     };
   }, []);
 
