@@ -1,4 +1,4 @@
-﻿use rdev::{listen, Button, EventType, Key};
+use rdev::{listen, Button, EventType, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -12,6 +12,13 @@ use std::{
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
+    window::Color,
+    AppHandle, Emitter, EventTarget, Manager, PhysicalPosition, PhysicalSize, Position, Size,
+    State, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent,
+};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::{
     Foundation::{BOOL, LPARAM, RECT},
@@ -23,15 +30,9 @@ use windows_sys::Win32::{
         VK_RWIN, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
     },
     UI::WindowsAndMessaging::{
-        SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TRANSPARENT,
     },
-};
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    window::Color,
-    AppHandle, Emitter, EventTarget, Manager, State, WebviewUrl, WebviewWindowBuilder, Window,
-    WindowEvent,
 };
 
 const MAIN_LABEL: &str = "main";
@@ -350,6 +351,24 @@ fn monitor_display_name(display_index: u32) -> String {
 }
 
 #[cfg(target_os = "windows")]
+fn apply_window_passthrough_style(window: &tauri::WebviewWindow) {
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            let current_style = GetWindowLongPtrW(hwnd.0 as _, GWL_EXSTYLE) as u32;
+            let desired_style =
+                current_style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE;
+
+            if desired_style != current_style {
+                let _ = SetWindowLongPtrW(hwnd.0 as _, GWL_EXSTYLE, desired_style as isize);
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn apply_window_passthrough_style(_window: &tauri::WebviewWindow) {}
+
+#[cfg(target_os = "windows")]
 fn force_window_topmost(window: &tauri::WebviewWindow) {
     if let Ok(hwnd) = window.hwnd() {
         unsafe {
@@ -360,7 +379,7 @@ fn force_window_topmost(window: &tauri::WebviewWindow) {
                 0,
                 0,
                 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             );
         }
     }
@@ -553,7 +572,11 @@ fn fetch_displays(app: &AppHandle) -> Result<Vec<DisplayInfo>, String> {
             let windows_display_index = windows_indices_by_bounds
                 .get(&bounds)
                 .copied()
-                .or_else(|| windows_indices_by_origin.get(&(bounds.x, bounds.y)).copied())
+                .or_else(|| {
+                    windows_indices_by_origin
+                        .get(&(bounds.x, bounds.y))
+                        .copied()
+                })
                 .or_else(|| {
                     windows_indices_by_origin
                         .iter()
@@ -691,6 +714,7 @@ fn ensure_overlay_z_order(app: &AppHandle, state: &AppState) {
             let _ = window.set_visible_on_all_workspaces(true);
             let _ = window.set_focusable(false);
             let _ = window.set_ignore_cursor_events(true);
+            apply_window_passthrough_style(&window);
             force_window_topmost(&window);
             if matches!(window.is_visible(), Ok(false)) {
                 let _ = window.show();
@@ -717,10 +741,7 @@ fn displays_need_overlay_recreate(previous: &[DisplayInfo], next: &[DisplayInfo]
     })
 }
 
-fn recreate_overlay_windows(
-    app: &AppHandle,
-    displays: &[DisplayInfo],
-) -> Result<(), String> {
+fn recreate_overlay_windows(app: &AppHandle, displays: &[DisplayInfo]) -> Result<(), String> {
     close_overlay_windows(app);
 
     for (index, display) in displays.iter().enumerate() {
@@ -739,8 +760,7 @@ fn recreate_overlay_windows(
         .skip_taskbar(true)
         .resizable(false)
         .focused(false)
-        .position(display.bounds.x as f64, display.bounds.y as f64)
-        .inner_size(display.bounds.width as f64, display.bounds.height as f64);
+        .visible(false);
 
         if let Some(icon) = app.default_window_icon().cloned() {
             builder = builder
@@ -752,10 +772,25 @@ fn recreate_overlay_windows(
             .build()
             .map_err(|err| format!("failed to create overlay window: {err}"))?;
 
+        window
+            .set_position(Position::Physical(PhysicalPosition::new(
+                display.bounds.x,
+                display.bounds.y,
+            )))
+            .map_err(|err| format!("failed to set overlay position: {err}"))?;
+        window
+            .set_size(Size::Physical(PhysicalSize::new(
+                display.bounds.width,
+                display.bounds.height,
+            )))
+            .map_err(|err| format!("failed to set overlay size: {err}"))?;
+
         let _ = window.set_focusable(false);
         let _ = window.set_ignore_cursor_events(true);
         let _ = window.set_visible_on_all_workspaces(true);
+        apply_window_passthrough_style(&window);
         force_window_topmost(&window);
+        let _ = window.show();
     }
 
     Ok(())
@@ -815,9 +850,14 @@ fn emit_mouse_move_for_point(app: &AppHandle, state: &AppState, x: f64, y: f64) 
         }
 
         if Some(index) == active_index {
+            let scale_factor = if display.scale_factor > 0.0 {
+                display.scale_factor
+            } else {
+                1.0
+            };
             let payload = MousePositionPayload {
-                x: (x - display.bounds.x as f64).round() as i32,
-                y: (y - display.bounds.y as f64).round() as i32,
+                x: ((x - display.bounds.x as f64) / scale_factor).round() as i32,
+                y: ((y - display.bounds.y as f64) / scale_factor).round() as i32,
             };
             let _ = app.emit_to(
                 EventTarget::webview_window(label.clone()),
@@ -1042,18 +1082,8 @@ fn key_name(key: Key) -> String {
     }
 }
 
-fn emit_key_press_if_allowed(
-    app: &AppHandle,
-    state: &AppState,
-    input: KeyInput,
-) {
-    let combination = build_combination(
-        &input.key,
-        input.ctrl,
-        input.shift,
-        input.alt,
-        input.meta,
-    );
+fn emit_key_press_if_allowed(app: &AppHandle, state: &AppState, input: KeyInput) {
+    let combination = build_combination(&input.key, input.ctrl, input.shift, input.alt, input.meta);
     let timestamp = now_ms();
 
     if !should_emit_combination(state, &combination, timestamp) {
@@ -1081,6 +1111,7 @@ fn emit_key_press_if_allowed(
             let _ = window.set_visible_on_all_workspaces(true);
             let _ = window.set_focusable(false);
             let _ = window.set_ignore_cursor_events(true);
+            apply_window_passthrough_style(&window);
             force_window_topmost(&window);
 
             let payload = KeyPressPayload {
@@ -1204,7 +1235,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), String> {
         true,
         None::<&str>,
     )
-        .map_err(|err| format!("failed to create tray show menu item: {err}"))?;
+    .map_err(|err| format!("failed to create tray show menu item: {err}"))?;
     let quit_item = MenuItem::with_id(
         app,
         TRAY_QUIT_MENU_ID,
@@ -1212,7 +1243,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), String> {
         true,
         None::<&str>,
     )
-        .map_err(|err| format!("failed to create tray quit menu item: {err}"))?;
+    .map_err(|err| format!("failed to create tray quit menu item: {err}"))?;
     let menu = Menu::with_items(app, &[&show_item, &quit_item])
         .map_err(|err| format!("failed to create tray menu: {err}"))?;
 
@@ -1268,23 +1299,21 @@ fn setup_main_close_behavior(app: &AppHandle) -> Result<(), String> {
     let app_handle = app.clone();
     let main_for_hide = main_window.clone();
 
-    main_window.on_window_event(move |event| {
-        match event {
-            WindowEvent::CloseRequested { api, .. } => {
-                let state = app_handle.state::<AppState>();
-                let should_quit = state.is_quitting.lock().map(|flag| *flag).unwrap_or(false);
+    main_window.on_window_event(move |event| match event {
+        WindowEvent::CloseRequested { api, .. } => {
+            let state = app_handle.state::<AppState>();
+            let should_quit = state.is_quitting.lock().map(|flag| *flag).unwrap_or(false);
 
-                if !should_quit {
-                    api.prevent_close();
-                    let _ = main_for_hide.hide();
-                }
+            if !should_quit {
+                api.prevent_close();
+                let _ = main_for_hide.hide();
             }
-            WindowEvent::Focused(true) => {
-                let state = app_handle.state::<AppState>();
-                ensure_overlay_z_order(&app_handle, state.inner());
-            }
-            _ => {}
         }
+        WindowEvent::Focused(true) => {
+            let state = app_handle.state::<AppState>();
+            ensure_overlay_z_order(&app_handle, state.inner());
+        }
+        _ => {}
     });
 
     Ok(())
@@ -1297,7 +1326,7 @@ fn start_input_workers(app: &AppHandle, state: &AppState) {
 
     let app_for_cursor = app.clone();
     thread::spawn(move || {
-        let resync_interval = Duration::from_millis(16);
+        let resync_interval = Duration::from_millis(250);
         let min_emit_interval = Duration::from_millis(1);
         let keepalive_interval = Duration::from_millis(100);
         let mut last_z_order_sync = Instant::now();
@@ -1544,9 +1573,7 @@ pub fn run() {
             let state = app.state::<AppState>();
             match refresh_displays_state(app.handle(), state.inner()) {
                 Ok(displays) => {
-                    if let Err(err) =
-                        recreate_overlay_windows(app.handle(), &displays)
-                    {
+                    if let Err(err) = recreate_overlay_windows(app.handle(), &displays) {
                         log::error!("failed to create overlay windows: {err}");
                     }
                     emit_displays_updated(app.handle(), &displays);
