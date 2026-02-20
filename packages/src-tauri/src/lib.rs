@@ -30,8 +30,7 @@ use windows_sys::Win32::{
         VK_RWIN, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
     },
     UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
-        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TRANSPARENT,
+        SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
     },
 };
 
@@ -351,24 +350,6 @@ fn monitor_display_name(display_index: u32) -> String {
 }
 
 #[cfg(target_os = "windows")]
-fn apply_window_passthrough_style(window: &tauri::WebviewWindow) {
-    if let Ok(hwnd) = window.hwnd() {
-        unsafe {
-            let current_style = GetWindowLongPtrW(hwnd.0 as _, GWL_EXSTYLE) as u32;
-            let desired_style =
-                current_style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE;
-
-            if desired_style != current_style {
-                let _ = SetWindowLongPtrW(hwnd.0 as _, GWL_EXSTYLE, desired_style as isize);
-            }
-        }
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn apply_window_passthrough_style(_window: &tauri::WebviewWindow) {}
-
-#[cfg(target_os = "windows")]
 fn force_window_topmost(window: &tauri::WebviewWindow) {
     if let Ok(hwnd) = window.hwnd() {
         unsafe {
@@ -379,7 +360,7 @@ fn force_window_topmost(window: &tauri::WebviewWindow) {
                 0,
                 0,
                 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
             );
         }
     }
@@ -714,7 +695,6 @@ fn ensure_overlay_z_order(app: &AppHandle, state: &AppState) {
             let _ = window.set_visible_on_all_workspaces(true);
             let _ = window.set_focusable(false);
             let _ = window.set_ignore_cursor_events(true);
-            apply_window_passthrough_style(&window);
             force_window_topmost(&window);
             if matches!(window.is_visible(), Ok(false)) {
                 let _ = window.show();
@@ -788,7 +768,6 @@ fn recreate_overlay_windows(app: &AppHandle, displays: &[DisplayInfo]) -> Result
         let _ = window.set_focusable(false);
         let _ = window.set_ignore_cursor_events(true);
         let _ = window.set_visible_on_all_workspaces(true);
-        apply_window_passthrough_style(&window);
         force_window_topmost(&window);
         let _ = window.show();
     }
@@ -1111,7 +1090,6 @@ fn emit_key_press_if_allowed(app: &AppHandle, state: &AppState, input: KeyInput)
             let _ = window.set_visible_on_all_workspaces(true);
             let _ = window.set_focusable(false);
             let _ = window.set_ignore_cursor_events(true);
-            apply_window_passthrough_style(&window);
             force_window_topmost(&window);
 
             let payload = KeyPressPayload {
@@ -1326,7 +1304,7 @@ fn start_input_workers(app: &AppHandle, state: &AppState) {
 
     let app_for_cursor = app.clone();
     thread::spawn(move || {
-        let resync_interval = Duration::from_millis(250);
+        let resync_interval = Duration::from_millis(16);
         let min_emit_interval = Duration::from_millis(1);
         let keepalive_interval = Duration::from_millis(100);
         let mut last_z_order_sync = Instant::now();
