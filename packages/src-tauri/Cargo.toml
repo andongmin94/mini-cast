@@ -1,6 +1,6 @@
 [package]
 name = "mini-cast"
-version = "0.2.2"
+version = "0.2.3"
 description = "MiniCast Tauri migration"
 authors = ["andongmin"]
 license = ""
