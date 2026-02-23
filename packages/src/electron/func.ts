@@ -94,6 +94,11 @@ export function captureKeyboardEvents() {
   }
 
   gkl.addListener((e) => {
+    const rawName = (e.name ?? "").trim();
+    if (!rawName) {
+      return;
+    }
+
     const isSpecialKey = [
       "LEFT CTRL",
       "RIGHT CTRL",
@@ -104,24 +109,24 @@ export function captureKeyboardEvents() {
       "LEFT META",
       "RIGHT META",
       "CAPS LOCK",
-    ].includes(e.name ?? "");
+    ].includes(rawName);
 
     // if (e.name === 'CAPS LOCK' && e.state === 'DOWN') {
     //   capsLockOn = !capsLockOn;
     // }
 
-    const keyName = getKeyName(e.name ?? "");
+    const keyName = getKeyName(rawName);
     if (
-      e.name === "MOUSE LEFT" ||
-      e.name === "MOUSE MIDDLE" ||
-      e.name === "MOUSE RIGHT"
+      rawName === "MOUSE LEFT" ||
+      rawName === "MOUSE MIDDLE" ||
+      rawName === "MOUSE RIGHT"
     ) {
       overlayWindows.forEach((window: any) => {
-        window.webContents.send(e.name + " " + e.state);
+        window.webContents.send(rawName + " " + e.state);
       });
     }
 
-    if (isSpecialKey && e.name !== "CAPS LOCK") {
+    if (isSpecialKey && rawName !== "CAPS LOCK") {
       specialKeys[keyName.toLowerCase()] = e.state === "DOWN";
     }
 
