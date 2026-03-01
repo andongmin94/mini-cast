@@ -16,8 +16,8 @@ hero:
       text: 미니캐스트 가이드
       link: /guide/
     - theme: alt
-      text: GitHub Releases
-      link: https://github.com/andongmin94/mini-cast/releases
+      text: GitHub
+      link: https://github.com/andongmin94/mini-cast
 
 features:
   # WINDOWS_DOWNLOADS_START (자동 생성 영역: release.ts)
