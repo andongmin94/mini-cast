@@ -106,7 +106,7 @@ npm run dev
 Windows 휴대용(Portable) 실행 파일 생성
 ```bash
 npm run build
-# 결과물: dist_app/ 에 실행 파일 (MiniCast.exe 등)
+# 결과물: output/ 에 실행 파일 (MiniCast.exe 등)
 ```
 `electron-builder` 설정은 `packages/package.json` 의 `build` 필드 참고.
 
