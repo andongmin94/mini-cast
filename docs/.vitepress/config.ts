@@ -1,66 +1,10 @@
 import { defineConfig, UserConfig } from "vitepress";
-import { buildEnd } from "./buildEnd.config";
-import { fetchLatestRelease, fetchAllReleases } from "./getReleaseData";
-import { updateIndexMd } from "./updateIndexFile";
-import fs from "node:fs/promises";
-import path from "node:path";
+import { fetchLatestRelease, fetchAllReleases, updateIndexMd, generateReleaseNotes } from "./release";
 
 const ogTitle = "미니캐스트";
 const ogDescription = "쓰기 쉽게, 보기 쉽게";
 const ogUrl = "https://mini-cast.andongmin.com";
 const ogImage = "https://mini-cast.andongmin.com/logo.png";
-
-async function generateReleaseNotes(releases: any) {
-  const releaseDir = path.resolve(__dirname, "../guide/release");
-
-  try {
-    // 디렉토리 존재 확인 및 생성
-    try {
-      await fs.access(releaseDir);
-    } catch {
-      await fs.mkdir(releaseDir, { recursive: true });
-      console.log(`📁 릴리즈 문서 디렉토리 생성: ${releaseDir}`);
-    }
-
-    // 각 릴리즈에 대한 문서 생성
-    for (const release of releases) {
-      const version = release.version;
-      const filePath = path.join(releaseDir, `${version}.md`);
-
-      // 릴리즈 노트 내용 포맷팅 (GitHub의 마크다운을 VitePress 호환 마크다운으로 변환)
-      let content = `# ${version}\n\n`;
-
-      // GitHub 릴리즈 본문을 파싱하여 추가
-      if (release.body) {
-        content += release.body
-          .replace(/\r\n/g, "\n") // 줄바꿈 통일
-          .trim();
-      } else {
-        content += `릴리즈 노트 내용이 없습니다.`;
-      }
-
-      // 파일이 없거나 내용이 다른 경우만 쓰기
-      let shouldWrite = true;
-      try {
-        const existingContent = await fs.readFile(filePath, "utf-8");
-        if (existingContent.trim() === content.trim()) {
-          shouldWrite = false;
-        }
-      } catch {
-        // 파일이 없으면 무시하고 새로 생성
-      }
-
-      if (shouldWrite) {
-        await fs.writeFile(filePath, content);
-        console.log(`📝 릴리즈 문서 생성: ${version}`);
-      }
-    }
-
-    console.log("✅ 모든 릴리즈 문서가 업데이트되었습니다");
-  } catch (error) {
-    console.error("❌ 릴리즈 문서 생성 실패:", error);
-  }
-}
 
 const config = async (): Promise<UserConfig> => {
   const isProd = process.env.NODE_ENV === "production";
@@ -107,17 +51,13 @@ const config = async (): Promise<UserConfig> => {
 
     head: [
       ["link", { rel: "icon", type: "image/png", href: "/logo.png" }],
-      [
-        "link",
-        { rel: "alternate", type: "application/rss+xml", href: "/blog.rss" },
-      ],
       ["link", { rel: "organization", href: "https://github.com/andongmin94" }],
       ["meta", { property: "og:type", content: "website" }],
       ["meta", { property: "og:title", content: ogTitle }],
       ["meta", { property: "og:image", content: ogImage }],
       ["meta", { property: "og:url", content: ogUrl }],
       ["meta", { property: "og:description", content: ogDescription }],
-      ["meta", { name: "theme-color", content: "#1170ff" }],
+      ["meta", { name: "theme-color", content: "#237AF5" }],
       [
         "script",
         {
@@ -208,7 +148,6 @@ const config = async (): Promise<UserConfig> => {
       ]);
       return pageData;
     },
-    buildEnd,
   };
 };
 
