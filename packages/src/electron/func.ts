@@ -1,16 +1,39 @@
 import { screen } from "electron";
 import { GlobalKeyboardListener } from "node-global-key-listener";
 
-import { overlayWindows } from "./window.js";
+import { overlayDisplays, overlayWindows } from "./window.js";
 
 export let mouseEventInterval: any;
+export function getOrderedDisplays() {
+  const primaryDisplay = screen.getPrimaryDisplay();
+
+  return [...screen.getAllDisplays()].sort((left, right) => {
+    const leftIsPrimary = left.id === primaryDisplay.id;
+    const rightIsPrimary = right.id === primaryDisplay.id;
+
+    if (leftIsPrimary !== rightIsPrimary) {
+      return leftIsPrimary ? -1 : 1;
+    }
+
+    return (
+      left.bounds.y - right.bounds.y ||
+      left.bounds.x - right.bounds.x ||
+      left.id - right.id
+    );
+  });
+}
+
 export function captureMouseEvents() {
   mouseEventInterval = setInterval(() => {
     const cursorPosition = screen.getCursorScreenPoint();
     const activeDisplay = screen.getDisplayNearestPoint(cursorPosition);
 
     overlayWindows.forEach((window: any, index: any) => {
-      const display = screen.getAllDisplays()[index];
+      const display = overlayDisplays[index];
+      if (!display) {
+        window.webContents.send("mouse-move", null);
+        return;
+      }
       if (display.id === activeDisplay.id) {
         const localPosition = {
           x: cursorPosition.x - display.bounds.x,
@@ -172,7 +195,7 @@ export function captureKeyboardEvents() {
 }
 
 export function getConnectedDisplays() {
-  return screen.getAllDisplays().map((display, index) => ({
+  return getOrderedDisplays().map((display, index) => ({
     id: display.id,
     name: `모니터 ${index + 1}`,
     bounds: display.bounds,
