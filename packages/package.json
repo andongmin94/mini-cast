@@ -10,7 +10,6 @@
     "productName": "MiniCast",
     "copyright": "Copyright © andongmin",
     "icon": "public/icon.ico",
-    "compression": "store",
     "mac": {
       "target": [
         "dir"
@@ -29,7 +28,6 @@
       "artifactName": "${productName}.${ext}"
     },
     "files": [
-      "node_modules/**/*",
       "public/**/*",
       "dist/**/*"
     ],
