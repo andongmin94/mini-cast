@@ -46,7 +46,6 @@ export default function Controller() {
       </div>
 
       <ControllerFooter version={packageJson.version} onReset={resetSettings} />
-      <AdBanner />
     </>
   );
 }
