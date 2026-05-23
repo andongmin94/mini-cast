@@ -2,7 +2,6 @@ import "@/globals.css";
 
 import { Keyboard, MousePointer2 } from "lucide-react";
 
-import AdBanner from "@/components/controller/AdBanner";
 import ControllerFooter from "@/components/controller/ControllerFooter";
 import CursorSettingsTab from "@/components/controller/CursorSettingsTab";
 import KeyboardSettingsTab from "@/components/controller/KeyboardSettingsTab";

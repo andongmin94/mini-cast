@@ -13,7 +13,7 @@ export async function createWindow(port: number) {
   mainWindow = new BrowserWindow({
     show: false,
     width: 416,
-    height: 352 + 121,
+    height: 352,
     frame: false,
     resizable: isDev,
     icon: path.join(__dirname, "../../public/icon.ico"),
