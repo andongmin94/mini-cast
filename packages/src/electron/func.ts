@@ -1,48 +1,135 @@
-import { screen } from "electron";
+import { screen, type Point, type Rectangle } from "electron";
 import { GlobalKeyboardListener } from "node-global-key-listener";
 
+import { getOrderedDisplays, type OverlayDisplayMeta } from "./display.js";
 import { overlayDisplays, overlayWindows } from "./window.js";
 
 export let mouseEventInterval: any;
-export function getOrderedDisplays() {
-  const primaryDisplay = screen.getPrimaryDisplay();
+function isPointInsideBounds(point: Point, bounds: Rectangle) {
+  return (
+    point.x >= bounds.x &&
+    point.x < bounds.x + bounds.width &&
+    point.y >= bounds.y &&
+    point.y < bounds.y + bounds.height
+  );
+}
 
-  return [...screen.getAllDisplays()].sort((left, right) => {
-    const leftIsPrimary = left.id === primaryDisplay.id;
-    const rightIsPrimary = right.id === primaryDisplay.id;
+function getDisplayIndexByBounds(
+  cursorPoint: Point,
+  displays: OverlayDisplayMeta[],
+) {
+  return displays.findIndex((display) =>
+    isPointInsideBounds(cursorPoint, display.bounds),
+  );
+}
 
-    if (leftIsPrimary !== rightIsPrimary) {
-      return leftIsPrimary ? -1 : 1;
+function getDisplayIndexByNearest(
+  cursorPoint: Point,
+  displays: OverlayDisplayMeta[],
+) {
+  const nearestDisplay = screen.getDisplayNearestPoint(cursorPoint);
+  return displays.findIndex((display) => display.id === nearestDisplay.id);
+}
+
+function isLocalPointInsideDisplay(
+  localPoint: { x: number; y: number },
+  display: OverlayDisplayMeta,
+) {
+  return (
+    localPoint.x >= 0 &&
+    localPoint.x < display.bounds.width &&
+    localPoint.y >= 0 &&
+    localPoint.y < display.bounds.height
+  );
+}
+
+function toLocalPoint(cursorPoint: Point, display: OverlayDisplayMeta) {
+  return {
+    x: Math.round(cursorPoint.x - display.bounds.x),
+    y: Math.round(cursorPoint.y - display.bounds.y),
+  };
+}
+
+function resolveCursorPosition(
+  rawCursorPoint: Point,
+  displays: OverlayDisplayMeta[],
+): { cursorPoint: Point; activeDisplayIndex: number } | null {
+  const rawByBoundsIndex = getDisplayIndexByBounds(rawCursorPoint, displays);
+  if (rawByBoundsIndex >= 0) {
+    return { cursorPoint: rawCursorPoint, activeDisplayIndex: rawByBoundsIndex };
+  }
+
+  const dipCursorPoint = screen.screenToDipPoint(rawCursorPoint);
+  const dipByBoundsIndex = getDisplayIndexByBounds(dipCursorPoint, displays);
+  if (dipByBoundsIndex >= 0) {
+    return { cursorPoint: dipCursorPoint, activeDisplayIndex: dipByBoundsIndex };
+  }
+
+  const rawNearestIndex = getDisplayIndexByNearest(rawCursorPoint, displays);
+  if (rawNearestIndex >= 0) {
+    const localPoint = toLocalPoint(rawCursorPoint, displays[rawNearestIndex]);
+    if (isLocalPointInsideDisplay(localPoint, displays[rawNearestIndex])) {
+      return {
+        cursorPoint: rawCursorPoint,
+        activeDisplayIndex: rawNearestIndex,
+      };
     }
+  }
 
-    return (
-      left.bounds.y - right.bounds.y ||
-      left.bounds.x - right.bounds.x ||
-      left.id - right.id
-    );
-  });
+  const dipNearestIndex = getDisplayIndexByNearest(dipCursorPoint, displays);
+  if (dipNearestIndex >= 0) {
+    const localPoint = toLocalPoint(dipCursorPoint, displays[dipNearestIndex]);
+    if (isLocalPointInsideDisplay(localPoint, displays[dipNearestIndex])) {
+      return {
+        cursorPoint: dipCursorPoint,
+        activeDisplayIndex: dipNearestIndex,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getActiveDisplayIndex(
+  cursorPoint: Point,
+  displays: OverlayDisplayMeta[],
+) {
+  const byBoundsIndex = getDisplayIndexByBounds(cursorPoint, displays);
+  if (byBoundsIndex >= 0) {
+    return byBoundsIndex;
+  }
+
+  return getDisplayIndexByNearest(cursorPoint, displays);
 }
 
 export function captureMouseEvents() {
   mouseEventInterval = setInterval(() => {
+    if (overlayWindows.length === 0 || overlayDisplays.length === 0) {
+      return;
+    }
+
+    // Electron cursor coordinates are already DIP values.
     const cursorPosition = screen.getCursorScreenPoint();
-    const activeDisplay = screen.getDisplayNearestPoint(cursorPosition);
+    const resolvedCursor = resolveCursorPosition(cursorPosition, overlayDisplays);
+    const activeDisplayIndex =
+      resolvedCursor?.activeDisplayIndex ??
+      getActiveDisplayIndex(cursorPosition, overlayDisplays);
+    const effectiveCursorPoint = resolvedCursor?.cursorPoint ?? cursorPosition;
 
     overlayWindows.forEach((window: any, index: any) => {
       const display = overlayDisplays[index];
-      if (!display) {
+      if (!display || index !== activeDisplayIndex) {
         window.webContents.send("mouse-move", null);
         return;
       }
-      if (display.id === activeDisplay.id) {
-        const localPosition = {
-          x: cursorPosition.x - display.bounds.x,
-          y: cursorPosition.y - display.bounds.y,
-        };
-        window.webContents.send("mouse-move", localPosition);
-      } else {
+
+      const localPosition = toLocalPoint(effectiveCursorPoint, display);
+      if (!isLocalPointInsideDisplay(localPosition, display)) {
         window.webContents.send("mouse-move", null);
+        return;
       }
+
+      window.webContents.send("mouse-move", localPosition);
     });
   }, 8);
 }

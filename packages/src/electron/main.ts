@@ -74,16 +74,24 @@ if (!app.requestSingleInstanceLock()) {
           createTray(); // 트레이 생성
           setupIpcHandlers(currentSettings); // IPC 핸들러 설정
 
-          screen.on("display-added", () => {
+          const refreshDisplaysAndOverlays = () => {
             const displays = getConnectedDisplays();
-            mainWindow.webContents.send("displays-updated", displays);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("displays-updated", displays);
+            }
             createOverlayWindows(port);
-          });
+          };
 
-          screen.on("display-removed", () => {
-            const displays = getConnectedDisplays();
-            mainWindow.webContents.send("displays-updated", displays);
-            createOverlayWindows(port);
+          screen.on("display-added", refreshDisplaysAndOverlays);
+          screen.on("display-removed", refreshDisplaysAndOverlays);
+          screen.on("display-metrics-changed", (_event, _display, metrics) => {
+            if (
+              metrics.includes("bounds") ||
+              metrics.includes("workArea") ||
+              metrics.includes("scaleFactor")
+            ) {
+              refreshDisplaysAndOverlays();
+            }
           });
         } catch (error) {
           console.error("Error creating window after delay:", error);

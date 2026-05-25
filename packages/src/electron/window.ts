@@ -1,13 +1,18 @@
 import path from "path";
 import { app, BrowserWindow } from "electron";
 
-import { getOrderedDisplays, mouseEventInterval } from "./func.js";
+import {
+  getOrderedDisplays,
+  toOverlayDisplayMeta,
+  type OverlayDisplayMeta,
+} from "./display.js";
+import { mouseEventInterval } from "./func.js";
 import { __dirname, currentSettings, isDev } from "./main.js"; // isDev를 main.ts에서 가져옴
 import { closeSplash } from "./splash.js";
 
 export let mainWindow: any;
 export let overlayWindows: any[] = [];
-export let overlayDisplays: any[] = [];
+export let overlayDisplays: OverlayDisplayMeta[] = [];
 
 export async function createWindow(port: number) {
   mainWindow = new BrowserWindow({
@@ -68,10 +73,7 @@ export function createOverlayWindows(PORT: number) {
   overlayWindows = [];
   overlayDisplays = [];
   const displays = getOrderedDisplays();
-  overlayDisplays = displays.map((display) => ({
-    id: display.id,
-    bounds: { ...display.bounds },
-  }));
+  overlayDisplays = displays.map((display) => toOverlayDisplayMeta(display));
 
   displays.forEach((display: any, index: any) => {
     const overlayWindow = new BrowserWindow({
