@@ -11,12 +11,16 @@ export function setupDevMenu() {
           {
             label: "Reload",
             accelerator: "F5",
-            click: () => mainWindow.reload(),
+            click: () => {
+              if (mainWindow) mainWindow.reload();
+            },
           },
           {
             label: "Toggle DevTools",
             accelerator: "F12",
-            click: () => mainWindow.webContents.toggleDevTools(),
+            click: () => {
+              if (mainWindow) mainWindow.webContents.toggleDevTools();
+            },
           },
         ],
       },

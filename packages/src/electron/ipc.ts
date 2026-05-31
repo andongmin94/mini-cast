@@ -6,17 +6,23 @@ import { mainWindow, overlayWindows } from "./window.js";
 
 export function setupIpcHandlers(currentSettings: any) {
   ipcMain.on("hidden", () => {
-    mainWindow.hide();
+    if (mainWindow) {
+      mainWindow.hide();
+    }
   });
 
   ipcMain.on("minimize", () => {
-    mainWindow.minimize();
+    if (mainWindow) {
+      mainWindow.minimize();
+    }
   });
 
   // 여기에 다른 IPC 핸들러 추가 가능
   ipcMain.on("request-displays", () => {
     const displays = getConnectedDisplays();
-    mainWindow.webContents.send("displays-updated", displays);
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send("displays-updated", displays);
+    }
   });
 
   ipcMain.on("update-settings", (_event: any, newSettings: any) => {

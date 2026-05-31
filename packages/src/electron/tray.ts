@@ -20,11 +20,13 @@ export function createTray() {
     tray.setToolTip("미니캐스트");
 
     tray.on("double-click", () => {
-      mainWindow.show();
+      if (mainWindow) {
+        mainWindow.show();
+      }
     });
 
     const contextMenu = Menu.buildFromTemplate([
-      { label: "열기", type: "normal", click: () => mainWindow.show() },
+      { label: "열기", type: "normal", click: () => { if (mainWindow) mainWindow.show(); } },
       { type: "separator" },
       {
         label: "종료",

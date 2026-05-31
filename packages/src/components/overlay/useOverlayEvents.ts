@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-
 import { DEFAULT_OVERLAY_SETTINGS } from "@/components/settings/defaults";
 import { type OverlaySettings } from "@/components/settings/types";
 import {
@@ -11,11 +10,22 @@ import {
 
 interface InitEventData {
   id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  scaleFactor?: number;
+}
+
+interface OverlayCoordinateSpace {
+  sourceWidth: number;
+  sourceHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
 }
 
 export function useOverlayEvents(): OverlayViewModel {
-  const [settings, setSettings] =
-    useState<OverlaySettings>(DEFAULT_OVERLAY_SETTINGS);
+  const [settings, setSettings] = useState(DEFAULT_OVERLAY_SETTINGS);
   const [mousePosition, setMousePosition] = useState<MousePosition | null>(null);
   const [keyPresses, setKeyPresses] = useState<KeyPress[]>([]);
   const [displayId, setDisplayId] = useState(0);
@@ -26,18 +36,60 @@ export function useOverlayEvents(): OverlayViewModel {
   });
 
   const settingsRef = useRef(settings);
+  const coordinateSpaceRef = useRef<OverlayCoordinateSpace>({
+    sourceWidth: window.innerWidth,
+    sourceHeight: window.innerHeight,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+  });
 
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
 
   useEffect(() => {
+    const syncViewport = () => {
+      coordinateSpaceRef.current = {
+        ...coordinateSpaceRef.current,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      };
+    };
+
+    const normalizeMousePosition = (position: MousePosition): MousePosition => {
+      const {
+        sourceWidth,
+        sourceHeight,
+        viewportWidth,
+        viewportHeight,
+      } = coordinateSpaceRef.current;
+
+      if (
+        sourceWidth <= 0 ||
+        sourceHeight <= 0 ||
+        viewportWidth <= 0 ||
+        viewportHeight <= 0
+      ) {
+        return position;
+      }
+
+      const normalizedX = Math.round(position.x * (viewportWidth / sourceWidth));
+      const normalizedY = Math.round(position.y * (viewportHeight / sourceHeight));
+
+      return {
+        x: Math.max(0, Math.min(viewportWidth - 1, normalizedX)),
+        y: Math.max(0, Math.min(viewportHeight - 1, normalizedY)),
+      };
+    };
+
     const settingsListener = (newSettings: OverlaySettings) => {
       setSettings(newSettings);
     };
+
     const mouseMoveListener = (position: MousePosition | null) => {
-      setMousePosition(position);
+      setMousePosition(position ? normalizeMousePosition(position) : null);
     };
+
     const keyPressListener = (keyPress: KeyPress) => {
       if (
         !settingsRef.current.showKeyDisplay ||
@@ -54,9 +106,24 @@ export function useOverlayEvents(): OverlayViewModel {
         );
       }, settingsRef.current.keyDisplayDuration);
     };
+
     const initListener = (data: InitEventData) => {
       setDisplayId(data.id);
+
+      coordinateSpaceRef.current = {
+        sourceWidth: data.width || window.innerWidth,
+        sourceHeight: data.height || window.innerHeight,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      };
     };
+
+    const handleResize = () => {
+      syncViewport();
+    };
+
+    syncViewport();
+    window.addEventListener("resize", handleResize);
 
     electron.on("update-settings", settingsListener);
     electron.on("mouse-move", mouseMoveListener);
@@ -64,6 +131,8 @@ export function useOverlayEvents(): OverlayViewModel {
     electron.on("init", initListener);
 
     return () => {
+      window.removeEventListener("resize", handleResize);
+
       electron.removeListener("update-settings", settingsListener);
       electron.removeListener("mouse-move", mouseMoveListener);
       electron.removeListener("key-press", keyPressListener);
@@ -77,26 +146,31 @@ export function useOverlayEvents(): OverlayViewModel {
         ...prev,
         left: true,
       }));
+
     const leftUp = () =>
       setMouseButtons((prev) => ({
         ...prev,
         left: false,
       }));
+
     const middleDown = () =>
       setMouseButtons((prev) => ({
         ...prev,
         middle: true,
       }));
+
     const middleUp = () =>
       setMouseButtons((prev) => ({
         ...prev,
         middle: false,
       }));
+
     const rightDown = () =>
       setMouseButtons((prev) => ({
         ...prev,
         right: true,
       }));
+
     const rightUp = () =>
       setMouseButtons((prev) => ({
         ...prev,

@@ -1,17 +1,16 @@
 import path from "path";
 import { app, BrowserWindow } from "electron";
-
 import {
   getOrderedDisplays,
   toOverlayDisplayMeta,
   type OverlayDisplayMeta,
 } from "./display.js";
 import { mouseEventInterval } from "./func.js";
-import { __dirname, currentSettings, isDev } from "./main.js"; // isDev를 main.ts에서 가져옴
+import { __dirname, currentSettings, isDev } from "./main.js";
 import { closeSplash } from "./splash.js";
 
-export let mainWindow: any;
-export let overlayWindows: any[] = [];
+export let mainWindow: BrowserWindow | null = null;
+export let overlayWindows: BrowserWindow[] = [];
 export let overlayDisplays: OverlayDisplayMeta[] = [];
 
 export async function createWindow(port: number) {
@@ -25,18 +24,17 @@ export async function createWindow(port: number) {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, "preload.js"), // preload 사용 시 주석 해제
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
   mainWindow.loadURL(`http://localhost:${port}`);
 
   mainWindow.webContents.on("did-finish-load", () => {
-    closeSplash(); // 스플래시 닫기
+    closeSplash();
     mainWindow?.show();
   });
 
-  // --- 플랫폼별 우클릭 메뉴 비활성화 시도 ---
   if (process.platform === "win32") {
     mainWindow.on("system-context-menu", (event: any) => {
       event.preventDefault();
@@ -48,39 +46,44 @@ export async function createWindow(port: number) {
     });
   }
 
-  // 종료 설정
   mainWindow.on("close", (e: any) => {
     if (process.platform === "darwin") {
-      // macOS: 사용자가 명시적으로 종료(Cmd+Q 등)하지 않으면 숨김
       e.preventDefault();
       mainWindow?.hide();
-      app.dock?.hide(); // Dock 에서도 숨김
-    }
-    // 다른 OS 에서는 window-all-closed 에서 앱 종료 처리
-    else {
+      app.dock?.hide();
+    } else {
       clearInterval(mouseEventInterval);
       app.quit();
     }
   });
 
   mainWindow.on("closed", () => {
-    mainWindow = null; // 창 참조 제거
+    mainWindow = null;
   });
 }
 
-export function createOverlayWindows(PORT: number) {
+export function createOverlayWindows(port: number) {
   overlayWindows.forEach((window) => window.close());
   overlayWindows = [];
   overlayDisplays = [];
+
   const displays = getOrderedDisplays();
   overlayDisplays = displays.map((display) => toOverlayDisplayMeta(display));
 
-  displays.forEach((display: any, index: any) => {
+  displays.forEach((display, index) => {
+    const overlayBounds = {
+      x: Math.round(display.bounds.x),
+      y: Math.round(display.bounds.y),
+      width: Math.round(display.bounds.width),
+      height: Math.round(display.bounds.height),
+    };
+
     const overlayWindow = new BrowserWindow({
-      x: display.bounds.x,
-      y: display.bounds.y,
-      width: display.bounds.width,
-      height: display.bounds.height,
+      x: overlayBounds.x,
+      y: overlayBounds.y,
+      width: overlayBounds.width,
+      height: overlayBounds.height,
+      useContentSize: true,
       transparent: true,
       frame: false,
       focusable: false,
@@ -89,17 +92,39 @@ export function createOverlayWindows(PORT: number) {
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
-        preload: path.join(__dirname, "preload.js"), // preload 사용 시 주석 해제
+        preload: path.join(__dirname, "preload.js"),
       },
     });
-    overlayWindow.loadURL(`http://localhost:${PORT}/overlay`);
+
+    const applyOverlayBounds = () => {
+      if (overlayWindow.isDestroyed()) {
+        return;
+      }
+
+      overlayWindow.setContentBounds(overlayBounds);
+
+      setTimeout(() => {
+        if (!overlayWindow.isDestroyed()) {
+          overlayWindow.setContentBounds(overlayBounds);
+        }
+      }, 0);
+    };
+
+    overlayWindow.loadURL(`http://localhost:${port}/overlay`);
     overlayWindows.push(overlayWindow);
+
     overlayWindow.webContents.on("did-finish-load", () => {
-      overlayWindow.webContents.send("init", { id: index, ...display.bounds });
+      applyOverlayBounds();
+
+      overlayWindow.webContents.send("init", {
+        id: index,
+        ...overlayBounds,
+        scaleFactor: display.scaleFactor,
+      });
+
       overlayWindow.webContents.send("update-settings", currentSettings);
     });
 
-    // 클릭만 전달
     overlayWindow.setIgnoreMouseEvents(true, { forward: false });
   });
 }
