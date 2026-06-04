@@ -68,15 +68,14 @@
 ## 프로젝트 구조 (요약)
 ```
 mini-cast/
- ├─ docs/               # VitePress 기반 문서 (사이트 hero 등)
- └─ packages/           # 실제 앱 (Electron + React)
-     ├─ public/         # 아이콘, 폰트, 정적 자원
-     ├─ src/
-     │   ├─ electron/   # 메인 프로세스 로직 (창, IPC, 입력 캡처 등)
-     │   ├─ components/ # React 컴포넌트 (Controller, Overlay, UI primitives)
-     │   ├─ hooks/      # 커스텀 훅
-     │   └─ lib/        # 공용 유틸
-     └─ package.json
+ ├─ public/             # 아이콘, 폰트, 정적 자원
+ ├─ src/
+ │   ├─ electron/       # 메인 프로세스 로직 (창, IPC, 입력 캡처 등)
+ │   ├─ components/     # React 컴포넌트 (Controller, Overlay, UI primitives)
+ │   ├─ hooks/          # 커스텀 훅
+ │   └─ lib/            # 공용 유틸
+ ├─ package.json
+ └─ vite.config.ts
 ```
 
 ## 실행 방법 (개발)
@@ -85,7 +84,7 @@ mini-cast/
 ```bash
 # 1. 저장소 클론
 git clone https://github.com/andongmin94/mini-cast.git
-cd mini-cast/packages
+cd mini-cast
 
 # 2. 의존성 설치
 npm install
@@ -108,7 +107,7 @@ Windows 휴대용(Portable) 실행 파일 생성
 npm run build
 # 결과물: output/ 에 실행 파일 (MiniCast.exe 등)
 ```
-`electron-builder` 설정은 `packages/package.json` 의 `build` 필드 참고.
+`electron-builder` 설정은 `package.json` 의 `build` 필드 참고.
 
 > 현재 macOS 대상은 설정의 기본 스켈레톤만 존재 (`mac.target: dir`). DMG 패키징은 추후 작업 필요.
 
@@ -145,7 +144,8 @@ npm run build
 - 커서 애니메이션 / 클릭 파동 효과
 
 ## 문서 & 가이드
-- 문서 사이트: `docs/` (VitePress) → `/guide/*` 에 개별 기능 가이드 확장 예정
+- 문서 사이트: [https://mini-cast.andongmin.com](https://mini-cast.andongmin.com)
+- 문서 소스는 현재 이 저장소가 아니라 별도 docs 프로젝트에서 관리
 - 현재 hero 의 다운로드 링크/버전 값은 릴리스 자동화 후 스크립트로 동기화 권장
 
 ## 기여 방법
