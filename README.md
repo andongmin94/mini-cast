@@ -1,7 +1,7 @@
 <div align="center">
 
-<a href="https://mini-cast.andongmin.com">
-<img src="https://mini-cast.andongmin.com/logo.svg" alt="logo" height="200" />
+<a href="https://andongmin.com/mini-cast">
+<img src="https://andongmin.com/mini-cast/logo.svg" alt="logo" height="200" />
 </a>
 
 </div>
