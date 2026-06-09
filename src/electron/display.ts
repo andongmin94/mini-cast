@@ -3,7 +3,6 @@ import { screen, type Display } from "electron";
 export interface OverlayDisplayMeta {
   id: number;
   bounds: Display["bounds"];
-  scaleFactor: number;
 }
 
 export function getOrderedDisplays(): Display[] {
@@ -25,10 +24,17 @@ export function getOrderedDisplays(): Display[] {
   });
 }
 
+export function getConnectedDisplays() {
+  return getOrderedDisplays().map((display, index) => ({
+    id: display.id,
+    name: `모니터 ${index + 1}`,
+    bounds: display.bounds,
+  }));
+}
+
 export function toOverlayDisplayMeta(display: Display): OverlayDisplayMeta {
   return {
     id: display.id,
     bounds: { ...display.bounds },
-    scaleFactor: display.scaleFactor > 0 ? display.scaleFactor : 1,
   };
 }

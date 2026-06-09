@@ -58,14 +58,14 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
 export default function TitleBar() {
   const minimize = () => {
-    electron.send("minimize");
+    miniCast.minimizeWindow();
   };
   const hidden = () => {
-    electron.send("hidden");
+    miniCast.hideWindow();
   };
   return (
     <>
-      {typeof electron !== "undefined" && (
+      {typeof miniCast !== "undefined" && (
         <div
           className="fixed flex w-full justify-between bg-neutral-800"
           style={{ WebkitAppRegion: "drag" } as React.CSSProperties}

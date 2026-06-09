@@ -1,59 +1,114 @@
-import { app, ipcMain } from "electron";
+import {
+  app,
+  ipcMain,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+  type WebContents,
+} from "electron";
 
-import { getConnectedDisplays } from "./func.js";
-import { store } from "./main.js";
-import { mainWindow, overlayWindows } from "./window.js";
+import { type OverlaySettings } from "./contract.js";
+import { getConnectedDisplays } from "./display.js";
+import { type SettingsStore } from "./settings.js";
+import { mainWindow, overlayDisplays, overlayWindows } from "./window.js";
 
-export function setupIpcHandlers(currentSettings: any) {
-  ipcMain.on("hidden", () => {
-    if (mainWindow) {
-      mainWindow.hide();
+function isMainWindow(sender: WebContents) {
+  return Boolean(
+    mainWindow &&
+    !mainWindow.isDestroyed() &&
+    mainWindow.webContents.id === sender.id,
+  );
+}
+
+function requireMainWindow(event: IpcMainInvokeEvent) {
+  if (!isMainWindow(event.sender)) {
+    throw new Error("The IPC request did not come from the main window.");
+  }
+}
+
+function sendOverlayInitialization(
+  event: IpcMainEvent,
+  settingsStore: SettingsStore,
+) {
+  const displayIndex = overlayWindows.findIndex(
+    (window) =>
+      !window.isDestroyed() && window.webContents.id === event.sender.id,
+  );
+  const display = overlayDisplays[displayIndex];
+
+  if (!display) {
+    return;
+  }
+
+  event.sender.send("overlay-init", {
+    id: displayIndex,
+    width: display.bounds.width,
+    height: display.bounds.height,
+  });
+  event.sender.send("settings-updated", settingsStore.get("settings"));
+}
+
+function getRuntimeInfo() {
+  const isPortable = Boolean(
+    process.env.PORTABLE_EXECUTABLE_FILE || process.env.PORTABLE_EXECUTABLE_DIR,
+  );
+
+  return {
+    installMode:
+      process.platform !== "win32"
+        ? "unknown"
+        : isPortable
+          ? "portable"
+          : app.isPackaged
+            ? "msi"
+            : "unknown",
+    platform: process.platform,
+    arch: process.arch,
+  };
+}
+
+export function setupIpcHandlers(settingsStore: SettingsStore) {
+  ipcMain.on("hide-window", (event) => {
+    if (isMainWindow(event.sender)) {
+      mainWindow?.hide();
     }
   });
 
-  ipcMain.on("minimize", () => {
-    if (mainWindow) {
-      mainWindow.minimize();
+  ipcMain.on("minimize-window", (event) => {
+    if (isMainWindow(event.sender)) {
+      mainWindow?.minimize();
     }
   });
 
-  // 여기에 다른 IPC 핸들러 추가 가능
-  ipcMain.on("request-displays", () => {
-    const displays = getConnectedDisplays();
-    if (mainWindow && mainWindow.webContents) {
-      mainWindow.webContents.send("displays-updated", displays);
+  ipcMain.on("request-displays", (event) => {
+    if (isMainWindow(event.sender)) {
+      event.sender.send("displays-updated", getConnectedDisplays());
     }
   });
 
-  ipcMain.on("update-settings", (_event: any, newSettings: any) => {
-    currentSettings = { ...currentSettings, ...newSettings };
-    (store() as any).set("settings", currentSettings);
-    overlayWindows.forEach((window: any) => {
-      window.webContents.send("update-settings", currentSettings);
+  ipcMain.on("save-settings", (event, settings: OverlaySettings) => {
+    if (!isMainWindow(event.sender)) {
+      return;
+    }
+
+    settingsStore.set("settings", settings);
+    overlayWindows.forEach((window) => {
+      if (!window.isDestroyed()) {
+        window.webContents.send("settings-updated", settings);
+      }
     });
   });
 
-  ipcMain.handle("get-value", (_event: any, key: any) => {
-    if (key === "runtimeInfo") {
-      const hasPortableContext = Boolean(
-        process.env.PORTABLE_EXECUTABLE_FILE ||
-        process.env.PORTABLE_EXECUTABLE_DIR,
-      );
-      const installMode =
-        process.platform === "win32" && hasPortableContext
-          ? "portable"
-          : process.platform === "win32" && app.isPackaged
-            ? "msi"
-            : "unknown";
+  ipcMain.on("overlay-ready", (event) => {
+    sendOverlayInitialization(event, settingsStore);
+  });
 
-      return {
-        installMode,
-        platform: process.platform,
-        arch: process.arch,
-      };
-    }
+  ipcMain.handle("get-settings", (event) => {
+    requireMainWindow(event);
+    return settingsStore.get("settings");
+  });
 
-    const value = (store() as any).get(key);
-    return value;
+  ipcMain.handle("get-runtime-info", (event) => {
+    requireMainWindow(event);
+    return getRuntimeInfo();
   });
 }

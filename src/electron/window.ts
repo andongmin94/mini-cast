@@ -1,77 +1,140 @@
 import path from "path";
-import { app, BrowserWindow } from "electron";
+import { fileURLToPath } from "url";
+import { app, BrowserWindow, powerMonitor } from "electron";
+
 import {
   getOrderedDisplays,
   toOverlayDisplayMeta,
   type OverlayDisplayMeta,
 } from "./display.js";
-import { mouseEventInterval } from "./func.js";
-import { __dirname, currentSettings, isDev } from "./main.js";
 import { closeSplash } from "./splash.js";
+
+const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
+const rendererFile = path.join(electronDirectory, "../index.html");
+const isDev = !app.isPackaged;
 
 export let mainWindow: BrowserWindow | null = null;
 export let overlayWindows: BrowserWindow[] = [];
 export let overlayDisplays: OverlayDisplayMeta[] = [];
 
-export async function createWindow(port: number) {
+let quitting = false;
+
+export function prepareWindowsForQuit() {
+  quitting = true;
+}
+
+export function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  app.dock?.show();
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+export function quitApplication() {
+  prepareWindowsForQuit();
+  app.quit();
+}
+
+function keepOverlayOnTop(window: BrowserWindow) {
+  if (window.isDestroyed()) {
+    return;
+  }
+
+  window.setAlwaysOnTop(true, "screen-saver");
+  if (window.isVisible()) {
+    window.moveTop();
+  }
+}
+
+function keepAllOverlaysOnTop() {
+  overlayWindows.forEach(keepOverlayOnTop);
+}
+
+export function registerOverlayLifecycle() {
+  app.on("browser-window-focus", keepAllOverlaysOnTop);
+  powerMonitor.on("resume", keepAllOverlaysOnTop);
+  powerMonitor.on("unlock-screen", keepAllOverlaysOnTop);
+}
+
+function loadRenderer(
+  window: BrowserWindow,
+  rendererUrl: string | null,
+  route: "/" | "/overlay",
+) {
+  if (rendererUrl) {
+    return window.loadURL(`${rendererUrl}/#${route}`);
+  }
+
+  return window.loadFile(rendererFile, { hash: route });
+}
+
+export async function createWindow(rendererUrl: string | null) {
   mainWindow = new BrowserWindow({
     show: false,
     width: 416,
     height: 352,
     frame: false,
     resizable: isDev,
-    icon: path.join(__dirname, "../../public/icon.ico"),
+    maximizable: isDev,
+    icon: path.join(electronDirectory, "../../public/icon.ico"),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(electronDirectory, "preload.cjs"),
     },
   });
 
-  mainWindow.loadURL(`http://localhost:${port}`);
-
+  mainWindow.center();
   mainWindow.webContents.on("did-finish-load", () => {
     closeSplash();
-    mainWindow?.show();
+    showMainWindow();
   });
 
   if (process.platform === "win32") {
-    mainWindow.on("system-context-menu", (event: any) => {
-      event.preventDefault();
-    });
+    mainWindow.on("system-context-menu", (event) => event.preventDefault());
   } else {
-    mainWindow.webContents.on("context-menu", (event: any) => {
-      console.log("Main process context-menu event triggered on macOS/Linux");
-      event.preventDefault();
-    });
+    mainWindow.webContents.on("context-menu", (event) =>
+      event.preventDefault(),
+    );
   }
 
-  mainWindow.on("close", (e: any) => {
-    if (process.platform === "darwin") {
-      e.preventDefault();
-      mainWindow?.hide();
-      app.dock?.hide();
-    } else {
-      clearInterval(mouseEventInterval);
-      app.quit();
+  mainWindow.on("close", (event) => {
+    if (quitting) {
+      return;
     }
+
+    event.preventDefault();
+    mainWindow?.hide();
+    app.dock?.hide();
   });
 
+  mainWindow.on("query-session-end", prepareWindowsForQuit);
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  await loadRenderer(mainWindow, rendererUrl, "/");
 }
 
-export function createOverlayWindows(port: number) {
-  overlayWindows.forEach((window) => window.close());
-  overlayWindows = [];
-  overlayDisplays = [];
+export async function createOverlayWindows(rendererUrl: string | null) {
+  overlayWindows.forEach((window) => {
+    if (!window.isDestroyed()) {
+      window.destroy();
+    }
+  });
 
   const displays = getOrderedDisplays();
-  overlayDisplays = displays.map((display) => toOverlayDisplayMeta(display));
+  overlayWindows = [];
+  overlayDisplays = displays.map(toOverlayDisplayMeta);
 
-  displays.forEach((display, index) => {
-    const overlayBounds = {
+  const rendererLoads = displays.map((display) => {
+    const bounds = {
       x: Math.round(display.bounds.x),
       y: Math.round(display.bounds.y),
       width: Math.round(display.bounds.width),
@@ -79,52 +142,49 @@ export function createOverlayWindows(port: number) {
     };
 
     const overlayWindow = new BrowserWindow({
-      x: overlayBounds.x,
-      y: overlayBounds.y,
-      width: overlayBounds.width,
-      height: overlayBounds.height,
+      show: false,
+      ...bounds,
       useContentSize: true,
       transparent: true,
       frame: false,
+      hasShadow: false,
       focusable: false,
-      alwaysOnTop: true,
+      resizable: false,
       skipTaskbar: true,
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
-        preload: path.join(__dirname, "preload.js"),
+        preload: path.join(electronDirectory, "preload.cjs"),
       },
     });
 
-    const applyOverlayBounds = () => {
-      if (overlayWindow.isDestroyed()) {
-        return;
-      }
-
-      overlayWindow.setContentBounds(overlayBounds);
-
-      setTimeout(() => {
-        if (!overlayWindow.isDestroyed()) {
-          overlayWindow.setContentBounds(overlayBounds);
-        }
-      }, 0);
-    };
-
-    overlayWindow.loadURL(`http://localhost:${port}/overlay`);
     overlayWindows.push(overlayWindow);
+    overlayWindow.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+    });
+    overlayWindow.setIgnoreMouseEvents(true, { forward: false });
+    keepOverlayOnTop(overlayWindow);
 
-    overlayWindow.webContents.on("did-finish-load", () => {
-      applyOverlayBounds();
-
-      overlayWindow.webContents.send("init", {
-        id: index,
-        ...overlayBounds,
-        scaleFactor: display.scaleFactor,
-      });
-
-      overlayWindow.webContents.send("update-settings", currentSettings);
+    overlayWindow.on("show", () => keepOverlayOnTop(overlayWindow));
+    overlayWindow.on("always-on-top-changed", (_event, alwaysOnTop) => {
+      if (!alwaysOnTop && !quitting) {
+        keepOverlayOnTop(overlayWindow);
+      }
     });
 
-    overlayWindow.setIgnoreMouseEvents(true, { forward: false });
+    overlayWindow.webContents.on("did-finish-load", () => {
+      // Windows가 투명 창의 초기 bounds를 바꾸는 경우가 있어 로드 후 다시 적용합니다.
+      overlayWindow.setContentBounds(bounds);
+      setTimeout(() => {
+        if (!overlayWindow.isDestroyed()) {
+          overlayWindow.setContentBounds(bounds);
+        }
+      }, 0);
+      overlayWindow.showInactive();
+    });
+
+    return loadRenderer(overlayWindow, rendererUrl, "/overlay");
   });
+
+  await Promise.all(rendererLoads);
 }

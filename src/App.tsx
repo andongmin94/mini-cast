@@ -1,15 +1,15 @@
-import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
+import { HashRouter, Route, Routes } from "react-router-dom";
 
 import Controller from "@/components/Controller";
 import Overlay from "@/components/Overlay";
 
 export default function App() {
   return (
-    <Router>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<Controller />} />
         <Route path="/overlay" element={<Overlay />} />
       </Routes>
-    </Router>
+    </HashRouter>
   );
 }

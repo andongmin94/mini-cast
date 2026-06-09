@@ -4,8 +4,6 @@ dist
 output
 *.local
 
-package-lock.json
-
 # Logs
 logs
 *.log

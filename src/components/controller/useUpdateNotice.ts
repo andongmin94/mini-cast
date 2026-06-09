@@ -48,8 +48,12 @@ function normalizeRuntimeInfo(payload: unknown): RuntimeUpdateInfo {
 }
 
 async function getRuntimeInfo() {
+  if (typeof miniCast === "undefined") {
+    return DEFAULT_RUNTIME_INFO;
+  }
+
   try {
-    const payload = (await electron.get("runtimeInfo")) as unknown;
+    const payload: unknown = await miniCast.getRuntimeInfo();
     return normalizeRuntimeInfo(payload);
   } catch {
     return DEFAULT_RUNTIME_INFO;

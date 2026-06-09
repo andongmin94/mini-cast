@@ -1,8 +1,9 @@
-export type KeyDisplayPosition =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+import { type KeyDisplayPosition } from "@/electron/contract";
+
+export {
+  type KeyDisplayPosition,
+  type OverlaySettings,
+} from "@/electron/contract";
 
 export interface Display {
   id: number;
@@ -13,21 +14,6 @@ export interface Display {
     width: number;
     height: number;
   };
-}
-
-export interface OverlaySettings {
-  cursorFillColor: string;
-  cursorStrokeColor: string;
-  cursorSize: number;
-  cursorStrokeSize: number;
-  showCursorHighlight: boolean;
-  keyDisplayMonitor: number;
-  keyDisplayDuration: number;
-  keyDisplayFontSize: number;
-  keyDisplayBackgroundColor: string;
-  keyDisplayTextColor: string;
-  keyDisplayPosition: KeyDisplayPosition;
-  showKeyDisplay: boolean;
 }
 
 export interface ControllerSettings {
