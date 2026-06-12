@@ -12,9 +12,7 @@ export function getOrderedDisplays(): Display[] {
     const leftIsPrimary = left.id === primaryDisplay.id;
     const rightIsPrimary = right.id === primaryDisplay.id;
 
-    if (leftIsPrimary !== rightIsPrimary) {
-      return leftIsPrimary ? -1 : 1;
-    }
+    if (leftIsPrimary !== rightIsPrimary) return leftIsPrimary ? -1 : 1;
 
     return (
       left.bounds.y - right.bounds.y ||
@@ -33,8 +31,5 @@ export function getConnectedDisplays() {
 }
 
 export function toOverlayDisplayMeta(display: Display): OverlayDisplayMeta {
-  return {
-    id: display.id,
-    bounds: { ...display.bounds },
-  };
+  return { id: display.id, bounds: { ...display.bounds } };
 }

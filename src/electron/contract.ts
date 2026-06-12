@@ -1,8 +1,21 @@
-// Electron main process와 React renderer가 함께 쓰는 순수 데이터 계약입니다.
-// 이 파일에는 Electron API나 브라우저 API를 import하지 않습니다.
-
 export type KeyDisplayPosition =
-  "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
+export interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface DisplayInfo {
+  id: number;
+  name: string;
+  bounds: Bounds;
+}
 
 export interface OverlaySettings {
   cursorFillColor: string;
@@ -40,6 +53,12 @@ export type MouseButton = "left" | "middle" | "right";
 export interface MouseButtonEvent {
   button: MouseButton;
   pressed: boolean;
+}
+
+export interface OverlayInit {
+  id: number;
+  width: number;
+  height: number;
 }
 
 export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {

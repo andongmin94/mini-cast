@@ -5,18 +5,17 @@ import {
   type UiohookMouseEvent,
 } from "uiohook-napi";
 
-import {
-  type KeyPress,
-  type MouseButton,
-  type MouseButtonEvent,
+import type {
+  KeyPress,
+  MouseButton,
+  MouseButtonEvent,
 } from "./contract.js";
-import { type OverlayDisplayMeta } from "./display.js";
+import type { OverlayDisplayMeta } from "./display.js";
 import {
   buildCombination,
   CombinationDeduplicator,
   getKeyInfo,
   isNonDisplayKey,
-  type ModifierState,
 } from "./keyboard-input.js";
 import { overlayDisplays, overlayWindows } from "./window.js";
 
@@ -24,7 +23,7 @@ let cursorTimer: ReturnType<typeof setInterval> | undefined;
 let inputStarted = false;
 const keyDeduplicator = new CombinationDeduplicator();
 
-function containsPoint(bounds: Rectangle, point: Point) {
+function contains(bounds: Rectangle, point: Point) {
   return (
     point.x >= bounds.x &&
     point.x < bounds.x + bounds.width &&
@@ -33,34 +32,26 @@ function containsPoint(bounds: Rectangle, point: Point) {
   );
 }
 
-function findDisplayIndex(point: Point, displays: OverlayDisplayMeta[]) {
-  const insideIndex = displays.findIndex((display) =>
-    containsPoint(display.bounds, point),
-  );
-  if (insideIndex >= 0) {
-    return insideIndex;
-  }
+function findDisplay(point: Point, displays: OverlayDisplayMeta[]) {
+  const exact = displays.findIndex((display) => contains(display.bounds, point));
+  if (exact >= 0) return exact;
 
-  const nearestDisplay = screen.getDisplayNearestPoint(point);
-  return displays.findIndex((display) => display.id === nearestDisplay.id);
+  const nearest = screen.getDisplayNearestPoint(point);
+  return displays.findIndex((display) => display.id === nearest.id);
 }
 
-function toLocalPoint(point: Point, display: OverlayDisplayMeta) {
-  return {
-    x: Math.round(point.x - display.bounds.x),
-    y: Math.round(point.y - display.bounds.y),
-  };
+function sendToOverlays(channel: string, payload: unknown) {
+  overlayWindows.forEach((window) => {
+    if (!window.isDestroyed()) window.webContents.send(channel, payload);
+  });
 }
 
 function startCursorCapture() {
   let lastPosition: Point | undefined;
-  let lastSentAt = Number.NEGATIVE_INFINITY;
+  let lastSentAt = 0;
 
-  // 움직일 때는 1ms 단위로 따라가고, 멈춰 있을 때는 100ms마다 상태만 확인합니다.
   cursorTimer = setInterval(() => {
-    if (overlayWindows.length === 0 || overlayDisplays.length === 0) {
-      return;
-    }
+    if (!overlayWindows.length || !overlayDisplays.length) return;
 
     const position = screen.getCursorScreenPoint();
     const now = Date.now();
@@ -69,86 +60,65 @@ function startCursorCapture() {
       position.x !== lastPosition.x ||
       position.y !== lastPosition.y;
 
-    if (!moved && now - lastSentAt < 100) {
-      return;
-    }
+    if (!moved && now - lastSentAt < 100) return;
 
-    const activeDisplayIndex = findDisplayIndex(position, overlayDisplays);
-
+    const activeDisplay = findDisplay(position, overlayDisplays);
     overlayWindows.forEach((window, index) => {
+      if (window.isDestroyed()) return;
       const display = overlayDisplays[index];
-      const localPosition = display ? toLocalPoint(position, display) : null;
-      const isInsideActiveDisplay =
-        index === activeDisplayIndex &&
-        display &&
-        localPosition &&
-        containsPoint(
-          {
-            x: 0,
-            y: 0,
-            width: display.bounds.width,
-            height: display.bounds.height,
-          },
-          localPosition,
-        );
+      const local = display
+        ? {
+            x: Math.round(position.x - display.bounds.x),
+            y: Math.round(position.y - display.bounds.y),
+          }
+        : null;
 
       window.webContents.send(
         "mouse-move",
-        isInsideActiveDisplay ? localPosition : null,
+        index === activeDisplay && local ? local : null,
       );
     });
 
     lastPosition = position;
     lastSentAt = now;
-  }, 1);
-}
-
-function sendToOverlays(channel: string, payload: unknown) {
-  overlayWindows.forEach((window) => {
-    if (!window.isDestroyed()) {
-      window.webContents.send(channel, payload);
-    }
-  });
+  }, 8);
 }
 
 function handleKeyDown(event: UiohookKeyboardEvent) {
-  if (isNonDisplayKey(event.keycode)) {
-    return;
-  }
+  if (isNonDisplayKey(event.keycode)) return;
 
-  // 물리 keycode를 사용하므로 한글 IME 상태에서도 실제 누른 QWERTY 키를 얻습니다.
   const key = getKeyInfo(event.keycode);
-  if (!key) {
-    return;
-  }
+  if (!key) return;
 
-  const modifiers: ModifierState = {
+  const modifiers = {
     ctrl: event.ctrlKey,
     shift: event.shiftKey,
     alt: event.altKey,
     meta: event.metaKey,
   };
-  const combination = buildCombination(key.label, modifiers);
   const timestamp = Date.now();
-
-  if (!keyDeduplicator.shouldEmit(combination, timestamp)) {
+  if (
+    !keyDeduplicator.shouldEmit(
+      buildCombination(key.label, modifiers),
+      timestamp,
+    )
+  ) {
     return;
   }
 
   overlayWindows.forEach((window, displayId) => {
-    if (!window.isDestroyed()) {
-      const keyPress: KeyPress = {
-        key: key.label,
-        code: key.code,
-        ctrlKey: modifiers.ctrl,
-        shiftKey: modifiers.shift,
-        altKey: modifiers.alt,
-        metaKey: modifiers.meta,
-        timestamp,
-        displayId,
-      };
-      window.webContents.send("key-press", keyPress);
-    }
+    if (window.isDestroyed()) return;
+    const keyPress: KeyPress = {
+      key: key.label,
+      code: key.code,
+      ctrlKey: modifiers.ctrl,
+      shiftKey: modifiers.shift,
+      altKey: modifiers.alt,
+      metaKey: modifiers.meta,
+      timestamp,
+      displayId,
+    };
+    window.webContents.send("key-press", keyPress);
   });
 }
 
@@ -163,23 +133,18 @@ function handleMouseButton(event: UiohookMouseEvent, pressed: boolean) {
           : null;
 
   if (button) {
-    const mouseButtonEvent: MouseButtonEvent = { button, pressed };
-    sendToOverlays("mouse-button", mouseButtonEvent);
+    const payload: MouseButtonEvent = { button, pressed };
+    sendToOverlays("mouse-button", payload);
   }
 }
 
-const handleMouseDown = (event: UiohookMouseEvent) => {
+const handleMouseDown = (event: UiohookMouseEvent) =>
   handleMouseButton(event, true);
-};
-
-const handleMouseUp = (event: UiohookMouseEvent) => {
+const handleMouseUp = (event: UiohookMouseEvent) =>
   handleMouseButton(event, false);
-};
 
 export function startInputCapture() {
-  if (inputStarted) {
-    return;
-  }
+  if (inputStarted) return;
 
   startCursorCapture();
   uIOhook.on("keydown", handleKeyDown);
@@ -196,15 +161,11 @@ export function startInputCapture() {
 }
 
 export function stopInputCapture() {
-  if (cursorTimer) {
-    clearInterval(cursorTimer);
-    cursorTimer = undefined;
-  }
+  if (cursorTimer) clearInterval(cursorTimer);
+  cursorTimer = undefined;
 
-  if (inputStarted) {
-    uIOhook.stop();
-    inputStarted = false;
-  }
+  if (inputStarted) uIOhook.stop();
+  inputStarted = false;
 
   uIOhook.off("keydown", handleKeyDown);
   uIOhook.off("mousedown", handleMouseDown);

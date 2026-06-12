@@ -97,12 +97,10 @@ export function getKeyInfo(keycode: number) {
 
 export function buildCombination(label: string, modifiers: ModifierState) {
   const keys: string[] = [];
-
   if (modifiers.ctrl) keys.push("Ctrl");
   if (modifiers.shift) keys.push("Shift");
   if (modifiers.alt) keys.push("Alt");
   if (modifiers.meta) keys.push("Meta");
-
   keys.push(label);
   return keys.join(" + ");
 }
@@ -112,14 +110,11 @@ export class CombinationDeduplicator {
   private lastTimestamp = Number.NEGATIVE_INFINITY;
 
   shouldEmit(combination: string, timestamp: number) {
-    const isDuplicate =
+    const duplicate =
       combination === this.lastCombination &&
       timestamp - this.lastTimestamp <= COMBINATION_DEDUP_MS;
 
-    if (isDuplicate) {
-      return false;
-    }
-
+    if (duplicate) return false;
     this.lastCombination = combination;
     this.lastTimestamp = timestamp;
     return true;

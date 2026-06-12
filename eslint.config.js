@@ -7,10 +7,10 @@ import tseslint from "typescript-eslint";
 export default tseslint.config({
   extends: [js.configs.recommended, ...tseslint.configs.recommended],
   files: ["**/*.{ts,tsx}"],
-  ignores: ["dist", "src/components/ui/*", "src/hooks/*", "src/lib/*"],
+  ignores: ["dist", "output"],
   languageOptions: {
     ecmaVersion: 2020,
-    globals: globals.browser,
+    globals: { ...globals.browser, ...globals.node },
   },
   plugins: {
     "react-hooks": reactHooks,
@@ -22,7 +22,6 @@ export default tseslint.config({
       "warn",
       { allowConstantExport: true },
     ],
-    "@typescript-eslint/no-explicit-any": "off", // 'any' 타입 사용 허용
-    "@typescript-eslint/no-require-imports": "off", // 'require()' 사용 허용
+    "@typescript-eslint/no-require-imports": "off",
   },
 });
