@@ -3,13 +3,17 @@ name: Verify
 on:
   push:
     branches: [main]
+  issues:
+    types: [opened]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
 
 jobs:
   checks:
+    if: ${{ github.event_name != 'issues' || startsWith(github.event.issue.title, '[ci]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,8 +39,20 @@ jobs:
         run: npm exec vite build
       - name: Build Electron main
         run: npm run build:electron
+      - name: Commit synced lockfile
+        shell: bash
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- package-lock.json
+          git commit -m "chore: sync package lock [skip ci]"
+          git push origin HEAD:main
 
   windows-package:
+    if: ${{ github.event_name != 'issues' || startsWith(github.event.issue.title, '[ci]') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,3 +70,21 @@ jobs:
         with:
           name: windows-packages
           path: output/*
+
+  report:
+    if: ${{ always() && github.event_name == 'issues' }}
+    needs: [checks, windows-package]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          PACKAGE_RESULT: ${{ needs.windows-package.result }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "검증 결과
+
+- Linux 타입검사·테스트·린트·renderer/Electron 빌드: **$CHECKS_RESULT**
+- Windows MSI·Portable 패키징: **$PACKAGE_RESULT**
+- 실행 로그: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
