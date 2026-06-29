@@ -3,13 +3,10 @@ name: Verify
 on:
   push:
     branches: [main]
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   checks:
@@ -41,20 +38,3 @@ jobs:
         with:
           name: windows-packages
           path: output/*
-
-  report:
-    if: ${{ always() && github.event_name == 'schedule' }}
-    needs: [checks, windows-package]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Report result
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHECKS_RESULT: ${{ needs.checks.result }}
-          PACKAGE_RESULT: ${{ needs.windows-package.result }}
-        run: |
-          gh issue comment 1 --repo "$GITHUB_REPOSITORY" --body "검증 결과
-
-- Linux 타입검사·테스트·린트·renderer/Electron 빌드: **$CHECKS_RESULT**
-- Windows MSI·Portable 패키징: **$PACKAGE_RESULT**
-- 실행 로그: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
