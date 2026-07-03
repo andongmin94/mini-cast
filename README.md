@@ -45,7 +45,7 @@ src/
 
 ## 실행
 
-Node.js 20.19 이상이 필요합니다.
+Node.js 22.12 이상이 필요합니다. Node.js 24 사용을 권장합니다.
 
 ```bash
 npm ci
