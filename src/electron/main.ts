@@ -15,6 +15,10 @@ import {
 } from "./contract.js";
 import { getConnectedDisplays } from "./display.js";
 import { startInputCapture, stopInputCapture } from "./input.js";
+import {
+  normalizeOverlaySettings,
+  overlaySettingsEqual,
+} from "./settings.js";
 import { closeSplash, createSplash } from "./splash.js";
 import { createTray, destroyTray } from "./tray.js";
 import {
@@ -28,9 +32,36 @@ import {
   showMainWindow,
 } from "./window.js";
 
-const rendererUrl = app.isPackaged ? null : "http://127.0.0.1:3000";
+const smokeTest = process.argv.includes("--smoke-test");
+const rendererUrl =
+  app.isPackaged || smokeTest ? null : "http://127.0.0.1:3000";
+
+if (smokeTest) app.disableHardwareAcceleration();
 
 type SettingsStore = Store<{ settings: OverlaySettings }>;
+
+function getDisplayCount() {
+  return Math.max(overlayDisplays.length, screen.getAllDisplays().length, 1);
+}
+
+function readSettings(store: SettingsStore) {
+  const saved = store.get("settings");
+  const normalized = normalizeOverlaySettings(saved, getDisplayCount());
+
+  if (!overlaySettingsEqual(saved, normalized)) {
+    store.set("settings", normalized);
+  }
+
+  return normalized;
+}
+
+function sendSettingsToOverlays(settings: OverlaySettings) {
+  overlayWindows.forEach((window) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send("settings-updated", settings);
+    }
+  });
+}
 
 function isMainWindow(sender: WebContents) {
   return Boolean(
@@ -53,7 +84,7 @@ function initializeOverlay(event: IpcMainEvent, store: SettingsStore) {
     width: display.bounds.width,
     height: display.bounds.height,
   });
-  event.sender.send("settings-updated", store.get("settings"));
+  event.sender.send("settings-updated", readSettings(store));
 }
 
 function registerIpc(store: SettingsStore) {
@@ -71,14 +102,12 @@ function registerIpc(store: SettingsStore) {
     }
   });
 
-  ipcMain.on("save-settings", (event, settings: OverlaySettings) => {
+  ipcMain.on("save-settings", (event, settings: unknown) => {
     if (!isMainWindow(event.sender)) return;
-    store.set("settings", settings);
-    overlayWindows.forEach((window) => {
-      if (!window.isDestroyed()) {
-        window.webContents.send("settings-updated", settings);
-      }
-    });
+
+    const normalized = normalizeOverlaySettings(settings, getDisplayCount());
+    store.set("settings", normalized);
+    sendSettingsToOverlays(normalized);
   });
 
   ipcMain.on("overlay-ready", (event) => initializeOverlay(event, store));
@@ -87,11 +116,11 @@ function registerIpc(store: SettingsStore) {
     if (!isMainWindow(event.sender)) {
       throw new Error("Invalid settings request");
     }
-    return store.get("settings");
+    return readSettings(store);
   });
 }
 
-function registerDisplayEvents() {
+function registerDisplayEvents(store: SettingsStore) {
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   const refresh = () => {
@@ -99,6 +128,8 @@ function registerDisplayEvents() {
     refreshTimer = setTimeout(() => {
       void createOverlayWindows(rendererUrl)
         .then(() => {
+          const settings = readSettings(store);
+          sendSettingsToOverlays(settings);
           mainWindow?.webContents.send(
             "displays-updated",
             getConnectedDisplays(),
@@ -113,6 +144,76 @@ function registerDisplayEvents() {
   screen.on("display-metrics-changed", refresh);
 }
 
+interface SmokeState {
+  bridge: boolean;
+  hash: string;
+  rootChildren: number;
+}
+
+async function inspectRenderer(
+  contents: WebContents,
+  expectedHash: "#/" | "#/overlay",
+) {
+  const state = (await contents.executeJavaScript(
+    `(() => ({
+      bridge: typeof window.miniCast === "object",
+      hash: window.location.hash,
+      rootChildren: document.getElementById("root")?.childElementCount ?? 0
+    }))()`,
+    true,
+  )) as SmokeState;
+
+  if (!state.bridge) throw new Error("preload bridge was not exposed");
+  if (state.hash !== expectedHash) {
+    throw new Error(`unexpected renderer route: ${state.hash}`);
+  }
+  if (state.rootChildren < 1) throw new Error("renderer root is empty");
+}
+
+async function performSmokeTest() {
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    throw new Error("controller window was not created");
+  }
+  if (!overlayWindows.length) {
+    throw new Error("no overlay window was created");
+  }
+  if (overlayWindows.length !== overlayDisplays.length) {
+    throw new Error("overlay window/display counts do not match");
+  }
+
+  await inspectRenderer(mainWindow.webContents, "#/");
+  await Promise.all(
+    overlayWindows.map((window) =>
+      inspectRenderer(window.webContents, "#/overlay"),
+    ),
+  );
+}
+
+async function runSmokeTest() {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    await Promise.race([
+      performSmokeTest(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("smoke test timed out")),
+          15_000,
+        );
+      }),
+    ]);
+
+    console.log("MiniCast smoke test passed");
+    prepareWindowsForQuit();
+    stopInputCapture();
+    app.exit(0);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function initializeApp() {
   await app.whenReady();
 
@@ -120,15 +221,22 @@ async function initializeApp() {
     defaults: { settings: DEFAULT_OVERLAY_SETTINGS },
   });
 
+  readSettings(store);
   registerIpc(store);
   registerOverlayLifecycle();
-  createSplash();
+  if (!smokeTest) createSplash();
 
   await createWindow(rendererUrl);
   await createOverlayWindows(rendererUrl);
   startInputCapture();
+
+  if (smokeTest) {
+    await runSmokeTest();
+    return;
+  }
+
   createTray();
-  registerDisplayEvents();
+  registerDisplayEvents(store);
 
   if (app.isPackaged) Menu.setApplicationMenu(null);
 }
@@ -146,6 +254,18 @@ if (!app.requestSingleInstanceLock()) {
 
   void initializeApp().catch((error) => {
     closeSplash();
+
+    if (smokeTest) {
+      console.error(
+        "MiniCast smoke test failed:",
+        error instanceof Error ? error.stack : String(error),
+      );
+      prepareWindowsForQuit();
+      stopInputCapture();
+      app.exit(1);
+      return;
+    }
+
     dialog.showErrorBox(
       "MiniCast 실행 오류",
       error instanceof Error ? error.message : String(error),

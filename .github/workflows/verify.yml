@@ -8,33 +8,84 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run lint
-      - run: npm exec vite build
-      - run: npm run build:electron
+      - name: Install from lockfile
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Lint
+        run: npm run lint
+      - name: Renderer and Electron builds
+        run: |
+          npm exec vite build
+          npm run build:electron
+      - name: Electron startup smoke test
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+          xvfb-run -a npm run smoke
 
   windows-package:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm run build
+      - name: Install from lockfile
+        run: npm ci
+      - name: Build MSI and portable packages
+        run: npm run build
+      - name: Smoke-test the packaged executable
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem output -Recurse -Filter MiniCast.exe |
+            Where-Object { $_.FullName -match 'win-unpacked' } |
+            Select-Object -First 1
+          if (-not $exe) {
+            throw 'Packaged MiniCast.exe was not found under win-unpacked.'
+          }
+
+          $process = Start-Process `
+            -FilePath $exe.FullName `
+            -ArgumentList '--smoke-test' `
+            -PassThru `
+            -Wait
+
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged smoke test failed with exit code $($process.ExitCode)."
+          }
+
+          if (-not (Test-Path 'output/MiniCast.exe')) {
+            throw 'Portable MiniCast.exe was not produced.'
+          }
+          if (-not (Get-ChildItem output -Filter '*.msi')) {
+            throw 'MSI package was not produced.'
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-packages
-          path: output/*
+          path: |
+            output/*.msi
+            output/MiniCast.exe
+          if-no-files-found: error
+          retention-days: 7
