@@ -225,7 +225,7 @@ export async function createOverlayWindows(
       throw new Error("No displays are available for overlay creation.");
     }
 
-    nextWindows = nextDisplays.map((display) => {
+    for (const display of nextDisplays) {
       const bounds = {
         x: Math.round(display.bounds.x),
         y: Math.round(display.bounds.y),
@@ -250,6 +250,7 @@ export async function createOverlayWindows(
           preload: path.join(electronDirectory, "preload.cjs"),
         },
       });
+      nextWindows.push(window);
       const webContentsId = window.webContents.id;
 
       window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -282,9 +283,7 @@ export async function createOverlayWindows(
           callbacks.onOverlayInvalidated?.();
         }
       });
-
-      return window;
-    });
+    }
 
     overlayDisplays = nextDisplays;
     overlayWindows = nextWindows;
