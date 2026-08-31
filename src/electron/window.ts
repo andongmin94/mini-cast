@@ -197,14 +197,15 @@ export async function createOverlayWindows(
   displays: readonly OverlayDisplayMeta[] = getOrderedOverlayDisplays(),
   callbacks: OverlayWindowCallbacks = {},
 ) {
-  const previousEntries = overlayWindows
+  const previousWindows = [...overlayWindows];
+  const previousEntries = previousWindows
     .map((window, index) => ({ window, display: overlayDisplays[index] }))
     .filter(
       (entry): entry is { window: BrowserWindow; display: OverlayDisplayMeta } =>
         Boolean(entry.display),
     );
 
-  previousEntries.forEach(({ window }) => {
+  previousWindows.forEach((window) => {
     if (window.isDestroyed()) return;
     try {
       window.setIgnoreMouseEvents(true, { forward: true });
@@ -217,71 +218,76 @@ export async function createOverlayWindows(
     id: display.id,
     bounds: { ...display.bounds },
   }));
-  const nextWindows = nextDisplays.map((display) => {
-    const bounds = {
-      x: Math.round(display.bounds.x),
-      y: Math.round(display.bounds.y),
-      width: Math.round(display.bounds.width),
-      height: Math.round(display.bounds.height),
-    };
-    const window = new BrowserWindow({
-      show: false,
-      ...bounds,
-      useContentSize: true,
-      transparent: true,
-      frame: false,
-      hasShadow: false,
-      focusable: false,
-      resizable: false,
-      skipTaskbar: true,
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-        webviewTag: false,
-        preload: path.join(electronDirectory, "preload.cjs"),
-      },
-    });
-    const webContentsId = window.webContents.id;
-
-    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    applyOverlayInput(window);
-    keepOverlayOnTop(window);
-    window.on("show", restoreWindowOrder);
-    window.on("always-on-top-changed", (_event, alwaysOnTop) => {
-      if (!alwaysOnTop && !quitting) restoreWindowOrder();
-    });
-    window.webContents.on("render-process-gone", (_event, details) => {
-      if (
-        !quitting &&
-        !intentionallyClosingOverlayContents.has(webContentsId) &&
-        details.reason !== "clean-exit"
-      ) {
-        callbacks.onOverlayInvalidated?.();
-      }
-    });
-    window.webContents.once("destroyed", () => {
-      intentionallyClosingOverlayContents.delete(webContentsId);
-      callbacks.onOverlayGone?.(webContentsId);
-    });
-    window.webContents.on("did-finish-load", () => {
-      if (window.isDestroyed()) return;
-      try {
-        window.setContentBounds(bounds);
-        window.showInactive();
-        restoreWindowOrder();
-      } catch {
-        callbacks.onOverlayInvalidated?.();
-      }
-    });
-
-    return window;
-  });
-
-  overlayDisplays = nextDisplays;
-  overlayWindows = nextWindows;
+  let nextWindows: BrowserWindow[] = [];
 
   try {
+    if (!nextDisplays.length) {
+      throw new Error("No displays are available for overlay creation.");
+    }
+
+    nextWindows = nextDisplays.map((display) => {
+      const bounds = {
+        x: Math.round(display.bounds.x),
+        y: Math.round(display.bounds.y),
+        width: Math.round(display.bounds.width),
+        height: Math.round(display.bounds.height),
+      };
+      const window = new BrowserWindow({
+        show: false,
+        ...bounds,
+        useContentSize: true,
+        transparent: true,
+        frame: false,
+        hasShadow: false,
+        focusable: false,
+        resizable: false,
+        skipTaskbar: true,
+        webPreferences: {
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          webviewTag: false,
+          preload: path.join(electronDirectory, "preload.cjs"),
+        },
+      });
+      const webContentsId = window.webContents.id;
+
+      window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      applyOverlayInput(window);
+      keepOverlayOnTop(window);
+      window.on("show", restoreWindowOrder);
+      window.on("always-on-top-changed", (_event, alwaysOnTop) => {
+        if (!alwaysOnTop && !quitting) restoreWindowOrder();
+      });
+      window.webContents.on("render-process-gone", (_event, details) => {
+        if (
+          !quitting &&
+          !intentionallyClosingOverlayContents.has(webContentsId) &&
+          details.reason !== "clean-exit"
+        ) {
+          callbacks.onOverlayInvalidated?.();
+        }
+      });
+      window.webContents.once("destroyed", () => {
+        intentionallyClosingOverlayContents.delete(webContentsId);
+        callbacks.onOverlayGone?.(webContentsId);
+      });
+      window.webContents.on("did-finish-load", () => {
+        if (window.isDestroyed()) return;
+        try {
+          window.setContentBounds(bounds);
+          window.showInactive();
+          restoreWindowOrder();
+        } catch {
+          callbacks.onOverlayInvalidated?.();
+        }
+      });
+
+      return window;
+    });
+
+    overlayDisplays = nextDisplays;
+    overlayWindows = nextWindows;
     await Promise.all(
       nextWindows.map((window) => loadRenderer(window, rendererUrl, "/overlay")),
     );
@@ -291,6 +297,12 @@ export async function createOverlayWindows(
     const survivingPrevious = previousEntries.filter(
       ({ window }) => !window.isDestroyed(),
     );
+    const survivingWindows = new Set(
+      survivingPrevious.map(({ window }) => window),
+    );
+    destroyOverlayWindows(
+      previousWindows.filter((window) => !survivingWindows.has(window)),
+    );
     overlayWindows = survivingPrevious.map(({ window }) => window);
     overlayDisplays = survivingPrevious.map(({ display }) => display);
     overlayWindows.forEach(applyOverlayInput);
@@ -298,6 +310,6 @@ export async function createOverlayWindows(
     throw error;
   }
 
-  destroyOverlayWindows(previousEntries.map(({ window }) => window));
+  destroyOverlayWindows(previousWindows);
   restoreWindowOrder();
 }
