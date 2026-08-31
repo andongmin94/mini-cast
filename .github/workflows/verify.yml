@@ -16,7 +16,7 @@ jobs:
   windows-package:
     name: Windows 검증 및 패키징
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 50
 
     steps:
       - name: 체크아웃
@@ -34,49 +34,37 @@ jobs:
       - name: 타입 검사
         run: npm run typecheck
 
-      - name: 단위 테스트
+      - name: 단위 및 상태 경계 테스트
         run: npm test
 
       - name: 린트
         run: npm run lint
 
+      - name: 배포 런타임 의존성 감사
+        run: npm audit --omit=dev --audit-level=high
+
       - name: MSI 및 포터블 패키징
         run: npm run build
 
-      - name: 패키징된 실행 파일 기동 검사
+      - name: 실제 Windows 입력·포터블·MSI 설치 검증
         shell: pwsh
-        run: |
-          $exe = Get-ChildItem output -Recurse -Filter MiniCast.exe |
-            Where-Object { $_.FullName -match 'win-unpacked' } |
-            Select-Object -First 1
-          if (-not $exe) {
-            throw '패키징된 MiniCast.exe를 output/win-unpacked에서 찾지 못했습니다.'
-          }
-
-          $process = Start-Process `
-            -FilePath $exe.FullName `
-            -ArgumentList '--smoke-test' `
-            -PassThru `
-            -Wait
-
-          if ($process.ExitCode -ne 0) {
-            throw "패키징된 앱 smoke test 실패: exit code $($process.ExitCode)"
-          }
-
-          if (-not (Test-Path 'output/MiniCast.exe')) {
-            throw '포터블 MiniCast.exe가 생성되지 않았습니다.'
-          }
-          if (-not (Get-ChildItem output -Filter '*.msi')) {
-            throw 'MSI 패키지가 생성되지 않았습니다.'
-          }
+        run: ./scripts/verify-windows.ps1
 
       - name: Windows 산출물 업로드
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mini-cast-windows
           path: |
             output/*.msi
             output/MiniCast.exe
-          if-no-files-found: warn
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 실패 로그 업로드
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mini-cast-verification-logs
+          path: verification-logs/**/*
+          if-no-files-found: ignore
           retention-days: 7

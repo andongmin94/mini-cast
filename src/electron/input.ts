@@ -5,12 +5,14 @@ import {
   type UiohookMouseEvent,
 } from "uiohook-napi";
 
+import { INTERNAL_INPUT_COMBINATIONS } from "./annotation-shortcuts.js";
 import type {
   KeyPress,
   MouseButton,
   MouseButtonEvent,
 } from "./contract.js";
 import type { OverlayDisplayMeta } from "./display.js";
+import { sendToWindow } from "./ipc.js";
 import {
   buildCombination,
   CombinationDeduplicator,
@@ -19,32 +21,23 @@ import {
 } from "./keyboard-input.js";
 import { overlayDisplays, overlayWindows } from "./window.js";
 
-const TOOL_SHORTCUTS = new Set([
-  "Shift + Alt + 1",
-  "Shift + Alt + 3",
-  "Shift + Alt + 4",
-  "Shift + Alt + 5",
-]);
-const ACTIVE_ANNOTATION_SHORTCUTS = new Set([
-  "Esc",
-  "Ctrl + Z",
-  "Ctrl + Shift + Z",
-  "Shift + Alt + 6",
-  "Shift + Alt + 7",
-]);
-
 let cursorTimer: ReturnType<typeof setInterval> | undefined;
 let inputStarted = false;
 let annotationInputActive = false;
-let emergencyPassThroughHandler: (() => void) | undefined;
+let fallbackToolCombinations = new Set<string>();
+let fallbackToolHandler: ((combination: string) => void) | undefined;
 const keyDeduplicator = new CombinationDeduplicator();
 
 export function setAnnotationInputMode(active: boolean) {
   annotationInputActive = active;
 }
 
-export function setEmergencyPassThroughHandler(handler: () => void) {
-  emergencyPassThroughHandler = handler;
+export function configureToolShortcutFallbacks(
+  combinations: Iterable<string>,
+  handler: (combination: string) => void,
+) {
+  fallbackToolCombinations = new Set(combinations);
+  fallbackToolHandler = handler;
 }
 
 function contains(bounds: Rectangle, point: Point) {
@@ -66,7 +59,7 @@ function findDisplay(point: Point, displays: OverlayDisplayMeta[]) {
 
 function sendToOverlays(channel: string, payload: unknown) {
   overlayWindows.forEach((window) => {
-    if (!window.isDestroyed()) window.webContents.send(channel, payload);
+    sendToWindow(window, channel, payload);
   });
 }
 
@@ -85,7 +78,6 @@ function startCursorCapture() {
 
     const activeDisplay = findDisplay(position, overlayDisplays);
     overlayWindows.forEach((window, index) => {
-      if (window.isDestroyed()) return;
       const display = overlayDisplays[index];
       const local = display
         ? {
@@ -94,7 +86,8 @@ function startCursorCapture() {
           }
         : null;
 
-      window.webContents.send(
+      sendToWindow(
+        window,
         "mouse-move",
         index === activeDisplay && local ? local : null,
       );
@@ -118,12 +111,12 @@ function handleKeyDown(event: UiohookKeyboardEvent) {
   };
   const combination = buildCombination(key.label, modifiers);
 
-  if (combination === "Shift + Alt + 1") {
-    emergencyPassThroughHandler?.();
+  if (fallbackToolCombinations.has(combination)) {
+    fallbackToolHandler?.(combination);
   }
   if (
-    TOOL_SHORTCUTS.has(combination) ||
-    (annotationInputActive && ACTIVE_ANNOTATION_SHORTCUTS.has(combination))
+    INTERNAL_INPUT_COMBINATIONS.has(combination) &&
+    (annotationInputActive || combination.includes("Alt"))
   ) {
     return;
   }
@@ -131,8 +124,10 @@ function handleKeyDown(event: UiohookKeyboardEvent) {
   const timestamp = Date.now();
   if (!keyDeduplicator.shouldEmit(combination, timestamp)) return;
 
-  overlayWindows.forEach((window, displayId) => {
-    if (window.isDestroyed()) return;
+  overlayWindows.forEach((window, index) => {
+    const displayId = overlayDisplays[index]?.id;
+    if (displayId === undefined) return;
+
     const keyPress: KeyPress = {
       key: key.label,
       code: key.code,
@@ -143,7 +138,7 @@ function handleKeyDown(event: UiohookKeyboardEvent) {
       timestamp,
       displayId,
     };
-    window.webContents.send("key-press", keyPress);
+    sendToWindow(window, "key-press", keyPress);
   });
 }
 

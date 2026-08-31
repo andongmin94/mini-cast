@@ -26,9 +26,16 @@ interface MiniCastBridge {
   getAnnotationState(): Promise<AnnotationState>;
   setAnnotationTool(tool: AnnotationTool): void;
   sendAnnotationCommand(command: AnnotationCommand): void;
-  commitAnnotationStroke(stroke: AnnotationStroke): void;
-  removeAnnotationStrokes(ids: readonly string[]): void;
-  setAnnotationGestureActive(active: boolean): void;
+  beginAnnotationGesture(gestureId: string): void;
+  commitAnnotationStroke(
+    gestureId: string,
+    stroke: AnnotationStroke,
+  ): Promise<boolean>;
+  removeAnnotationStrokes(
+    gestureId: string,
+    ids: readonly string[],
+  ): Promise<boolean>;
+  endAnnotationGesture(gestureId: string): void;
   onDisplaysUpdated(listener: (displays: DisplayInfo[]) => void): Unsubscribe;
   onSettingsUpdated(listener: (settings: OverlaySettings) => void): Unsubscribe;
   onMouseMove(listener: (position: MousePosition | null) => void): Unsubscribe;
@@ -41,7 +48,9 @@ interface MiniCastBridge {
   onAnnotationDocumentUpdated(
     listener: (document: AnnotationDocumentSnapshot) => void,
   ): Unsubscribe;
-  onAnnotationGestureCancel(listener: () => void): Unsubscribe;
+  onAnnotationGestureCancel(
+    listener: (gestureId: string) => void,
+  ): Unsubscribe;
 }
 
 declare global {

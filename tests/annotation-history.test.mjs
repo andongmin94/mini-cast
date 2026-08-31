@@ -7,13 +7,13 @@ import {
   readAnnotationStrokeIds,
 } from "../dist/annotation/history.js";
 
-function stroke(id) {
+function stroke(id, x = 1, y = 2, width = 4) {
   return {
     id,
     tool: "pen",
-    points: [{ x: 1, y: 2 }],
+    points: [{ x, y }],
     color: "#000000",
-    width: 4,
+    width,
     opacity: 1,
   };
 }
@@ -78,10 +78,48 @@ test("new edits drop redo history and revisions advance", () => {
   assert.ok(history.getSnapshot(10).revision > firstRevision);
 });
 
+test("viewport changes rescale documents and both history stacks", () => {
+  const history = new AnnotationHistory();
+  history.setDisplayViewport(10, 100, 100);
+  history.addStroke(10, stroke("a", 25, 50, 4));
+  history.addStroke(10, stroke("b", 50, 25, 8));
+  assert.equal(history.undo(), 10);
+
+  history.setDisplayViewport(10, 200, 50);
+  let snapshot = history.getSnapshot(10);
+  assert.deepEqual(snapshot.viewport, { width: 200, height: 50 });
+  assert.deepEqual(snapshot.strokes[0].points[0], { x: 50, y: 25 });
+  assert.equal(snapshot.strokes[0].width, 4);
+
+  assert.equal(history.redo(), 10);
+  snapshot = history.getSnapshot(10);
+  assert.deepEqual(snapshot.strokes[1].points[0], { x: 100, y: 12.5 });
+  assert.equal(snapshot.strokes[1].width, 8);
+  assert.equal(history.undo(), 10);
+  assert.deepEqual(ids(history, 10), ["a"]);
+});
+
+test("snapshots and input objects cannot mutate stored history", () => {
+  const history = new AnnotationHistory();
+  const source = stroke("a", 10, 20);
+  history.addStroke(10, source);
+  source.points[0].x = 999;
+
+  const snapshot = history.getSnapshot(10);
+  snapshot.strokes[0].points[0].x = 777;
+  assert.deepEqual(history.getSnapshot(10).strokes[0].points[0], {
+    x: 10,
+    y: 20,
+  });
+});
+
 test("runtime stroke and id validation rejects malformed payloads", () => {
   assert.equal(isAnnotationStroke(stroke("a")), true);
   assert.equal(isAnnotationStroke({ ...stroke("a"), width: Infinity }), false);
-  assert.equal(isAnnotationStroke({ ...stroke("a"), points: [{ x: NaN, y: 0 }] }), false);
+  assert.equal(
+    isAnnotationStroke({ ...stroke("a"), points: [{ x: NaN, y: 0 }] }),
+    false,
+  );
   assert.deepEqual(readAnnotationStrokeIds(["a", "a", "b"]), ["a", "b"]);
   assert.equal(readAnnotationStrokeIds(["", "b"]), null);
 });

@@ -11,12 +11,12 @@ test("valid settings are preserved", () => {
   const settings = {
     ...DEFAULT_OVERLAY_SETTINGS,
     cursorSize: 42,
-    keyDisplayMonitor: 1,
+    keyDisplayId: 202,
     keyDisplayPosition: "top-left",
     annotationPenWidth: 9,
   };
 
-  assert.deepEqual(normalizeOverlaySettings(settings, 2), settings);
+  assert.deepEqual(normalizeOverlaySettings(settings, [101, 202]), settings);
   assert.equal(overlaySettingsEqual(settings, settings), true);
 });
 
@@ -29,9 +29,9 @@ test("partial and malformed settings fall back to current defaults", () => {
       showCursorHighlight: "false",
       keyDisplayPosition: "center",
       showKeyDisplay: false,
-      annotationPenColor: "",
+      annotationPenColor: "red",
     },
-    1,
+    [101],
   );
 
   assert.equal(
@@ -56,26 +56,27 @@ test("partial and malformed settings fall back to current defaults", () => {
     settings.annotationPenColor,
     DEFAULT_OVERLAY_SETTINGS.annotationPenColor,
   );
+  assert.equal(settings.keyDisplayId, 101);
 });
 
-test("numeric settings and monitor selection are clamped", () => {
+test("numeric settings and physical monitor selection are normalized", () => {
   const settings = normalizeOverlaySettings(
     {
       cursorSize: 999,
       cursorStrokeSize: -10,
-      keyDisplayMonitor: 9,
+      keyDisplayId: 999,
       keyDisplayDuration: 1,
       keyDisplayFontSize: 80,
       annotationPenWidth: 100,
       annotationHighlighterWidth: 1,
       annotationEraserWidth: 500,
     },
-    2,
+    [10, 20],
   );
 
   assert.equal(settings.cursorSize, 60);
   assert.equal(settings.cursorStrokeSize, 0);
-  assert.equal(settings.keyDisplayMonitor, 1);
+  assert.equal(settings.keyDisplayId, 10);
   assert.equal(settings.keyDisplayDuration, 500);
   assert.equal(settings.keyDisplayFontSize, 60);
   assert.equal(settings.annotationPenWidth, 24);
@@ -83,10 +84,21 @@ test("numeric settings and monitor selection are clamped", () => {
   assert.equal(settings.annotationEraserWidth, 80);
 });
 
-test("settings equality rejects incomplete runtime data", () => {
+test("settings equality rejects incomplete and obsolete runtime data", () => {
   assert.equal(
     overlaySettingsEqual(
       { cursorSize: DEFAULT_OVERLAY_SETTINGS.cursorSize },
+      DEFAULT_OVERLAY_SETTINGS,
+    ),
+    false,
+  );
+  assert.equal(
+    overlaySettingsEqual(
+      {
+        ...DEFAULT_OVERLAY_SETTINGS,
+        keyDisplayMonitor: 0,
+        keyDisplayId: undefined,
+      },
       DEFAULT_OVERLAY_SETTINGS,
     ),
     false,

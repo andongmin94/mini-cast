@@ -39,6 +39,7 @@ test("only identical events within five milliseconds are deduplicated", () => {
 });
 
 test("library key names normalize to compact Tauri-equivalent labels", () => {
+  assert.equal(getKeyInfo(UiohookKey[1])?.label, "1");
   assert.equal(getKeyInfo(UiohookKey.Equal)?.label, "=");
   assert.equal(getKeyInfo(UiohookKey.Period)?.label, ".");
   assert.equal(getKeyInfo(UiohookKey.Backslash)?.label, "\\");

@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   AnnotationCommand,
   AnnotationPreferences,
+  AnnotationState,
   AnnotationTool,
   DisplayInfo,
   KeyDisplayPosition,
@@ -32,7 +33,7 @@ interface Settings extends AnnotationPreferences {
   cursorSize: number;
   cursorStrokeSize: number;
   showCursorHighlight: boolean;
-  keyDisplayMonitor: number;
+  keyDisplayId: number;
   keyDisplayDuration: number;
   keyDisplayFontSize: number;
   keyDisplayBackgroundColor: string;
@@ -50,7 +51,7 @@ const DEFAULT_SETTINGS: Settings = {
   cursorSize: 30,
   cursorStrokeSize: 3,
   showCursorHighlight: true,
-  keyDisplayMonitor: 0,
+  keyDisplayId: 0,
   keyDisplayDuration: 2000,
   keyDisplayFontSize: 16,
   keyDisplayBackgroundColor: "#000000",
@@ -95,7 +96,7 @@ function fromOverlaySettings(settings: OverlaySettings): Settings {
     cursorSize: settings.cursorSize,
     cursorStrokeSize: settings.cursorStrokeSize,
     showCursorHighlight: settings.showCursorHighlight,
-    keyDisplayMonitor: settings.keyDisplayMonitor,
+    keyDisplayId: settings.keyDisplayId,
     keyDisplayDuration: settings.keyDisplayDuration,
     keyDisplayFontSize: settings.keyDisplayFontSize,
     keyDisplayBackgroundColor: background.color,
@@ -124,7 +125,7 @@ function toOverlaySettings(settings: Settings): OverlaySettings {
     cursorSize: settings.cursorSize,
     cursorStrokeSize: settings.cursorStrokeSize,
     showCursorHighlight: settings.showCursorHighlight,
-    keyDisplayMonitor: settings.keyDisplayMonitor,
+    keyDisplayId: settings.keyDisplayId,
     keyDisplayDuration: settings.keyDisplayDuration,
     keyDisplayFontSize: settings.keyDisplayFontSize,
     keyDisplayBackgroundColor: hexToRgba(
@@ -145,29 +146,35 @@ function toOverlaySettings(settings: Settings): OverlaySettings {
 export default function Controller() {
   const hasBridge = typeof miniCast !== "undefined";
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [annotationTool, setAnnotationTool] =
-    useState<AnnotationTool>("pass-through");
+  const [annotationState, setAnnotationState] = useState<AnnotationState>({
+    tool: "pass-through",
+    unavailableShortcuts: [],
+  });
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
-  const [loaded, setLoaded] = useState(!hasBridge);
+  const [settingsLoaded, setSettingsLoaded] = useState(!hasBridge);
 
   useEffect(() => {
     if (!hasBridge) return;
 
     let active = true;
-    void Promise.all([miniCast.getSettings(), miniCast.getAnnotationState()])
-      .then(([saved, annotation]) => {
+    void miniCast
+      .getSettings()
+      .then((saved) => {
         if (!active) return;
         setSettings(fromOverlaySettings(saved));
-        setAnnotationTool(annotation.tool);
+        setSettingsLoaded(true);
       })
-      .catch((error) => console.error("Failed to load settings:", error))
-      .finally(() => {
-        if (active) setLoaded(true);
-      });
+      .catch((error) => console.error("Failed to load settings:", error));
+    void miniCast
+      .getAnnotationState()
+      .then((state) => {
+        if (active) setAnnotationState(state);
+      })
+      .catch((error) =>
+        console.error("Failed to load annotation state:", error),
+      );
 
-    const stopAnnotation = miniCast.onAnnotationStateUpdated((state) => {
-      setAnnotationTool(state.tool);
-    });
+    const stopAnnotation = miniCast.onAnnotationStateUpdated(setAnnotationState);
     return () => {
       active = false;
       stopAnnotation();
@@ -182,10 +189,18 @@ export default function Controller() {
   }, [hasBridge]);
 
   useEffect(() => {
-    if (hasBridge && loaded) {
+    if (!hasBridge) return;
+    return miniCast.onSettingsUpdated((saved) => {
+      setSettings(fromOverlaySettings(saved));
+      setSettingsLoaded(true);
+    });
+  }, [hasBridge]);
+
+  useEffect(() => {
+    if (hasBridge && settingsLoaded) {
       miniCast.saveSettings(toOverlaySettings(settings));
     }
-  }, [hasBridge, loaded, settings]);
+  }, [hasBridge, settingsLoaded, settings]);
 
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -199,7 +214,7 @@ export default function Controller() {
   }
 
   function chooseAnnotationTool(tool: AnnotationTool) {
-    setAnnotationTool(tool);
+    setAnnotationState((current) => ({ ...current, tool }));
     if (hasBridge) miniCast.setAnnotationTool(tool);
   }
 
@@ -209,7 +224,10 @@ export default function Controller() {
 
   function reset() {
     if (window.confirm("모든 설정을 초기화하시겠습니까?")) {
-      setSettings(DEFAULT_SETTINGS);
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        keyDisplayId: displays[0]?.id ?? DEFAULT_SETTINGS.keyDisplayId,
+      });
     }
   }
 
@@ -384,9 +402,9 @@ export default function Controller() {
                   활성 모니터
                 </Label>
                 <Select
-                  value={String(settings.keyDisplayMonitor)}
+                  value={String(settings.keyDisplayId)}
                   onValueChange={(value) =>
-                    set("keyDisplayMonitor", Number(value))
+                    set("keyDisplayId", Number(value))
                   }
                 >
                   <SelectTrigger id="key-display-monitor">
@@ -394,8 +412,8 @@ export default function Controller() {
                   </SelectTrigger>
                   <SelectContent>
                     {displays.length ? (
-                      displays.map((display, index) => (
-                        <SelectItem key={display.id} value={String(index)}>
+                      displays.map((display) => (
+                        <SelectItem key={display.id} value={String(display.id)}>
                           {display.name}
                         </SelectItem>
                       ))
@@ -431,7 +449,7 @@ export default function Controller() {
 
           <TabsContent value="annotation">
             <AnnotationControls
-              tool={annotationTool}
+              tool={annotationState.tool}
               settings={{
                 annotationPenColor: settings.annotationPenColor,
                 annotationHighlighterColor:
@@ -444,6 +462,7 @@ export default function Controller() {
               onToolChange={chooseAnnotationTool}
               onCommand={sendAnnotationCommand}
               onSettingChange={setAnnotationPreference}
+              unavailableShortcuts={annotationState.unavailableShortcuts}
             />
           </TabsContent>
         </Tabs>

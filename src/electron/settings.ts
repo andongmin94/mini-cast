@@ -10,6 +10,7 @@ const POSITIONS = new Set<KeyDisplayPosition>([
   "bottom-left",
   "bottom-right",
 ]);
+const HEX_COLOR = /^#[\da-f]{6}$/i;
 
 const SETTING_KEYS = Object.keys(
   DEFAULT_OVERLAY_SETTINGS,
@@ -43,6 +44,15 @@ function readColor(
     : fallback;
 }
 
+function readHexColor(
+  source: UnknownRecord,
+  key: keyof OverlaySettings,
+  fallback: string,
+) {
+  const value = source[key];
+  return typeof value === "string" && HEX_COLOR.test(value) ? value : fallback;
+}
+
 function readNumber(
   source: UnknownRecord,
   key: keyof OverlaySettings,
@@ -66,12 +76,21 @@ function readPosition(source: UnknownRecord) {
     : DEFAULT_OVERLAY_SETTINGS.keyDisplayPosition;
 }
 
+function readDisplayId(source: UnknownRecord, displayIds: readonly number[]) {
+  const fallback = displayIds[0] ?? DEFAULT_OVERLAY_SETTINGS.keyDisplayId;
+  const value = source.keyDisplayId;
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    displayIds.includes(value)
+    ? value
+    : fallback;
+}
+
 export function normalizeOverlaySettings(
   value: unknown,
-  displayCount = 1,
+  displayIds: readonly number[] = [DEFAULT_OVERLAY_SETTINGS.keyDisplayId],
 ): OverlaySettings {
   const source = isRecord(value) ? value : {};
-  const monitorMax = Math.max(0, Math.floor(displayCount) - 1);
 
   return {
     cursorFillColor: readColor(
@@ -103,14 +122,7 @@ export function normalizeOverlaySettings(
       "showCursorHighlight",
       DEFAULT_OVERLAY_SETTINGS.showCursorHighlight,
     ),
-    keyDisplayMonitor: readNumber(
-      source,
-      "keyDisplayMonitor",
-      DEFAULT_OVERLAY_SETTINGS.keyDisplayMonitor,
-      0,
-      monitorMax,
-      true,
-    ),
+    keyDisplayId: readDisplayId(source, displayIds),
     keyDisplayDuration: readNumber(
       source,
       "keyDisplayDuration",
@@ -143,12 +155,12 @@ export function normalizeOverlaySettings(
       "showKeyDisplay",
       DEFAULT_OVERLAY_SETTINGS.showKeyDisplay,
     ),
-    annotationPenColor: readColor(
+    annotationPenColor: readHexColor(
       source,
       "annotationPenColor",
       DEFAULT_OVERLAY_SETTINGS.annotationPenColor,
     ),
-    annotationHighlighterColor: readColor(
+    annotationHighlighterColor: readHexColor(
       source,
       "annotationHighlighterColor",
       DEFAULT_OVERLAY_SETTINGS.annotationHighlighterColor,

@@ -1,13 +1,13 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import { app, BrowserWindow, powerMonitor } from "electron";
+import { app, BrowserWindow, powerMonitor, screen } from "electron";
 
 import {
-  getOrderedDisplays,
-  toOverlayDisplayMeta,
+  getOrderedOverlayDisplays,
   type OverlayDisplayMeta,
 } from "./display.js";
 import { closeSplash } from "./splash.js";
+import { fitWindowToWorkAreas } from "./window-layout.js";
 
 const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererFile = path.join(electronDirectory, "../index.html");
@@ -19,6 +19,12 @@ export let overlayDisplays: OverlayDisplayMeta[] = [];
 let quitting = false;
 let overlayInteractive = false;
 let beforeMainWindowHide: (() => void) | undefined;
+const intentionallyClosingOverlayContents = new Set<number>();
+
+export interface OverlayWindowCallbacks {
+  onOverlayGone?(webContentsId: number): void;
+  onOverlayInvalidated?(): void;
+}
 
 export function prepareWindowsForQuit() {
   quitting = true;
@@ -26,32 +32,44 @@ export function prepareWindowsForQuit() {
 
 function applyOverlayInput(window: BrowserWindow) {
   if (window.isDestroyed()) return;
-  if (overlayInteractive) {
-    window.setIgnoreMouseEvents(false);
-  } else {
-    window.setIgnoreMouseEvents(true, { forward: true });
+  try {
+    if (overlayInteractive) {
+      window.setIgnoreMouseEvents(false);
+    } else {
+      window.setIgnoreMouseEvents(true, { forward: true });
+    }
+  } catch {
+    // A renderer can disappear between the destroyed check and the native call.
   }
 }
 
 function keepOverlayOnTop(window: BrowserWindow) {
   if (window.isDestroyed()) return;
-  window.setAlwaysOnTop(true, "screen-saver");
-  if (window.isVisible()) window.moveTop();
+  try {
+    window.setAlwaysOnTop(true, "screen-saver");
+    if (window.isVisible()) window.moveTop();
+  } catch {
+    // Window teardown is asynchronous on Windows.
+  }
 }
 
 function keepControllerAboveOverlays() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
 
-  if (!overlayInteractive) {
-    mainWindow.setAlwaysOnTop(false);
-    return;
-  }
+  try {
+    if (!overlayInteractive) {
+      mainWindow.setAlwaysOnTop(false);
+      return;
+    }
 
-  mainWindow.setAlwaysOnTop(true, "screen-saver");
-  if (mainWindow.isVisible()) mainWindow.moveTop();
+    mainWindow.setAlwaysOnTop(true, "screen-saver");
+    if (mainWindow.isVisible()) mainWindow.moveTop();
+  } catch {
+    // Ignore native ordering failures during shutdown/rebuild.
+  }
 }
 
-function restoreWindowOrder() {
+export function restoreWindowOrder() {
   overlayWindows.forEach(keepOverlayOnTop);
   keepControllerAboveOverlays();
 }
@@ -62,9 +80,27 @@ export function setOverlayInteractive(interactive: boolean) {
   restoreWindowOrder();
 }
 
+export function isOverlayInteractive() {
+  return overlayInteractive;
+}
+
+export function ensureMainWindowVisible() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  const displays = screen.getAllDisplays();
+  if (!displays.length) return;
+  const next = fitWindowToWorkAreas(
+    mainWindow.getBounds(),
+    displays.map((display) => ({ id: display.id, ...display.workArea })),
+    screen.getPrimaryDisplay().id,
+  );
+  mainWindow.setBounds(next, false);
+}
+
 export function showMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   app.dock?.show();
+  ensureMainWindowVisible();
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
@@ -126,6 +162,9 @@ export async function createWindow(
     closeSplash();
     showMainWindow();
   });
+  mainWindow.on("always-on-top-changed", (_event, alwaysOnTop) => {
+    if (overlayInteractive && !alwaysOnTop && !quitting) restoreWindowOrder();
+  });
   mainWindow.on("close", (event) => {
     if (quitting) return;
     event.preventDefault();
@@ -140,59 +179,107 @@ export async function createWindow(
   await loadRenderer(mainWindow, rendererUrl, "/");
 }
 
-export async function createOverlayWindows(rendererUrl: string | null) {
-  overlayWindows.forEach((window) => {
-    if (!window.isDestroyed()) window.destroy();
+function destroyOverlayWindows(windows: readonly BrowserWindow[]) {
+  windows.forEach((window) => {
+    if (window.isDestroyed()) return;
+    try {
+      intentionallyClosingOverlayContents.add(window.webContents.id);
+      window.setIgnoreMouseEvents(true, { forward: true });
+      window.destroy();
+    } catch {
+      // Ignore a concurrent renderer/native teardown.
+    }
   });
+}
 
-  const displays = getOrderedDisplays();
+export async function createOverlayWindows(
+  rendererUrl: string | null,
+  displays: readonly OverlayDisplayMeta[] = getOrderedOverlayDisplays(),
+  callbacks: OverlayWindowCallbacks = {},
+) {
+  const previousWindows = overlayWindows;
   overlayWindows = [];
-  overlayDisplays = displays.map(toOverlayDisplayMeta);
+  overlayDisplays = [];
+  destroyOverlayWindows(previousWindows);
 
-  await Promise.all(
-    displays.map(async (display) => {
-      const bounds = {
-        x: Math.round(display.bounds.x),
-        y: Math.round(display.bounds.y),
-        width: Math.round(display.bounds.width),
-        height: Math.round(display.bounds.height),
-      };
-      const window = new BrowserWindow({
-        show: false,
-        ...bounds,
-        useContentSize: true,
-        transparent: true,
-        frame: false,
-        hasShadow: false,
-        focusable: false,
-        resizable: false,
-        skipTaskbar: true,
-        webPreferences: {
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          webviewTag: false,
-          preload: path.join(electronDirectory, "preload.cjs"),
-        },
-      });
+  const nextDisplays = displays.map((display) => ({
+    id: display.id,
+    bounds: { ...display.bounds },
+  }));
+  const nextWindows = nextDisplays.map((display) => {
+    const bounds = {
+      x: Math.round(display.bounds.x),
+      y: Math.round(display.bounds.y),
+      width: Math.round(display.bounds.width),
+      height: Math.round(display.bounds.height),
+    };
+    const window = new BrowserWindow({
+      show: false,
+      ...bounds,
+      useContentSize: true,
+      transparent: true,
+      frame: false,
+      hasShadow: false,
+      focusable: false,
+      resizable: false,
+      skipTaskbar: true,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        webviewTag: false,
+        preload: path.join(electronDirectory, "preload.cjs"),
+      },
+    });
+    const webContentsId = window.webContents.id;
 
-      overlayWindows.push(window);
-      window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-      applyOverlayInput(window);
-      keepOverlayOnTop(window);
-      window.on("show", restoreWindowOrder);
-      window.on("always-on-top-changed", (_event, alwaysOnTop) => {
-        if (!alwaysOnTop && !quitting) restoreWindowOrder();
-      });
-      window.webContents.on("did-finish-load", () => {
+    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    applyOverlayInput(window);
+    keepOverlayOnTop(window);
+    window.on("show", restoreWindowOrder);
+    window.on("always-on-top-changed", (_event, alwaysOnTop) => {
+      if (!alwaysOnTop && !quitting) restoreWindowOrder();
+    });
+    window.webContents.on("render-process-gone", (_event, details) => {
+      if (
+        !quitting &&
+        !intentionallyClosingOverlayContents.has(webContentsId) &&
+        details.reason !== "clean-exit"
+      ) {
+        callbacks.onOverlayInvalidated?.();
+      }
+    });
+    window.webContents.once("destroyed", () => {
+      intentionallyClosingOverlayContents.delete(webContentsId);
+      callbacks.onOverlayGone?.(webContentsId);
+    });
+    window.webContents.on("did-finish-load", () => {
+      if (window.isDestroyed()) return;
+      try {
         window.setContentBounds(bounds);
         window.showInactive();
         restoreWindowOrder();
-      });
+      } catch {
+        callbacks.onOverlayInvalidated?.();
+      }
+    });
 
-      await loadRenderer(window, rendererUrl, "/overlay");
-    }),
-  );
+    return window;
+  });
+
+  overlayDisplays = nextDisplays;
+  overlayWindows = nextWindows;
+
+  try {
+    await Promise.all(
+      nextWindows.map((window) => loadRenderer(window, rendererUrl, "/overlay")),
+    );
+  } catch (error) {
+    destroyOverlayWindows(nextWindows);
+    overlayWindows = [];
+    overlayDisplays = [];
+    throw error;
+  }
 
   restoreWindowOrder();
 }

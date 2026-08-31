@@ -25,6 +25,7 @@ interface AnnotationControlsProps {
     key: K,
     value: AnnotationPreferences[K],
   ): void;
+  unavailableShortcuts: readonly string[];
 }
 
 const TOOL_OPTIONS = [
@@ -55,6 +56,7 @@ export default function AnnotationControls({
   onToolChange,
   onCommand,
   onSettingChange,
+  unavailableShortcuts,
 }: AnnotationControlsProps) {
   return (
     <div className="space-y-3">
@@ -80,6 +82,12 @@ export default function AnnotationControls({
       <p className="text-muted-foreground text-center text-[11px]">
         판서 중에는 커서 하이라이트와 클릭 효과가 자동으로 숨겨집니다.
       </p>
+
+      {unavailableShortcuts.length > 0 && (
+        <p className="text-destructive text-center text-[11px]">
+          사용 중인 단축키: {unavailableShortcuts.join(", ")}
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex items-center justify-center gap-3">

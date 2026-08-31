@@ -17,6 +17,7 @@ export type AnnotationCommand = (typeof ANNOTATION_COMMANDS)[number];
 
 export interface AnnotationState {
   tool: AnnotationTool;
+  unavailableShortcuts: readonly string[];
 }
 
 export interface Bounds {
@@ -46,7 +47,7 @@ export interface OverlaySettings extends AnnotationPreferences {
   cursorSize: number;
   cursorStrokeSize: number;
   showCursorHighlight: boolean;
-  keyDisplayMonitor: number;
+  keyDisplayId: number;
   keyDisplayDuration: number;
   keyDisplayFontSize: number;
   keyDisplayBackgroundColor: string;
@@ -79,7 +80,6 @@ export interface MouseButtonEvent {
 }
 
 export interface OverlayInit {
-  id: number;
   displayId: number;
   width: number;
   height: number;
@@ -91,7 +91,7 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   cursorSize: 30,
   cursorStrokeSize: 3,
   showCursorHighlight: true,
-  keyDisplayMonitor: 0,
+  keyDisplayId: 0,
   keyDisplayDuration: 2000,
   keyDisplayFontSize: 16,
   keyDisplayBackgroundColor: "rgba(0, 0, 0, 0.5)",

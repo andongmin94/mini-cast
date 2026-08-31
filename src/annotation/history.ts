@@ -14,9 +14,15 @@ export interface AnnotationStroke {
   opacity: number;
 }
 
+export interface AnnotationViewport {
+  width: number;
+  height: number;
+}
+
 export interface AnnotationDocumentSnapshot {
   displayId: number;
   revision: number;
+  viewport: AnnotationViewport | null;
   strokes: readonly AnnotationStroke[];
 }
 
@@ -42,6 +48,11 @@ type HistoryEntry = AddHistoryEntry | RemoveHistoryEntry;
 
 type UnknownRecord = Record<string, unknown>;
 
+interface DocumentState {
+  viewport: AnnotationViewport | null;
+  strokes: AnnotationStroke[];
+}
+
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -54,6 +65,60 @@ function isFinitePoint(value: unknown): value is AnnotationPoint {
     typeof value.y === "number" &&
     Number.isFinite(value.y)
   );
+}
+
+function clonePoint(point: AnnotationPoint): AnnotationPoint {
+  return { x: point.x, y: point.y };
+}
+
+export function cloneAnnotationStroke(stroke: AnnotationStroke): AnnotationStroke {
+  return {
+    id: stroke.id,
+    tool: stroke.tool,
+    points: stroke.points.map(clonePoint),
+    color: stroke.color,
+    width: stroke.width,
+    opacity: stroke.opacity,
+  };
+}
+
+function scaleStroke(
+  stroke: AnnotationStroke,
+  scaleX: number,
+  scaleY: number,
+): AnnotationStroke {
+  const widthScale = Math.sqrt(Math.abs(scaleX * scaleY));
+  return {
+    ...cloneAnnotationStroke(stroke),
+    points: stroke.points.map((point) => ({
+      x: point.x * scaleX,
+      y: point.y * scaleY,
+    })),
+    width: Math.min(128, Math.max(0.5, stroke.width * widthScale)),
+  };
+}
+
+function scaleHistoryEntry(
+  entry: HistoryEntry,
+  displayId: number,
+  scaleX: number,
+  scaleY: number,
+): HistoryEntry {
+  if (entry.displayId !== displayId) return entry;
+  if (entry.kind === "add") {
+    return { ...entry, stroke: scaleStroke(entry.stroke, scaleX, scaleY) };
+  }
+  return {
+    ...entry,
+    strokes: entry.strokes.map(({ stroke, index }) => ({
+      stroke: scaleStroke(stroke, scaleX, scaleY),
+      index,
+    })),
+  };
+}
+
+function validViewportDimension(value: number) {
+  return Number.isFinite(value) && value > 0 && value <= 100_000;
 }
 
 export function isAnnotationStroke(value: unknown): value is AnnotationStroke {
@@ -111,7 +176,7 @@ export function readAnnotationStrokeIds(value: unknown) {
 }
 
 export class AnnotationHistory {
-  private documents = new Map<number, AnnotationStroke[]>();
+  private documents = new Map<number, DocumentState>();
   private revisions = new Map<number, number>();
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
@@ -125,24 +190,57 @@ export class AnnotationHistory {
   }
 
   getSnapshot(displayId: number): AnnotationDocumentSnapshot {
+    const document = this.document(displayId);
     return {
       displayId,
       revision: this.revisions.get(displayId) ?? 0,
-      strokes: [...this.document(displayId)],
+      viewport: document.viewport ? { ...document.viewport } : null,
+      strokes: document.strokes.map(cloneAnnotationStroke),
     };
+  }
+
+  setDisplayViewport(displayId: number, width: number, height: number) {
+    if (!validViewportDimension(width) || !validViewportDimension(height)) {
+      throw new Error(`Invalid annotation viewport: ${width}x${height}`);
+    }
+
+    const document = this.document(displayId);
+    const previous = document.viewport;
+    if (!previous) {
+      document.viewport = { width, height };
+      this.touch(displayId);
+      return true;
+    }
+    if (previous.width === width && previous.height === height) return false;
+
+    const scaleX = width / previous.width;
+    const scaleY = height / previous.height;
+    document.strokes = document.strokes.map((stroke) =>
+      scaleStroke(stroke, scaleX, scaleY),
+    );
+    document.viewport = { width, height };
+    this.undoStack = this.undoStack.map((entry) =>
+      scaleHistoryEntry(entry, displayId, scaleX, scaleY),
+    );
+    this.redoStack = this.redoStack.map((entry) =>
+      scaleHistoryEntry(entry, displayId, scaleX, scaleY),
+    );
+    this.touch(displayId);
+    return true;
   }
 
   addStroke(displayId: number, stroke: AnnotationStroke) {
     const document = this.document(displayId);
-    if (document.some((item) => item.id === stroke.id)) {
+    if (document.strokes.some((item) => item.id === stroke.id)) {
       throw new Error(`Duplicate annotation stroke id: ${stroke.id}`);
     }
 
+    const stored = cloneAnnotationStroke(stroke);
     const entry: AddHistoryEntry = {
       kind: "add",
       displayId,
-      stroke,
-      index: document.length,
+      stroke: stored,
+      index: document.strokes.length,
     };
     this.apply(entry);
     this.commit(entry);
@@ -154,7 +252,10 @@ export class AnnotationHistory {
     if (!idSet.size) return null;
 
     const removed = this.document(displayId)
-      .map((stroke, index) => ({ stroke, index }))
+      .strokes.map((stroke, index) => ({
+        stroke: cloneAnnotationStroke(stroke),
+        index,
+      }))
       .filter(({ stroke }) => idSet.has(stroke.id));
     if (!removed.length) return null;
 
@@ -171,7 +272,7 @@ export class AnnotationHistory {
   clearDisplay(displayId: number) {
     return this.removeStrokes(
       displayId,
-      this.document(displayId).map((stroke) => stroke.id),
+      this.document(displayId).strokes.map((stroke) => stroke.id),
     );
   }
 
@@ -197,7 +298,7 @@ export class AnnotationHistory {
     const existing = this.documents.get(displayId);
     if (existing) return existing;
 
-    const created: AnnotationStroke[] = [];
+    const created: DocumentState = { viewport: null, strokes: [] };
     this.documents.set(displayId, created);
     return created;
   }
@@ -214,37 +315,41 @@ export class AnnotationHistory {
   private apply(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
     if (entry.kind === "add") {
-      document.splice(Math.min(entry.index, document.length), 0, entry.stroke);
-      this.touch(entry.displayId);
-      return;
-    }
-
-    const removedIds = new Set(entry.strokes.map(({ stroke }) => stroke.id));
-    this.documents.set(
-      entry.displayId,
-      document.filter((stroke) => !removedIds.has(stroke.id)),
-    );
-    this.touch(entry.displayId);
-  }
-
-  private revert(entry: HistoryEntry) {
-    if (entry.kind === "add") {
-      this.documents.set(
-        entry.displayId,
-        this.document(entry.displayId).filter(
-          (stroke) => stroke.id !== entry.stroke.id,
-        ),
+      document.strokes.splice(
+        Math.min(entry.index, document.strokes.length),
+        0,
+        cloneAnnotationStroke(entry.stroke),
       );
       this.touch(entry.displayId);
       return;
     }
 
+    const removedIds = new Set(entry.strokes.map(({ stroke }) => stroke.id));
+    document.strokes = document.strokes.filter(
+      (stroke) => !removedIds.has(stroke.id),
+    );
+    this.touch(entry.displayId);
+  }
+
+  private revert(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
+    if (entry.kind === "add") {
+      document.strokes = document.strokes.filter(
+        (stroke) => stroke.id !== entry.stroke.id,
+      );
+      this.touch(entry.displayId);
+      return;
+    }
+
     const ordered = [...entry.strokes].sort((left, right) => {
       return left.index - right.index;
     });
     ordered.forEach(({ stroke, index }) => {
-      document.splice(Math.min(index, document.length), 0, stroke);
+      document.strokes.splice(
+        Math.min(index, document.strokes.length),
+        0,
+        cloneAnnotationStroke(stroke),
+      );
     });
     this.touch(entry.displayId);
   }

@@ -94,14 +94,9 @@ function drawStroke(
   context.beginPath();
   context.moveTo(stroke.points[0].x, stroke.points[0].y);
   for (let index = 1; index < stroke.points.length; index += 1) {
-    const previous = stroke.points[index - 1];
-    const current = stroke.points[index];
-    const middleX = (previous.x + current.x) / 2;
-    const middleY = (previous.y + current.y) / 2;
-    context.quadraticCurveTo(previous.x, previous.y, middleX, middleY);
+    const point = stroke.points[index];
+    context.lineTo(point.x, point.y);
   }
-  const last = stroke.points[stroke.points.length - 1];
-  context.lineTo(last.x, last.y);
   context.stroke();
   context.restore();
 }
@@ -164,6 +159,7 @@ export default function AnnotationSurface({
   const pendingStrokesRef = useRef<Map<string, AnnotationStroke>>(new Map());
   const pendingRemovalIdsRef = useRef<Set<string>>(new Set());
   const activePointerRef = useRef<number | null>(null);
+  const activeGestureIdRef = useRef<string | null>(null);
   const activeStrokeRef = useRef<ActiveStroke | null>(null);
   const eraserBaseRef = useRef<readonly AnnotationStroke[] | null>(null);
   const activeErasedIdsRef = useRef<Set<string>>(new Set());
@@ -201,23 +197,37 @@ export default function AnnotationSurface({
     clearCanvas(gestureCanvasRef.current);
   }, []);
 
-  const finishGestureState = useCallback(() => {
-    const wasActive = activePointerRef.current !== null;
-    activePointerRef.current = null;
-    activeStrokeRef.current = null;
-    eraserBaseRef.current = null;
-    activeErasedIdsRef.current = new Set();
-    lastEraserPointRef.current = null;
-    clearGesture();
-    if (wasActive && typeof miniCast !== "undefined") {
-      miniCast.setAnnotationGestureActive(false);
-    }
-  }, [clearGesture]);
+  const finishGestureState = useCallback(
+    (notifyMain: boolean) => {
+      const gestureId = activeGestureIdRef.current;
+      activePointerRef.current = null;
+      activeGestureIdRef.current = null;
+      activeStrokeRef.current = null;
+      eraserBaseRef.current = null;
+      activeErasedIdsRef.current = new Set();
+      lastEraserPointRef.current = null;
+      clearGesture();
+      if (notifyMain && gestureId && typeof miniCast !== "undefined") {
+        miniCast.endAnnotationGesture(gestureId);
+      }
+    },
+    [clearGesture],
+  );
 
-  const cancelGesture = useCallback(() => {
-    finishGestureState();
-    renderCommitted();
-  }, [finishGestureState, renderCommitted]);
+  const cancelGesture = useCallback(
+    (gestureId?: string) => {
+      if (
+        gestureId &&
+        activeGestureIdRef.current &&
+        gestureId !== activeGestureIdRef.current
+      ) {
+        return;
+      }
+      finishGestureState(true);
+      renderCommitted();
+    },
+    [finishGestureState, renderCommitted],
+  );
 
   useLayoutEffect(() => {
     const committed = committedCanvasRef.current;
@@ -312,23 +322,52 @@ export default function AnnotationSurface({
   }
 
   function commitGesture() {
+    const gestureId = activeGestureIdRef.current;
     const stroke = activeStrokeRef.current;
     const erasedIds = [...activeErasedIdsRef.current];
+    if (!gestureId || typeof miniCast === "undefined") {
+      finishGestureState(true);
+      renderCommitted();
+      return;
+    }
 
-    if (stroke && typeof miniCast !== "undefined") {
+    if (stroke) {
       const committed: AnnotationStroke = {
         ...stroke,
         points: [...stroke.points],
       };
       pendingStrokesRef.current.set(committed.id, committed);
-      miniCast.commitAnnotationStroke(committed);
-    }
-    if (erasedIds.length && typeof miniCast !== "undefined") {
+      void miniCast
+        .commitAnnotationStroke(gestureId, committed)
+        .then((accepted) => {
+          if (!accepted) pendingStrokesRef.current.delete(committed.id);
+        })
+        .catch(() => pendingStrokesRef.current.delete(committed.id))
+        .finally(() => {
+          miniCast.endAnnotationGesture(gestureId);
+          renderCommitted();
+        });
+    } else if (erasedIds.length) {
       erasedIds.forEach((id) => pendingRemovalIdsRef.current.add(id));
-      miniCast.removeAnnotationStrokes(erasedIds);
+      void miniCast
+        .removeAnnotationStrokes(gestureId, erasedIds)
+        .then((accepted) => {
+          if (!accepted) {
+            erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
+          }
+        })
+        .catch(() => {
+          erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
+        })
+        .finally(() => {
+          miniCast.endAnnotationGesture(gestureId);
+          renderCommitted();
+        });
+    } else {
+      miniCast.endAnnotationGesture(gestureId);
     }
 
-    finishGestureState();
+    finishGestureState(false);
     renderCommitted();
   }
 
@@ -337,10 +376,12 @@ export default function AnnotationSurface({
     if (!event.isPrimary || event.button !== 0) return;
 
     event.preventDefault();
+    const gestureId = crypto.randomUUID();
     event.currentTarget.setPointerCapture(event.pointerId);
     activePointerRef.current = event.pointerId;
+    activeGestureIdRef.current = gestureId;
     if (typeof miniCast !== "undefined") {
-      miniCast.setAnnotationGestureActive(true);
+      miniCast.beginAnnotationGesture(gestureId);
     }
 
     const point = { x: event.clientX, y: event.clientY };

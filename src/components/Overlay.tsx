@@ -80,6 +80,7 @@ export default function Overlay() {
   );
   const [annotationState, setAnnotationState] = useState<AnnotationState>({
     tool: "pass-through",
+    unavailableShortcuts: [],
   });
   const [annotationDocument, setAnnotationDocument] =
     useState<AnnotationDocumentSnapshot | null>(null);
@@ -90,11 +91,11 @@ export default function Overlay() {
     right: false,
   });
   const [keyPresses, setKeyPresses] = useState<KeyPress[]>([]);
-  const [displayIndex, setDisplayIndex] = useState(0);
   const [displayId, setDisplayId] = useState<number | null>(null);
 
   const settingsRef = useRef(settings);
   const displayIdRef = useRef<number | null>(null);
+  const documentRevisionRef = useRef(-1);
   const sourceSize = useRef({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -121,7 +122,7 @@ export default function Overlay() {
       const current = settingsRef.current;
       if (
         !current.showKeyDisplay ||
-        keyPress.displayId !== current.keyDisplayMonitor
+        keyPress.displayId !== current.keyDisplayId
       ) {
         return;
       }
@@ -136,15 +137,20 @@ export default function Overlay() {
       setMouseButtons((current) => ({ ...current, [button]: pressed }));
     };
 
-    const onOverlayInit = ({ id, displayId: physicalId, width, height }: OverlayInit) => {
+    const onOverlayInit = ({ displayId: physicalId, width, height }: OverlayInit) => {
       displayIdRef.current = physicalId;
-      setDisplayIndex(id);
+      documentRevisionRef.current = -1;
+      setAnnotationDocument(null);
       setDisplayId(physicalId);
       sourceSize.current = { width, height };
     };
 
     const onDocumentUpdated = (document: AnnotationDocumentSnapshot) => {
-      if (document.displayId === displayIdRef.current) {
+      if (
+        document.displayId === displayIdRef.current &&
+        document.revision >= documentRevisionRef.current
+      ) {
+        documentRevisionRef.current = document.revision;
         setAnnotationDocument(document);
       }
     };
@@ -212,30 +218,29 @@ export default function Overlay() {
         />
       )}
 
-      {settings.showKeyDisplay &&
-        displayIndex === settings.keyDisplayMonitor && (
-          <div
-            className={`fixed flex flex-col ${POSITION_CLASSES[settings.keyDisplayPosition]}`}
-            style={{ zIndex: 4 }}
-          >
-            {keyPresses.map((keyPress, index) => (
-              <div
-                key={`${keyPress.timestamp}-${index}`}
-                className="mb-2 rounded px-3 py-1"
-                style={{
-                  backgroundColor: settings.keyDisplayBackgroundColor,
-                  color: settings.keyDisplayTextColor,
-                  fontSize: settings.keyDisplayFontSize,
-                  textAlign: settings.keyDisplayPosition.includes("left")
-                    ? "left"
-                    : "right",
-                }}
-              >
-                {formatKeyPress(keyPress)}
-              </div>
-            ))}
-          </div>
-        )}
+      {settings.showKeyDisplay && displayId === settings.keyDisplayId && (
+        <div
+          className={`fixed flex flex-col ${POSITION_CLASSES[settings.keyDisplayPosition]}`}
+          style={{ zIndex: 4 }}
+        >
+          {keyPresses.map((keyPress, index) => (
+            <div
+              key={`${keyPress.timestamp}-${index}`}
+              className="mb-2 rounded px-3 py-1"
+              style={{
+                backgroundColor: settings.keyDisplayBackgroundColor,
+                color: settings.keyDisplayTextColor,
+                fontSize: settings.keyDisplayFontSize,
+                textAlign: settings.keyDisplayPosition.includes("left")
+                  ? "left"
+                  : "right",
+              }}
+            >
+              {formatKeyPress(keyPress)}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

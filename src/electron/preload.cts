@@ -22,12 +22,14 @@ contextBridge.exposeInMainWorld("miniCast", {
     ipcRenderer.send("set-annotation-tool", tool),
   sendAnnotationCommand: (command: unknown) =>
     ipcRenderer.send("annotation-command", command),
-  commitAnnotationStroke: (stroke: unknown) =>
-    ipcRenderer.send("annotation-add-stroke", stroke),
-  removeAnnotationStrokes: (ids: unknown) =>
-    ipcRenderer.send("annotation-remove-strokes", ids),
-  setAnnotationGestureActive: (active: unknown) =>
-    ipcRenderer.send("annotation-gesture-state", active),
+  beginAnnotationGesture: (gestureId: unknown) =>
+    ipcRenderer.send("annotation-gesture-begin", gestureId),
+  commitAnnotationStroke: (gestureId: unknown, stroke: unknown) =>
+    ipcRenderer.invoke("annotation-add-stroke", gestureId, stroke),
+  removeAnnotationStrokes: (gestureId: unknown, ids: unknown) =>
+    ipcRenderer.invoke("annotation-remove-strokes", gestureId, ids),
+  endAnnotationGesture: (gestureId: unknown) =>
+    ipcRenderer.send("annotation-gesture-end", gestureId),
   onDisplaysUpdated: (listener: Listener) => on("displays-updated", listener),
   onSettingsUpdated: (listener: Listener) => on("settings-updated", listener),
   onMouseMove: (listener: Listener) => on("mouse-move", listener),
