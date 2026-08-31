@@ -1,0 +1,82 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-package:
+    name: Windows 검증 및 패키징
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 24 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 잠금 파일로 의존성 설치
+        run: npm ci
+
+      - name: 타입 검사
+        run: npm run typecheck
+
+      - name: 단위 테스트
+        run: npm test
+
+      - name: 린트
+        run: npm run lint
+
+      - name: MSI 및 포터블 패키징
+        run: npm run build
+
+      - name: 패키징된 실행 파일 기동 검사
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem output -Recurse -Filter MiniCast.exe |
+            Where-Object { $_.FullName -match 'win-unpacked' } |
+            Select-Object -First 1
+          if (-not $exe) {
+            throw '패키징된 MiniCast.exe를 output/win-unpacked에서 찾지 못했습니다.'
+          }
+
+          $process = Start-Process `
+            -FilePath $exe.FullName `
+            -ArgumentList '--smoke-test' `
+            -PassThru `
+            -Wait
+
+          if ($process.ExitCode -ne 0) {
+            throw "패키징된 앱 smoke test 실패: exit code $($process.ExitCode)"
+          }
+
+          if (-not (Test-Path 'output/MiniCast.exe')) {
+            throw '포터블 MiniCast.exe가 생성되지 않았습니다.'
+          }
+          if (-not (Get-ChildItem output -Filter '*.msi')) {
+            throw 'MSI 패키지가 생성되지 않았습니다.'
+          }
+
+      - name: Windows 산출물 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mini-cast-windows
+          path: |
+            output/*.msi
+            output/MiniCast.exe
+          if-no-files-found: warn
+          retention-days: 7
