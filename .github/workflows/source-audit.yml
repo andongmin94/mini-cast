@@ -1,0 +1,26 @@
+name: Source Audit Snapshot
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: 감사용 소스 스냅샷
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 소스 묶기
+        run: |
+          tar --exclude=.git --exclude=node_modules --exclude=dist --exclude=output \
+            -czf mini-cast-source.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mini-cast-source-audit
+          path: mini-cast-source.tgz
+          retention-days: 1
+          if-no-files-found: error
