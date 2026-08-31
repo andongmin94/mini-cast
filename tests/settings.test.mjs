@@ -13,6 +13,7 @@ test("valid settings are preserved", () => {
     cursorSize: 42,
     keyDisplayMonitor: 1,
     keyDisplayPosition: "top-left",
+    annotationPenWidth: 9,
   };
 
   assert.deepEqual(normalizeOverlaySettings(settings, 2), settings);
@@ -28,6 +29,7 @@ test("partial and malformed settings fall back to current defaults", () => {
       showCursorHighlight: "false",
       keyDisplayPosition: "center",
       showKeyDisplay: false,
+      annotationPenColor: "",
     },
     1,
   );
@@ -50,6 +52,10 @@ test("partial and malformed settings fall back to current defaults", () => {
     DEFAULT_OVERLAY_SETTINGS.keyDisplayPosition,
   );
   assert.equal(settings.showKeyDisplay, false);
+  assert.equal(
+    settings.annotationPenColor,
+    DEFAULT_OVERLAY_SETTINGS.annotationPenColor,
+  );
 });
 
 test("numeric settings and monitor selection are clamped", () => {
@@ -60,6 +66,9 @@ test("numeric settings and monitor selection are clamped", () => {
       keyDisplayMonitor: 9,
       keyDisplayDuration: 1,
       keyDisplayFontSize: 80,
+      annotationPenWidth: 100,
+      annotationHighlighterWidth: 1,
+      annotationEraserWidth: 500,
     },
     2,
   );
@@ -69,6 +78,9 @@ test("numeric settings and monitor selection are clamped", () => {
   assert.equal(settings.keyDisplayMonitor, 1);
   assert.equal(settings.keyDisplayDuration, 500);
   assert.equal(settings.keyDisplayFontSize, 60);
+  assert.equal(settings.annotationPenWidth, 24);
+  assert.equal(settings.annotationHighlighterWidth, 4);
+  assert.equal(settings.annotationEraserWidth, 80);
 });
 
 test("settings equality rejects incomplete runtime data", () => {

@@ -17,10 +17,21 @@ contextBridge.exposeInMainWorld("miniCast", {
     ipcRenderer.send("save-settings", settings),
   notifyOverlayReady: () => ipcRenderer.send("overlay-ready"),
   getSettings: () => ipcRenderer.invoke("get-settings"),
+  getAnnotationState: () => ipcRenderer.invoke("get-annotation-state"),
+  setAnnotationTool: (tool: unknown) =>
+    ipcRenderer.send("set-annotation-tool", tool),
+  sendAnnotationCommand: (command: unknown) =>
+    ipcRenderer.send("annotation-command", command),
+  notifyAnnotationInteraction: () =>
+    ipcRenderer.send("annotation-interaction"),
   onDisplaysUpdated: (listener: Listener) => on("displays-updated", listener),
   onSettingsUpdated: (listener: Listener) => on("settings-updated", listener),
   onMouseMove: (listener: Listener) => on("mouse-move", listener),
   onMouseButton: (listener: Listener) => on("mouse-button", listener),
   onKeyPress: (listener: Listener) => on("key-press", listener),
   onOverlayInit: (listener: Listener) => on("overlay-init", listener),
+  onAnnotationStateUpdated: (listener: Listener) =>
+    on("annotation-state-updated", listener),
+  onAnnotationCommand: (listener: Listener) =>
+    on("annotation-command", listener),
 });

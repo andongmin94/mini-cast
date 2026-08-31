@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 
-import "@/globals.css";
+import { Keyboard, MousePointer2, PenLine } from "lucide-react";
 
-import { Keyboard, MousePointer2 } from "lucide-react";
-
+import AnnotationControls from "@/components/AnnotationControls";
 import TitleBar from "@/components/TitleBar";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,12 +16,15 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
+  AnnotationCommand,
+  AnnotationPreferences,
+  AnnotationTool,
   DisplayInfo,
   KeyDisplayPosition,
   OverlaySettings,
 } from "@/electron/contract";
 
-interface Settings {
+interface Settings extends AnnotationPreferences {
   cursorFillColor: string;
   cursorFillOpacity: number;
   cursorStrokeColor: string;
@@ -56,6 +58,11 @@ const DEFAULT_SETTINGS: Settings = {
   keyDisplayTextColor: "#FFFFFF",
   keyDisplayPosition: "bottom-right",
   showKeyDisplay: true,
+  annotationPenColor: "#FF3B30",
+  annotationHighlighterColor: "#FFD60A",
+  annotationPenWidth: 4,
+  annotationHighlighterWidth: 18,
+  annotationEraserWidth: 28,
 };
 
 function hexToRgba(hex: string, opacity: number) {
@@ -96,6 +103,11 @@ function fromOverlaySettings(settings: OverlaySettings): Settings {
     keyDisplayTextColor: settings.keyDisplayTextColor,
     keyDisplayPosition: settings.keyDisplayPosition,
     showKeyDisplay: settings.showKeyDisplay,
+    annotationPenColor: settings.annotationPenColor,
+    annotationHighlighterColor: settings.annotationHighlighterColor,
+    annotationPenWidth: settings.annotationPenWidth,
+    annotationHighlighterWidth: settings.annotationHighlighterWidth,
+    annotationEraserWidth: settings.annotationEraserWidth,
   };
 }
 
@@ -122,12 +134,19 @@ function toOverlaySettings(settings: Settings): OverlaySettings {
     keyDisplayTextColor: settings.keyDisplayTextColor,
     keyDisplayPosition: settings.keyDisplayPosition,
     showKeyDisplay: settings.showKeyDisplay,
+    annotationPenColor: settings.annotationPenColor,
+    annotationHighlighterColor: settings.annotationHighlighterColor,
+    annotationPenWidth: settings.annotationPenWidth,
+    annotationHighlighterWidth: settings.annotationHighlighterWidth,
+    annotationEraserWidth: settings.annotationEraserWidth,
   };
 }
 
 export default function Controller() {
   const hasBridge = typeof miniCast !== "undefined";
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [annotationTool, setAnnotationTool] =
+    useState<AnnotationTool>("pass-through");
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
   const [loaded, setLoaded] = useState(!hasBridge);
 
@@ -135,18 +154,23 @@ export default function Controller() {
     if (!hasBridge) return;
 
     let active = true;
-    void miniCast
-      .getSettings()
-      .then((saved) => {
-        if (active) setSettings(fromOverlaySettings(saved));
+    void Promise.all([miniCast.getSettings(), miniCast.getAnnotationState()])
+      .then(([saved, annotation]) => {
+        if (!active) return;
+        setSettings(fromOverlaySettings(saved));
+        setAnnotationTool(annotation.tool);
       })
       .catch((error) => console.error("Failed to load settings:", error))
       .finally(() => {
         if (active) setLoaded(true);
       });
 
+    const stopAnnotation = miniCast.onAnnotationStateUpdated((state) => {
+      setAnnotationTool(state.tool);
+    });
     return () => {
       active = false;
+      stopAnnotation();
     };
   }, [hasBridge]);
 
@@ -167,6 +191,15 @@ export default function Controller() {
     setSettings((current) => ({ ...current, [key]: value }));
   }
 
+  function chooseAnnotationTool(tool: AnnotationTool) {
+    setAnnotationTool(tool);
+    if (hasBridge) miniCast.setAnnotationTool(tool);
+  }
+
+  function sendAnnotationCommand(command: AnnotationCommand) {
+    if (hasBridge) miniCast.sendAnnotationCommand(command);
+  }
+
   function reset() {
     if (window.confirm("모든 설정을 초기화하시겠습니까?")) {
       setSettings(DEFAULT_SETTINGS);
@@ -176,16 +209,20 @@ export default function Controller() {
   return (
     <>
       <TitleBar />
-      <div className="pointer-events-auto z-[999] h-70 overflow-hidden p-4">
+      <div className="pointer-events-auto z-[999] h-[336px] overflow-hidden p-4">
         <Tabs defaultValue="cursor" className="w-full">
-          <TabsList className="z-[999] grid w-full grid-cols-2">
+          <TabsList className="z-[999] grid w-full grid-cols-3">
             <TabsTrigger value="cursor">
               <MousePointer2 className="mr-2 h-4 w-4" />
-              커서 설정
+              커서
             </TabsTrigger>
             <TabsTrigger value="keyboard">
               <Keyboard className="mr-2 h-4 w-4" />
-              키보드 설정
+              키보드
+            </TabsTrigger>
+            <TabsTrigger value="annotation">
+              <PenLine className="mr-2 h-4 w-4" />
+              판서
             </TabsTrigger>
           </TabsList>
 
@@ -384,6 +421,24 @@ export default function Controller() {
               </div>
             </div>
           </TabsContent>
+
+          <TabsContent value="annotation">
+            <AnnotationControls
+              tool={annotationTool}
+              settings={{
+                annotationPenColor: settings.annotationPenColor,
+                annotationHighlighterColor:
+                  settings.annotationHighlighterColor,
+                annotationPenWidth: settings.annotationPenWidth,
+                annotationHighlighterWidth:
+                  settings.annotationHighlighterWidth,
+                annotationEraserWidth: settings.annotationEraserWidth,
+              }}
+              onToolChange={chooseAnnotationTool}
+              onCommand={sendAnnotationCommand}
+              onSettingChange={(key, value) => set(key, value)}
+            />
+          </TabsContent>
         </Tabs>
       </div>
       <button
@@ -417,7 +472,7 @@ function SettingSlider({
   onChange,
 }: SettingSliderProps) {
   return (
-    <div className="flex items-center space-x-2 pb-3">
+    <div className="flex items-center space-x-2 pb-2">
       <Label className="whitespace-nowrap">{label}</Label>
       <Slider
         min={min}

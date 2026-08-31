@@ -143,6 +143,37 @@ export function normalizeOverlaySettings(
       "showKeyDisplay",
       DEFAULT_OVERLAY_SETTINGS.showKeyDisplay,
     ),
+    annotationPenColor: readColor(
+      source,
+      "annotationPenColor",
+      DEFAULT_OVERLAY_SETTINGS.annotationPenColor,
+    ),
+    annotationHighlighterColor: readColor(
+      source,
+      "annotationHighlighterColor",
+      DEFAULT_OVERLAY_SETTINGS.annotationHighlighterColor,
+    ),
+    annotationPenWidth: readNumber(
+      source,
+      "annotationPenWidth",
+      DEFAULT_OVERLAY_SETTINGS.annotationPenWidth,
+      1,
+      24,
+    ),
+    annotationHighlighterWidth: readNumber(
+      source,
+      "annotationHighlighterWidth",
+      DEFAULT_OVERLAY_SETTINGS.annotationHighlighterWidth,
+      4,
+      64,
+    ),
+    annotationEraserWidth: readNumber(
+      source,
+      "annotationEraserWidth",
+      DEFAULT_OVERLAY_SETTINGS.annotationEraserWidth,
+      8,
+      80,
+    ),
   };
 }
 

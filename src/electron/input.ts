@@ -19,9 +19,28 @@ import {
 } from "./keyboard-input.js";
 import { overlayDisplays, overlayWindows } from "./window.js";
 
+const TOOL_SHORTCUTS = new Set([
+  "Shift + Alt + 1",
+  "Shift + Alt + 3",
+  "Shift + Alt + 4",
+  "Shift + Alt + 5",
+]);
+const ACTIVE_ANNOTATION_SHORTCUTS = new Set([
+  "Esc",
+  "Ctrl + Z",
+  "Ctrl + Shift + Z",
+  "Shift + Alt + 6",
+  "Shift + Alt + 7",
+]);
+
 let cursorTimer: ReturnType<typeof setInterval> | undefined;
 let inputStarted = false;
+let annotationInputActive = false;
 const keyDeduplicator = new CombinationDeduplicator();
+
+export function setAnnotationInputMode(active: boolean) {
+  annotationInputActive = active;
+}
 
 function contains(bounds: Rectangle, point: Point) {
   return (
@@ -96,15 +115,16 @@ function handleKeyDown(event: UiohookKeyboardEvent) {
     alt: event.altKey,
     meta: event.metaKey,
   };
-  const timestamp = Date.now();
+  const combination = buildCombination(key.label, modifiers);
   if (
-    !keyDeduplicator.shouldEmit(
-      buildCombination(key.label, modifiers),
-      timestamp,
-    )
+    TOOL_SHORTCUTS.has(combination) ||
+    (annotationInputActive && ACTIVE_ANNOTATION_SHORTCUTS.has(combination))
   ) {
     return;
   }
+
+  const timestamp = Date.now();
+  if (!keyDeduplicator.shouldEmit(combination, timestamp)) return;
 
   overlayWindows.forEach((window, displayId) => {
     if (window.isDestroyed()) return;

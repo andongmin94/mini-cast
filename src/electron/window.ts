@@ -17,22 +17,19 @@ export let overlayWindows: BrowserWindow[] = [];
 export let overlayDisplays: OverlayDisplayMeta[] = [];
 
 let quitting = false;
+let overlayInteractive = false;
 
 export function prepareWindowsForQuit() {
   quitting = true;
 }
 
-export function showMainWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  app.dock?.show();
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
-}
-
-export function quitApplication() {
-  prepareWindowsForQuit();
-  app.quit();
+function applyOverlayInput(window: BrowserWindow) {
+  if (window.isDestroyed()) return;
+  if (overlayInteractive) {
+    window.setIgnoreMouseEvents(false);
+  } else {
+    window.setIgnoreMouseEvents(true, { forward: true });
+  }
 }
 
 function keepOverlayOnTop(window: BrowserWindow) {
@@ -41,11 +38,47 @@ function keepOverlayOnTop(window: BrowserWindow) {
   if (window.isVisible()) window.moveTop();
 }
 
+function keepControllerAboveOverlays() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  if (!overlayInteractive) {
+    mainWindow.setAlwaysOnTop(false);
+    return;
+  }
+
+  mainWindow.setAlwaysOnTop(true, "screen-saver");
+  if (mainWindow.isVisible()) mainWindow.moveTop();
+}
+
+function restoreWindowOrder() {
+  overlayWindows.forEach(keepOverlayOnTop);
+  keepControllerAboveOverlays();
+}
+
+export function setOverlayInteractive(interactive: boolean) {
+  overlayInteractive = interactive;
+  overlayWindows.forEach(applyOverlayInput);
+  restoreWindowOrder();
+}
+
+export function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  app.dock?.show();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  restoreWindowOrder();
+}
+
+export function quitApplication() {
+  prepareWindowsForQuit();
+  app.quit();
+}
+
 export function registerOverlayLifecycle() {
-  const restore = () => overlayWindows.forEach(keepOverlayOnTop);
-  app.on("browser-window-focus", restore);
-  powerMonitor.on("resume", restore);
-  powerMonitor.on("unlock-screen", restore);
+  app.on("browser-window-focus", restoreWindowOrder);
+  powerMonitor.on("resume", restoreWindowOrder);
+  powerMonitor.on("unlock-screen", restoreWindowOrder);
 }
 
 function loadRenderer(
@@ -62,7 +95,7 @@ export async function createWindow(rendererUrl: string | null) {
   mainWindow = new BrowserWindow({
     show: false,
     width: 416,
-    height: 352,
+    height: 420,
     frame: false,
     resizable: !app.isPackaged,
     maximizable: !app.isPackaged,
@@ -133,18 +166,21 @@ export async function createOverlayWindows(rendererUrl: string | null) {
 
       overlayWindows.push(window);
       window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-      window.setIgnoreMouseEvents(true);
+      applyOverlayInput(window);
       keepOverlayOnTop(window);
-      window.on("show", () => keepOverlayOnTop(window));
+      window.on("show", restoreWindowOrder);
       window.on("always-on-top-changed", (_event, alwaysOnTop) => {
-        if (!alwaysOnTop && !quitting) keepOverlayOnTop(window);
+        if (!alwaysOnTop && !quitting) restoreWindowOrder();
       });
       window.webContents.on("did-finish-load", () => {
         window.setContentBounds(bounds);
         window.showInactive();
+        restoreWindowOrder();
       });
 
       await loadRenderer(window, rendererUrl, "/overlay");
     }),
   );
+
+  restoreWindowOrder();
 }

@@ -4,7 +4,7 @@
   "type": "module",
   "author": "안동민",
   "main": "dist/electron/main.js",
-  "description": "키보드 & 마우스 오버레이",
+  "description": "키보드·마우스 시각화 및 화면 판서 오버레이",
   "scripts": {
     "dev": "vite",
     "build:electron": "tsc -p tsconfig.electron.json",

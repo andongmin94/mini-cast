@@ -4,6 +4,21 @@ export type KeyDisplayPosition =
   | "bottom-left"
   | "bottom-right";
 
+export const ANNOTATION_TOOLS = [
+  "pass-through",
+  "pen",
+  "highlighter",
+  "eraser",
+] as const;
+export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
+
+export const ANNOTATION_COMMANDS = ["undo", "redo", "clear"] as const;
+export type AnnotationCommand = (typeof ANNOTATION_COMMANDS)[number];
+
+export interface AnnotationState {
+  tool: AnnotationTool;
+}
+
 export interface Bounds {
   x: number;
   y: number;
@@ -17,7 +32,15 @@ export interface DisplayInfo {
   bounds: Bounds;
 }
 
-export interface OverlaySettings {
+export interface AnnotationPreferences {
+  annotationPenColor: string;
+  annotationHighlighterColor: string;
+  annotationPenWidth: number;
+  annotationHighlighterWidth: number;
+  annotationEraserWidth: number;
+}
+
+export interface OverlaySettings extends AnnotationPreferences {
   cursorFillColor: string;
   cursorStrokeColor: string;
   cursorSize: number;
@@ -74,4 +97,25 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   keyDisplayTextColor: "#FFFFFF",
   keyDisplayPosition: "bottom-right",
   showKeyDisplay: true,
+  annotationPenColor: "#FF3B30",
+  annotationHighlighterColor: "#FFD60A",
+  annotationPenWidth: 4,
+  annotationHighlighterWidth: 18,
+  annotationEraserWidth: 28,
 };
+
+export function isAnnotationTool(value: unknown): value is AnnotationTool {
+  return (
+    typeof value === "string" &&
+    (ANNOTATION_TOOLS as readonly string[]).includes(value)
+  );
+}
+
+export function isAnnotationCommand(
+  value: unknown,
+): value is AnnotationCommand {
+  return (
+    typeof value === "string" &&
+    (ANNOTATION_COMMANDS as readonly string[]).includes(value)
+  );
+}

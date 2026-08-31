@@ -3,13 +3,17 @@
     "target": "ES2020", // Electron에 포함된 Node.js 버전에 맞춤
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "outDir": "./dist/electron", // 컴파일된 main/preload 파일
-    "rootDir": "./src/electron",
+    "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/electron/**/*.ts", "src/electron/**/*.cts"],
+  "include": [
+    "src/annotation/**/*.ts",
+    "src/electron/**/*.ts",
+    "src/electron/**/*.cts"
+  ],
   "exclude": ["node_modules"]
 }

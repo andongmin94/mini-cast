@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
+import AnnotationSurface from "@/components/AnnotationSurface";
 import type {
+  AnnotationState,
+  AnnotationTool,
   KeyDisplayPosition,
   KeyPress,
   MouseButtonEvent,
@@ -35,10 +38,48 @@ function formatKeyPress(keyPress: KeyPress) {
     .join(" + ");
 }
 
+function colorWithAlpha(color: string, alpha: number) {
+  const match = color.match(/^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i);
+  if (!match) return color;
+
+  const [red, green, blue] = match.slice(1).map((part) => {
+    return Number.parseInt(part, 16);
+  });
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function toolCursor(tool: AnnotationTool, settings: OverlaySettings) {
+  if (tool === "pen") {
+    return {
+      size: Math.max(settings.annotationPenWidth, 6),
+      border: `1px solid ${settings.annotationPenColor}`,
+      background: "rgba(255, 255, 255, 0.2)",
+    };
+  }
+  if (tool === "highlighter") {
+    return {
+      size: settings.annotationHighlighterWidth,
+      border: `1px solid ${settings.annotationHighlighterColor}`,
+      background: colorWithAlpha(settings.annotationHighlighterColor, 0.24),
+    };
+  }
+  if (tool === "eraser") {
+    return {
+      size: settings.annotationEraserWidth,
+      border: "1px dashed rgba(32, 38, 50, 0.9)",
+      background: "rgba(255, 255, 255, 0.3)",
+    };
+  }
+  return null;
+}
+
 export default function Overlay() {
   const [settings, setSettings] = useState<OverlaySettings>(
     DEFAULT_OVERLAY_SETTINGS,
   );
+  const [annotationState, setAnnotationState] = useState<AnnotationState>({
+    tool: "pass-through",
+  });
   const [mousePosition, setMousePosition] = useState<MousePosition | null>(null);
   const [mouseButtons, setMouseButtons] = useState<MouseButtons>({
     left: false,
@@ -97,6 +138,7 @@ export default function Overlay() {
 
     const unsubscribe = [
       miniCast.onSettingsUpdated(setSettings),
+      miniCast.onAnnotationStateUpdated(setAnnotationState),
       miniCast.onMouseMove((position) =>
         setMousePosition(position ? scalePosition(position) : null),
       ),
@@ -109,16 +151,21 @@ export default function Overlay() {
     return () => unsubscribe.forEach((stop) => stop());
   }, []);
 
+  const passive = annotationState.tool === "pass-through";
   const cursorPressed =
     mouseButtons.left || mouseButtons.middle || mouseButtons.right;
   const cursorRadius = settings.cursorSize / 2;
+  const activeToolCursor = toolCursor(annotationState.tool, settings);
 
   return (
     <div className="pointer-events-none fixed inset-0" style={{ zIndex: 9999 }}>
-      {mousePosition && settings.showCursorHighlight && (
+      <AnnotationSurface tool={annotationState.tool} settings={settings} />
+
+      {mousePosition && passive && settings.showCursorHighlight && (
         <div
           className="absolute rounded-full"
           style={{
+            zIndex: 2,
             width: settings.cursorSize,
             height: settings.cursorSize,
             backgroundColor: settings.cursorFillColor,
@@ -131,9 +178,25 @@ export default function Overlay() {
         />
       )}
 
+      {mousePosition && activeToolCursor && (
+        <div
+          className="absolute rounded-full"
+          style={{
+            zIndex: 2,
+            width: activeToolCursor.size,
+            height: activeToolCursor.size,
+            border: activeToolCursor.border,
+            backgroundColor: activeToolCursor.background,
+            transform: `translate3d(${mousePosition.x - activeToolCursor.size / 2}px, ${mousePosition.y - activeToolCursor.size / 2}px, 0)`,
+            willChange: "transform",
+          }}
+        />
+      )}
+
       {settings.showKeyDisplay && displayId === settings.keyDisplayMonitor && (
         <div
           className={`fixed flex flex-col ${POSITION_CLASSES[settings.keyDisplayPosition]}`}
+          style={{ zIndex: 3 }}
         >
           {keyPresses.map((keyPress, index) => (
             <div
