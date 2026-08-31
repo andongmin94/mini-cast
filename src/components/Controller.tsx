@@ -191,6 +191,13 @@ export default function Controller() {
     setSettings((current) => ({ ...current, [key]: value }));
   }
 
+  function setAnnotationPreference<K extends keyof AnnotationPreferences>(
+    key: K,
+    value: AnnotationPreferences[K],
+  ) {
+    setSettings((current) => ({ ...current, [key]: value }));
+  }
+
   function chooseAnnotationTool(tool: AnnotationTool) {
     setAnnotationTool(tool);
     if (hasBridge) miniCast.setAnnotationTool(tool);
@@ -436,7 +443,7 @@ export default function Controller() {
               }}
               onToolChange={chooseAnnotationTool}
               onCommand={sendAnnotationCommand}
-              onSettingChange={(key, value) => set(key, value)}
+              onSettingChange={setAnnotationPreference}
             />
           </TabsContent>
         </Tabs>
