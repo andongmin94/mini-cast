@@ -218,7 +218,7 @@ export async function createOverlayWindows(
     id: display.id,
     bounds: { ...display.bounds },
   }));
-  let nextWindows: BrowserWindow[] = [];
+  const nextWindows: BrowserWindow[] = [];
 
   try {
     if (!nextDisplays.length) {
