@@ -83,33 +83,32 @@ function Invoke-MiniCastSmoke {
   }
 }
 
-function Get-MiniCastUninstallEntry {
+function Read-MsiLogProperty {
+  param(
+    [Parameter(Mandatory = $true)][string]$LogPath,
+    [Parameter(Mandatory = $true)][string]$Name
+  )
+
+  $content = Get-Content -LiteralPath $LogPath -Raw
+  $pattern = '(?m)^Property\(S\):\s*' + [regex]::Escape($Name) + '\s*=\s*(.+?)\s*$'
+  $match = [regex]::Match($content, $pattern)
+  if (-not $match.Success) {
+    throw "MSI log property '$Name' was not found in $LogPath."
+  }
+  return $match.Groups[1].Value.Trim()
+}
+
+function Get-MiniCastUninstallEntryByProductCode([string]$ProductCode) {
   $paths = @(
     'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
     'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
     'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
   )
   return Get-ItemProperty $paths -ErrorAction SilentlyContinue |
-    Where-Object { $_.DisplayName -like 'MiniCast*' } |
-    Select-Object -First 1
-}
-
-function Resolve-InstalledExecutable($Entry) {
-  $candidates = [System.Collections.Generic.List[string]]::new()
-  if ($Entry.InstallLocation) {
-    $candidates.Add((Join-Path $Entry.InstallLocation 'MiniCast.exe'))
-  }
-  if ($Entry.DisplayIcon) {
-    $displayIcon = ([string]$Entry.DisplayIcon).Trim('"') -replace ',\d+$', ''
-    $candidates.Add($displayIcon)
-  }
-  $candidates.Add((Join-Path $env:ProgramFiles 'MiniCast\MiniCast.exe'))
-  $candidates.Add((Join-Path ${env:ProgramFiles(x86)} 'MiniCast\MiniCast.exe'))
-  $candidates.Add((Join-Path $env:LOCALAPPDATA 'Programs\MiniCast\MiniCast.exe'))
-  $candidates.Add((Join-Path $env:LOCALAPPDATA 'MiniCast\MiniCast.exe'))
-
-  return $candidates |
-    Where-Object { $_ -and (Test-Path $_) } |
+    Where-Object {
+      $childName = $_.PSObject.Properties['PSChildName']
+      $childName -and ([string]$childName.Value -ieq $ProductCode)
+    } |
     Select-Object -First 1
 }
 
@@ -125,31 +124,40 @@ if (-not $unpackedExecutable) { throw 'win-unpacked MiniCast.exe was not produce
 if (-not (Test-Path $portableExecutable)) { throw 'Portable MiniCast.exe was not produced.' }
 if (-not $msi) { throw 'MSI package was not produced.' }
 
+Write-Host 'Verifying unpacked startup...'
 Invoke-MiniCastSmoke -Executable $unpackedExecutable.FullName -Mode startup -Label 'unpacked-startup'
+Write-Host 'Verifying real Windows click-through and annotation routing...'
 Invoke-MiniCastSmoke -Executable $unpackedExecutable.FullName -Mode interaction -Label 'unpacked-interaction' -TimeoutSeconds 60
+Write-Host 'Verifying portable launcher startup and complete shutdown...'
 Invoke-MiniCastSmoke -Executable $portableExecutable -Mode startup -Label 'portable-startup' -TimeoutSeconds 75
 
 $installLog = Join-Path $LogDirectory 'msi-install.log'
 $uninstallLog = Join-Path $LogDirectory 'msi-uninstall.log'
 $installArguments = "/i `"$($msi.FullName)`" /qn /norestart /L*v `"$installLog`""
+Write-Host 'Installing MSI silently...'
 $install = Start-Process 'msiexec.exe' -ArgumentList $installArguments -Wait -PassThru
 if ($install.ExitCode -notin @(0, 3010)) {
   throw "MSI installation failed with exit code $($install.ExitCode)."
 }
 
-$entry = Get-MiniCastUninstallEntry
-if (-not $entry) { throw 'MiniCast uninstall registry entry was not created.' }
-$installedExecutable = Resolve-InstalledExecutable $entry
-if (-not $installedExecutable) { throw 'Installed MiniCast.exe could not be located.' }
+$productCode = Read-MsiLogProperty -LogPath $installLog -Name 'ProductCode'
+$applicationFolder = Read-MsiLogProperty -LogPath $installLog -Name 'APPLICATIONFOLDER'
+if ($productCode -notmatch '^\{[0-9A-Fa-f-]+\}$') {
+  throw "MSI ProductCode is invalid: $productCode"
+}
+$entry = Get-MiniCastUninstallEntryByProductCode $productCode
+if (-not $entry) {
+  throw "MiniCast uninstall registry entry was not created for $productCode."
+}
+$installedExecutable = Join-Path $applicationFolder 'MiniCast.exe'
+if (-not (Test-Path $installedExecutable)) {
+  throw "Installed MiniCast.exe could not be located: $installedExecutable"
+}
+Write-Host "Verifying installed executable: $installedExecutable"
 Invoke-MiniCastSmoke -Executable $installedExecutable -Mode startup -Label 'msi-installed-startup'
 
-$productCode = [string]$entry.PSChildName
-$uninstallTarget = if ($productCode -match '^\{[0-9A-Fa-f-]+\}$') {
-  $productCode
-} else {
-  $msi.FullName
-}
-$uninstallArguments = "/x `"$uninstallTarget`" /qn /norestart /L*v `"$uninstallLog`""
+$uninstallArguments = "/x `"$productCode`" /qn /norestart /L*v `"$uninstallLog`""
+Write-Host 'Removing MSI silently...'
 $uninstall = Start-Process 'msiexec.exe' -ArgumentList $uninstallArguments -Wait -PassThru
 if ($uninstall.ExitCode -notin @(0, 1605, 3010)) {
   throw "MSI removal failed with exit code $($uninstall.ExitCode)."
@@ -158,16 +166,33 @@ if ($uninstall.ExitCode -notin @(0, 1605, 3010)) {
 Wait-ForNoMiniCastProcess
 $removalDeadline = [DateTime]::UtcNow.AddSeconds(15)
 do {
-  $entryRemains = [bool](Get-MiniCastUninstallEntry)
-  $executableRemains = Test-Path $installedExecutable
-  if (-not $entryRemains -and -not $executableRemains) { break }
+  $entryRemains = [bool](Get-MiniCastUninstallEntryByProductCode $productCode)
+  $folderRemains = Test-Path $applicationFolder
+  if (-not $entryRemains -and -not $folderRemains) { break }
   Start-Sleep -Milliseconds 250
 } while ([DateTime]::UtcNow -lt $removalDeadline)
-if (Get-MiniCastUninstallEntry) {
-  throw 'MiniCast uninstall registry entry remains after removal.'
+if (Get-MiniCastUninstallEntryByProductCode $productCode) {
+  throw "MiniCast uninstall registry entry remains after removal: $productCode"
 }
-if (Test-Path $installedExecutable) {
-  throw "Installed executable remains after MSI removal: $installedExecutable"
+if (Test-Path $applicationFolder) {
+  throw "MiniCast installation folder remains after MSI removal: $applicationFolder"
+}
+
+$shortcutRoots = @(
+  [Environment]::GetFolderPath('Desktop'),
+  [Environment]::GetFolderPath('CommonDesktopDirectory'),
+  [Environment]::GetFolderPath('StartMenu'),
+  [Environment]::GetFolderPath('CommonStartMenu')
+) | Where-Object { $_ -and (Test-Path $_) }
+$remainingShortcuts = @(
+  $shortcutRoots |
+    ForEach-Object {
+      Get-ChildItem -LiteralPath $_ -Recurse -Filter 'MiniCast*.lnk' -ErrorAction SilentlyContinue
+    }
+)
+if ($remainingShortcuts.Count -gt 0) {
+  $shortcutList = $remainingShortcuts.FullName -join "`n"
+  throw "MiniCast shortcuts remain after MSI removal:`n$shortcutList"
 }
 
 Write-Host 'All Windows package, input-routing, install, and removal checks passed.'

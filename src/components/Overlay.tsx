@@ -178,7 +178,14 @@ export default function Overlay() {
   const activeToolCursor = toolCursor(annotationState.tool, settings);
 
   return (
-    <div className="pointer-events-none fixed inset-0" style={{ zIndex: 9999 }}>
+    <div
+      className="pointer-events-none fixed inset-0"
+      style={{ zIndex: 9999 }}
+      data-mini-cast-overlay=""
+      data-display-id={displayId ?? ""}
+      data-annotation-revision={annotationDocument?.revision ?? -1}
+      data-annotation-strokes={annotationDocument?.strokes.length ?? 0}
+    >
       <AnnotationSurface
         tool={annotationState.tool}
         settings={settings}

@@ -197,10 +197,21 @@ export async function createOverlayWindows(
   displays: readonly OverlayDisplayMeta[] = getOrderedOverlayDisplays(),
   callbacks: OverlayWindowCallbacks = {},
 ) {
-  const previousWindows = overlayWindows;
-  overlayWindows = [];
-  overlayDisplays = [];
-  destroyOverlayWindows(previousWindows);
+  const previousEntries = overlayWindows
+    .map((window, index) => ({ window, display: overlayDisplays[index] }))
+    .filter(
+      (entry): entry is { window: BrowserWindow; display: OverlayDisplayMeta } =>
+        Boolean(entry.display),
+    );
+
+  previousEntries.forEach(({ window }) => {
+    if (window.isDestroyed()) return;
+    try {
+      window.setIgnoreMouseEvents(true, { forward: true });
+    } catch {
+      // The previous generation may already be tearing down.
+    }
+  });
 
   const nextDisplays = displays.map((display) => ({
     id: display.id,
@@ -276,10 +287,17 @@ export async function createOverlayWindows(
     );
   } catch (error) {
     destroyOverlayWindows(nextWindows);
-    overlayWindows = [];
-    overlayDisplays = [];
+
+    const survivingPrevious = previousEntries.filter(
+      ({ window }) => !window.isDestroyed(),
+    );
+    overlayWindows = survivingPrevious.map(({ window }) => window);
+    overlayDisplays = survivingPrevious.map(({ display }) => display);
+    overlayWindows.forEach(applyOverlayInput);
+    restoreWindowOrder();
     throw error;
   }
 
+  destroyOverlayWindows(previousEntries.map(({ window }) => window));
   restoreWindowOrder();
 }

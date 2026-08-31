@@ -463,11 +463,13 @@ function scheduleDisplayRefresh(delayMs = 150) {
 }
 
 function registerDisplayEvents(store: SettingsStore) {
-  displayRefreshExecutor = new CoalescingSerialExecutor(() => rebuildDisplays(store));
+  const executor = new CoalescingSerialExecutor(() => rebuildDisplays(store));
+  displayRefreshExecutor = executor;
   const refresh = () => scheduleDisplayRefresh();
   screen.on("display-added", refresh);
   screen.on("display-removed", refresh);
   screen.on("display-metrics-changed", refresh);
+  return executor;
 }
 
 interface SmokeState {
@@ -597,6 +599,45 @@ async function performInteractionSmoke() {
       throw new Error("interactive overlay leaked the pointer to the underlay");
     }
 
+    const persisted = annotationHistory.getSnapshot(primary.id);
+    if (!displayRefreshExecutor) {
+      throw new Error("display refresh executor was not initialized");
+    }
+    await Promise.all([
+      displayRefreshExecutor.request(),
+      displayRefreshExecutor.request(),
+    ]);
+    await inspectAllRenderers();
+    await waitForOverlayInput(primary.id, true);
+
+    const rebuiltIndex = overlayDisplays.findIndex(
+      (display) => display.id === primary.id,
+    );
+    const rebuiltOverlay = overlayWindows[rebuiltIndex];
+    if (!rebuiltOverlay) throw new Error("rebuilt primary overlay was not found");
+    await waitFor(
+      async () => {
+        const state = (await rebuiltOverlay.webContents.executeJavaScript(
+          `(() => {
+            const root = document.querySelector("[data-mini-cast-overlay]");
+            return root
+              ? {
+                  revision: Number(root.getAttribute("data-annotation-revision")),
+                  strokes: Number(root.getAttribute("data-annotation-strokes"))
+                }
+              : null;
+          })()`,
+          true,
+        )) as { revision: number; strokes: number } | null;
+        return (
+          state?.revision === persisted.revision &&
+          state.strokes === persisted.strokes.length
+        );
+      },
+      5_000,
+      "annotation restoration after overlay rebuild",
+    );
+
     setAnnotationTool("pass-through");
     await waitForOverlayInput(primary.id, false);
     await injectWindowsClick(end.x, end.y);
@@ -638,7 +679,6 @@ async function initializeApp() {
   });
   const initialDisplays = getOrderedOverlayDisplays();
   currentSettings = readInitialSettings(store, initialDisplays);
-  syncDisplayState(store, initialDisplays);
   registerIpc(store);
   registerOverlayLifecycle();
   if (!smokeOptions.mode) createSplash();
@@ -647,8 +687,8 @@ async function initializeApp() {
   mainWindow?.webContents.on("did-start-loading", () => {
     controllerSettingsRead = false;
   });
-  registerDisplayEvents(store);
-  await createOverlayWindows(rendererUrl, initialDisplays, overlayCallbacks());
+  const displayExecutor = registerDisplayEvents(store);
+  await displayExecutor.request();
   startInputCapture();
 
   if (smokeOptions.mode) {
