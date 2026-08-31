@@ -18,6 +18,7 @@ export let overlayDisplays: OverlayDisplayMeta[] = [];
 
 let quitting = false;
 let overlayInteractive = false;
+let beforeMainWindowHide: (() => void) | undefined;
 
 export function prepareWindowsForQuit() {
   quitting = true;
@@ -70,6 +71,13 @@ export function showMainWindow() {
   restoreWindowOrder();
 }
 
+export function hideMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  beforeMainWindowHide?.();
+  mainWindow.hide();
+  app.dock?.hide();
+}
+
 export function quitApplication() {
   prepareWindowsForQuit();
   app.quit();
@@ -91,7 +99,11 @@ function loadRenderer(
     : window.loadFile(rendererFile, { hash: route });
 }
 
-export async function createWindow(rendererUrl: string | null) {
+export async function createWindow(
+  rendererUrl: string | null,
+  onBeforeHide?: () => void,
+) {
+  beforeMainWindowHide = onBeforeHide;
   mainWindow = new BrowserWindow({
     show: false,
     width: 416,
@@ -117,12 +129,12 @@ export async function createWindow(rendererUrl: string | null) {
   mainWindow.on("close", (event) => {
     if (quitting) return;
     event.preventDefault();
-    mainWindow?.hide();
-    app.dock?.hide();
+    hideMainWindow();
   });
   mainWindow.on("query-session-end", prepareWindowsForQuit);
   mainWindow.on("closed", () => {
     mainWindow = null;
+    beforeMainWindowHide = undefined;
   });
 
   await loadRenderer(mainWindow, rendererUrl, "/");

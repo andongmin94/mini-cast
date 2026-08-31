@@ -22,8 +22,12 @@ contextBridge.exposeInMainWorld("miniCast", {
     ipcRenderer.send("set-annotation-tool", tool),
   sendAnnotationCommand: (command: unknown) =>
     ipcRenderer.send("annotation-command", command),
-  notifyAnnotationInteraction: () =>
-    ipcRenderer.send("annotation-interaction"),
+  commitAnnotationStroke: (stroke: unknown) =>
+    ipcRenderer.send("annotation-add-stroke", stroke),
+  removeAnnotationStrokes: (ids: unknown) =>
+    ipcRenderer.send("annotation-remove-strokes", ids),
+  setAnnotationGestureActive: (active: unknown) =>
+    ipcRenderer.send("annotation-gesture-state", active),
   onDisplaysUpdated: (listener: Listener) => on("displays-updated", listener),
   onSettingsUpdated: (listener: Listener) => on("settings-updated", listener),
   onMouseMove: (listener: Listener) => on("mouse-move", listener),
@@ -32,6 +36,8 @@ contextBridge.exposeInMainWorld("miniCast", {
   onOverlayInit: (listener: Listener) => on("overlay-init", listener),
   onAnnotationStateUpdated: (listener: Listener) =>
     on("annotation-state-updated", listener),
-  onAnnotationCommand: (listener: Listener) =>
-    on("annotation-command", listener),
+  onAnnotationDocumentUpdated: (listener: Listener) =>
+    on("annotation-document-updated", listener),
+  onAnnotationGestureCancel: (listener: Listener) =>
+    on("annotation-gesture-cancel", listener),
 });

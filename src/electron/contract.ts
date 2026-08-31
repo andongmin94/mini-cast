@@ -80,6 +80,7 @@ export interface MouseButtonEvent {
 
 export interface OverlayInit {
   id: number;
+  displayId: number;
   width: number;
   height: number;
 }

@@ -3,26 +3,30 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
-  useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { distanceSquared, pointHitsStroke } from "@/annotation/geometry";
 import {
-  AnnotationHistory,
-  type AnnotationPoint,
-  type AnnotationStroke,
-  type StrokeTool,
-} from "@/annotation/history";
+  eraserSweepHitsStroke,
+  pointHitsStroke,
+} from "@/annotation/geometry";
 import type {
-  AnnotationCommand,
-  AnnotationTool,
-  OverlaySettings,
-} from "@/electron/contract";
+  AnnotationDocumentSnapshot,
+  AnnotationPoint,
+  AnnotationStroke,
+  StrokeTool,
+} from "@/annotation/history";
+import type { AnnotationTool, OverlaySettings } from "@/electron/contract";
 
 interface AnnotationSurfaceProps {
   tool: AnnotationTool;
   settings: OverlaySettings;
+  displayId: number | null;
+  document: AnnotationDocumentSnapshot | null;
+}
+
+interface ActiveStroke extends Omit<AnnotationStroke, "points"> {
+  points: AnnotationPoint[];
 }
 
 const MIN_POINT_DISTANCE_SQUARED = 0.75 * 0.75;
@@ -36,6 +40,40 @@ function pointerPoints(event: ReactPointerEvent<HTMLCanvasElement>) {
   }));
 }
 
+function clearCanvas(canvas: HTMLCanvasElement | null) {
+  if (!canvas) return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  context.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+}
+
+function resizeCanvas(canvas: HTMLCanvasElement) {
+  const ratio = Math.max(window.devicePixelRatio || 1, 1);
+  const width = Math.max(canvas.clientWidth, 1);
+  const height = Math.max(canvas.clientHeight, 1);
+  const pixelWidth = Math.round(width * ratio);
+  const pixelHeight = Math.round(height * ratio);
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+  }
+
+  const context = canvas.getContext("2d");
+  context?.setTransform(ratio, 0, 0, ratio, 0, 0);
+}
+
+function configureStroke(
+  context: CanvasRenderingContext2D,
+  stroke: AnnotationStroke,
+) {
+  context.globalAlpha = stroke.opacity;
+  context.strokeStyle = stroke.color;
+  context.fillStyle = stroke.color;
+  context.lineWidth = stroke.width;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+}
+
 function drawStroke(
   context: CanvasRenderingContext2D,
   stroke: AnnotationStroke,
@@ -43,13 +81,7 @@ function drawStroke(
   if (!stroke.points.length) return;
 
   context.save();
-  context.globalAlpha = stroke.opacity;
-  context.strokeStyle = stroke.color;
-  context.fillStyle = stroke.color;
-  context.lineWidth = stroke.width;
-  context.lineCap = "round";
-  context.lineJoin = "round";
-
+  configureStroke(context, stroke);
   if (stroke.points.length === 1) {
     const point = stroke.points[0];
     context.beginPath();
@@ -74,6 +106,38 @@ function drawStroke(
   context.restore();
 }
 
+function drawActiveSegments(
+  canvas: HTMLCanvasElement | null,
+  stroke: ActiveStroke,
+  previousLength: number,
+) {
+  if (!canvas || !stroke.points.length) return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  context.save();
+  configureStroke(context, stroke);
+  if (previousLength === 0) {
+    const point = stroke.points[0];
+    context.beginPath();
+    context.arc(point.x, point.y, stroke.width / 2, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  const startIndex = Math.max(1, previousLength);
+  if (startIndex < stroke.points.length) {
+    context.beginPath();
+    const start = stroke.points[startIndex - 1];
+    context.moveTo(start.x, start.y);
+    for (let index = startIndex; index < stroke.points.length; index += 1) {
+      const point = stroke.points[index];
+      context.lineTo(point.x, point.y);
+    }
+    context.stroke();
+  }
+  context.restore();
+}
+
 function strokeStyle(tool: StrokeTool, settings: OverlaySettings) {
   return tool === "highlighter"
     ? {
@@ -91,52 +155,107 @@ function strokeStyle(tool: StrokeTool, settings: OverlaySettings) {
 export default function AnnotationSurface({
   tool,
   settings,
+  displayId,
+  document,
 }: AnnotationSurfaceProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const historyRef = useRef(new AnnotationHistory());
+  const committedCanvasRef = useRef<HTMLCanvasElement>(null);
+  const gestureCanvasRef = useRef<HTMLCanvasElement>(null);
+  const documentRef = useRef<AnnotationDocumentSnapshot | null>(document);
+  const pendingStrokesRef = useRef<Map<string, AnnotationStroke>>(new Map());
+  const pendingRemovalIdsRef = useRef<Set<string>>(new Set());
   const activePointerRef = useRef<number | null>(null);
-  const activeStrokeRef = useRef<AnnotationStroke | null>(null);
+  const activeStrokeRef = useRef<ActiveStroke | null>(null);
   const eraserBaseRef = useRef<readonly AnnotationStroke[] | null>(null);
-  const erasedIdsRef = useRef<Set<string>>(new Set());
+  const activeErasedIdsRef = useRef<Set<string>>(new Set());
+  const lastEraserPointRef = useRef<AnnotationPoint | null>(null);
   const eraserRadiusRef = useRef(settings.annotationEraserWidth / 2);
-  const [revision, setRevision] = useState(0);
 
-  const interactive = tool !== "pass-through";
+  const interactive = tool !== "pass-through" && displayId !== null;
 
-  const invalidate = useCallback(() => {
-    setRevision((current) => current + 1);
+  const visibleStrokes = useCallback(() => {
+    const committed = documentRef.current?.strokes ?? [];
+    const committedIds = new Set(committed.map((stroke) => stroke.id));
+    const pending = [...pendingStrokesRef.current.values()].filter(
+      (stroke) => !committedIds.has(stroke.id),
+    );
+    const hidden = new Set([
+      ...pendingRemovalIdsRef.current,
+      ...activeErasedIdsRef.current,
+    ]);
+    return [...committed, ...pending].filter(
+      (stroke) => !hidden.has(stroke.id),
+    );
   }, []);
 
+  const renderCommitted = useCallback(() => {
+    const canvas = committedCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    context.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    visibleStrokes().forEach((stroke) => drawStroke(context, stroke));
+  }, [visibleStrokes]);
+
+  const clearGesture = useCallback(() => {
+    clearCanvas(gestureCanvasRef.current);
+  }, []);
+
+  const finishGestureState = useCallback(() => {
+    const wasActive = activePointerRef.current !== null;
+    activePointerRef.current = null;
+    activeStrokeRef.current = null;
+    eraserBaseRef.current = null;
+    activeErasedIdsRef.current = new Set();
+    lastEraserPointRef.current = null;
+    clearGesture();
+    if (wasActive && typeof miniCast !== "undefined") {
+      miniCast.setAnnotationGestureActive(false);
+    }
+  }, [clearGesture]);
+
   const cancelGesture = useCallback(() => {
-    activePointerRef.current = null;
-    activeStrokeRef.current = null;
-    eraserBaseRef.current = null;
-    erasedIdsRef.current = new Set();
-    invalidate();
-  }, [invalidate]);
+    finishGestureState();
+    renderCommitted();
+  }, [finishGestureState, renderCommitted]);
 
-  function commitGesture() {
-    const stroke = activeStrokeRef.current;
-    const erasedIds = [...erasedIdsRef.current];
+  useLayoutEffect(() => {
+    const committed = committedCanvasRef.current;
+    const gesture = gestureCanvasRef.current;
+    if (!committed || !gesture) return;
 
-    activePointerRef.current = null;
-    activeStrokeRef.current = null;
-    eraserBaseRef.current = null;
-    erasedIdsRef.current = new Set();
+    const resize = () => {
+      resizeCanvas(committed);
+      resizeCanvas(gesture);
+      clearGesture();
+      renderCommitted();
+    };
+    resize();
 
-    if (stroke) historyRef.current.addStroke(stroke);
-    if (erasedIds.length) historyRef.current.removeStrokes(erasedIds);
-    invalidate();
-  }
+    const observer = new ResizeObserver(resize);
+    observer.observe(committed);
+    return () => observer.disconnect();
+  }, [clearGesture, renderCommitted]);
 
-  const applyCommand = useCallback((command: AnnotationCommand) => {
+  useEffect(() => {
+    documentRef.current = document;
+    if (document) {
+      const committedIds = new Set(document.strokes.map((stroke) => stroke.id));
+      pendingStrokesRef.current.forEach((_stroke, id) => {
+        if (committedIds.has(id)) pendingStrokesRef.current.delete(id);
+      });
+      pendingRemovalIdsRef.current.forEach((id) => {
+        if (!committedIds.has(id)) pendingRemovalIdsRef.current.delete(id);
+      });
+    }
+    renderCommitted();
+  }, [document, renderCommitted]);
+
+  useEffect(() => {
+    pendingStrokesRef.current.clear();
+    pendingRemovalIdsRef.current.clear();
     cancelGesture();
-
-    if (command === "undo") historyRef.current.undo();
-    if (command === "redo") historyRef.current.redo();
-    if (command === "clear") historyRef.current.clear();
-    invalidate();
-  }, [cancelGesture, invalidate]);
+  }, [cancelGesture, displayId]);
 
   useEffect(() => {
     cancelGesture();
@@ -144,59 +263,25 @@ export default function AnnotationSurface({
 
   useEffect(() => {
     if (typeof miniCast === "undefined") return;
-    return miniCast.onAnnotationCommand(applyCommand);
-  }, [applyCommand]);
-
-  useEffect(() => {
-    const resize = () => invalidate();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, [invalidate]);
-
-  useLayoutEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    const width = Math.max(canvas.clientWidth, 1);
-    const height = Math.max(canvas.clientHeight, 1);
-    const pixelWidth = Math.round(width * ratio);
-    const pixelHeight = Math.round(height * ratio);
-    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
-      canvas.width = pixelWidth;
-      canvas.height = pixelHeight;
-    }
-
-    const context = canvas.getContext("2d");
-    if (!context) return;
-
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context.clearRect(0, 0, width, height);
-
-    const erasedIds = erasedIdsRef.current;
-    const base = eraserBaseRef.current ?? historyRef.current.getSnapshot();
-    base.forEach((stroke) => {
-      if (!erasedIds.has(stroke.id)) drawStroke(context, stroke);
-    });
-
-    if (activeStrokeRef.current) {
-      drawStroke(context, activeStrokeRef.current);
-    }
-  }, [revision, settings]);
+    return miniCast.onAnnotationGestureCancel(cancelGesture);
+  }, [cancelGesture]);
 
   function appendStrokePoints(points: readonly AnnotationPoint[]) {
     const active = activeStrokeRef.current;
     if (!active) return;
 
-    const nextPoints = [...active.points];
+    const previousLength = active.points.length;
     points.forEach((point) => {
-      const last = nextPoints[nextPoints.length - 1];
-      if (!last || distanceSquared(last, point) >= MIN_POINT_DISTANCE_SQUARED) {
-        nextPoints.push(point);
+      const last = active.points[active.points.length - 1];
+      const dx = (last?.x ?? point.x) - point.x;
+      const dy = (last?.y ?? point.y) - point.y;
+      if (!last || dx * dx + dy * dy >= MIN_POINT_DISTANCE_SQUARED) {
+        active.points.push(point);
       }
     });
-    activeStrokeRef.current = { ...active, points: nextPoints };
-    invalidate();
+    if (active.points.length !== previousLength) {
+      drawActiveSegments(gestureCanvasRef.current, active, previousLength);
+    }
   }
 
   function previewErase(points: readonly AnnotationPoint[]) {
@@ -205,17 +290,46 @@ export default function AnnotationSurface({
 
     let changed = false;
     points.forEach((point) => {
+      const previous = lastEraserPointRef.current;
       base.forEach((stroke) => {
-        if (
-          !erasedIdsRef.current.has(stroke.id) &&
-          pointHitsStroke(point, stroke, eraserRadiusRef.current)
-        ) {
-          erasedIdsRef.current.add(stroke.id);
+        if (activeErasedIdsRef.current.has(stroke.id)) return;
+        const hit = previous
+          ? eraserSweepHitsStroke(
+              previous,
+              point,
+              stroke,
+              eraserRadiusRef.current,
+            )
+          : pointHitsStroke(point, stroke, eraserRadiusRef.current);
+        if (hit) {
+          activeErasedIdsRef.current.add(stroke.id);
           changed = true;
         }
       });
+      lastEraserPointRef.current = point;
     });
-    if (changed) invalidate();
+    if (changed) renderCommitted();
+  }
+
+  function commitGesture() {
+    const stroke = activeStrokeRef.current;
+    const erasedIds = [...activeErasedIdsRef.current];
+
+    if (stroke && typeof miniCast !== "undefined") {
+      const committed: AnnotationStroke = {
+        ...stroke,
+        points: [...stroke.points],
+      };
+      pendingStrokesRef.current.set(committed.id, committed);
+      miniCast.commitAnnotationStroke(committed);
+    }
+    if (erasedIds.length && typeof miniCast !== "undefined") {
+      erasedIds.forEach((id) => pendingRemovalIdsRef.current.add(id));
+      miniCast.removeAnnotationStrokes(erasedIds);
+    }
+
+    finishGestureState();
+    renderCommitted();
   }
 
   function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -225,12 +339,15 @@ export default function AnnotationSurface({
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     activePointerRef.current = event.pointerId;
-    miniCast.notifyAnnotationInteraction();
+    if (typeof miniCast !== "undefined") {
+      miniCast.setAnnotationGestureActive(true);
+    }
 
     const point = { x: event.clientX, y: event.clientY };
     if (tool === "eraser") {
-      eraserBaseRef.current = historyRef.current.getSnapshot();
-      erasedIdsRef.current = new Set();
+      eraserBaseRef.current = visibleStrokes();
+      activeErasedIdsRef.current = new Set();
+      lastEraserPointRef.current = null;
       eraserRadiusRef.current = settings.annotationEraserWidth / 2;
       previewErase([point]);
       return;
@@ -238,24 +355,27 @@ export default function AnnotationSurface({
 
     const activeTool: StrokeTool =
       tool === "highlighter" ? "highlighter" : "pen";
-    const style = strokeStyle(activeTool, settings);
     activeStrokeRef.current = {
       id: crypto.randomUUID(),
       tool: activeTool,
       points: [point],
-      ...style,
+      ...strokeStyle(activeTool, settings),
     };
-    invalidate();
+    clearGesture();
+    drawActiveSegments(gestureCanvasRef.current, activeStrokeRef.current, 0);
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
     if (activePointerRef.current !== event.pointerId) return;
 
     const points = pointerPoints(event);
-    if (eraserBaseRef.current) {
-      previewErase(points);
-    } else {
-      appendStrokePoints(points);
+    if (eraserBaseRef.current) previewErase(points);
+    else appendStrokePoints(points);
+  }
+
+  function releasePointer(event: ReactPointerEvent<HTMLCanvasElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }
 
@@ -264,36 +384,40 @@ export default function AnnotationSurface({
 
     handlePointerMove(event);
     commitGesture();
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
+    releasePointer(event);
   }
 
   function handlePointerCancel(event: ReactPointerEvent<HTMLCanvasElement>) {
     if (activePointerRef.current !== event.pointerId) return;
 
     cancelGesture();
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
+    releasePointer(event);
   }
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 size-full"
-      style={{
-        zIndex: 1,
-        pointerEvents: interactive ? "auto" : "none",
-        touchAction: "none",
-        cursor: interactive ? "none" : "default",
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
-      onLostPointerCapture={cancelGesture}
-      aria-hidden="true"
-    />
+    <>
+      <canvas
+        ref={committedCanvasRef}
+        className="pointer-events-none fixed inset-0 size-full"
+        style={{ zIndex: 1 }}
+        aria-hidden="true"
+      />
+      <canvas
+        ref={gestureCanvasRef}
+        className="fixed inset-0 size-full"
+        style={{
+          zIndex: 2,
+          pointerEvents: interactive ? "auto" : "none",
+          touchAction: "none",
+          cursor: interactive ? "none" : "default",
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handlePointerCancel}
+        aria-hidden="true"
+      />
+    </>
   );
 }

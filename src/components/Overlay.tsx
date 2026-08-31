@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import type { AnnotationDocumentSnapshot } from "@/annotation/history";
 import AnnotationSurface from "@/components/AnnotationSurface";
 import type {
   AnnotationState,
@@ -80,6 +81,8 @@ export default function Overlay() {
   const [annotationState, setAnnotationState] = useState<AnnotationState>({
     tool: "pass-through",
   });
+  const [annotationDocument, setAnnotationDocument] =
+    useState<AnnotationDocumentSnapshot | null>(null);
   const [mousePosition, setMousePosition] = useState<MousePosition | null>(null);
   const [mouseButtons, setMouseButtons] = useState<MouseButtons>({
     left: false,
@@ -87,9 +90,11 @@ export default function Overlay() {
     right: false,
   });
   const [keyPresses, setKeyPresses] = useState<KeyPress[]>([]);
-  const [displayId, setDisplayId] = useState(0);
+  const [displayIndex, setDisplayIndex] = useState(0);
+  const [displayId, setDisplayId] = useState<number | null>(null);
 
   const settingsRef = useRef(settings);
+  const displayIdRef = useRef<number | null>(null);
   const sourceSize = useRef({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -131,14 +136,23 @@ export default function Overlay() {
       setMouseButtons((current) => ({ ...current, [button]: pressed }));
     };
 
-    const onOverlayInit = ({ id, width, height }: OverlayInit) => {
-      setDisplayId(id);
+    const onOverlayInit = ({ id, displayId: physicalId, width, height }: OverlayInit) => {
+      displayIdRef.current = physicalId;
+      setDisplayIndex(id);
+      setDisplayId(physicalId);
       sourceSize.current = { width, height };
+    };
+
+    const onDocumentUpdated = (document: AnnotationDocumentSnapshot) => {
+      if (document.displayId === displayIdRef.current) {
+        setAnnotationDocument(document);
+      }
     };
 
     const unsubscribe = [
       miniCast.onSettingsUpdated(setSettings),
       miniCast.onAnnotationStateUpdated(setAnnotationState),
+      miniCast.onAnnotationDocumentUpdated(onDocumentUpdated),
       miniCast.onMouseMove((position) =>
         setMousePosition(position ? scalePosition(position) : null),
       ),
@@ -159,13 +173,18 @@ export default function Overlay() {
 
   return (
     <div className="pointer-events-none fixed inset-0" style={{ zIndex: 9999 }}>
-      <AnnotationSurface tool={annotationState.tool} settings={settings} />
+      <AnnotationSurface
+        tool={annotationState.tool}
+        settings={settings}
+        displayId={displayId}
+        document={annotationDocument}
+      />
 
       {mousePosition && passive && settings.showCursorHighlight && (
         <div
           className="absolute rounded-full"
           style={{
-            zIndex: 2,
+            zIndex: 3,
             width: settings.cursorSize,
             height: settings.cursorSize,
             backgroundColor: settings.cursorFillColor,
@@ -182,7 +201,7 @@ export default function Overlay() {
         <div
           className="absolute rounded-full"
           style={{
-            zIndex: 2,
+            zIndex: 3,
             width: activeToolCursor.size,
             height: activeToolCursor.size,
             border: activeToolCursor.border,
@@ -193,29 +212,30 @@ export default function Overlay() {
         />
       )}
 
-      {settings.showKeyDisplay && displayId === settings.keyDisplayMonitor && (
-        <div
-          className={`fixed flex flex-col ${POSITION_CLASSES[settings.keyDisplayPosition]}`}
-          style={{ zIndex: 3 }}
-        >
-          {keyPresses.map((keyPress, index) => (
-            <div
-              key={`${keyPress.timestamp}-${index}`}
-              className="mb-2 rounded px-3 py-1"
-              style={{
-                backgroundColor: settings.keyDisplayBackgroundColor,
-                color: settings.keyDisplayTextColor,
-                fontSize: settings.keyDisplayFontSize,
-                textAlign: settings.keyDisplayPosition.includes("left")
-                  ? "left"
-                  : "right",
-              }}
-            >
-              {formatKeyPress(keyPress)}
-            </div>
-          ))}
-        </div>
-      )}
+      {settings.showKeyDisplay &&
+        displayIndex === settings.keyDisplayMonitor && (
+          <div
+            className={`fixed flex flex-col ${POSITION_CLASSES[settings.keyDisplayPosition]}`}
+            style={{ zIndex: 4 }}
+          >
+            {keyPresses.map((keyPress, index) => (
+              <div
+                key={`${keyPress.timestamp}-${index}`}
+                className="mb-2 rounded px-3 py-1"
+                style={{
+                  backgroundColor: settings.keyDisplayBackgroundColor,
+                  color: settings.keyDisplayTextColor,
+                  fontSize: settings.keyDisplayFontSize,
+                  textAlign: settings.keyDisplayPosition.includes("left")
+                    ? "left"
+                    : "right",
+                }}
+              >
+                {formatKeyPress(keyPress)}
+              </div>
+            ))}
+          </div>
+        )}
     </div>
   );
 }

@@ -11,6 +11,11 @@ import {
 import Store from "electron-store";
 
 import {
+  AnnotationHistory,
+  isAnnotationStroke,
+  readAnnotationStrokeIds,
+} from "../annotation/history.js";
+import {
   DEFAULT_OVERLAY_SETTINGS,
   isAnnotationCommand,
   isAnnotationTool,
@@ -22,6 +27,7 @@ import {
 import { getConnectedDisplays } from "./display.js";
 import {
   setAnnotationInputMode,
+  setEmergencyPassThroughHandler,
   startInputCapture,
   stopInputCapture,
 } from "./input.js";
@@ -34,6 +40,7 @@ import { createTray, destroyTray } from "./tray.js";
 import {
   createOverlayWindows,
   createWindow,
+  hideMainWindow,
   mainWindow,
   overlayDisplays,
   overlayWindows,
@@ -58,8 +65,12 @@ if (smokeTest) app.disableHardwareAcceleration();
 
 type SettingsStore = Store<{ settings: OverlaySettings }>;
 
+const annotationHistory = new AnnotationHistory();
+const activeAnnotationGestures = new Set<number>();
 let annotationTool: AnnotationTool = "pass-through";
-let lastAnnotationOverlayId: number | null = null;
+let lastAnnotationDisplayId: number | null = null;
+let controllerSettingsRead = false;
+let controllerAnnotationStateRead = false;
 
 function getDisplayCount() {
   return Math.max(overlayDisplays.length, screen.getAllDisplays().length, 1);
@@ -98,6 +109,26 @@ function sendAnnotationState() {
   });
 }
 
+function displayIdForSender(sender: WebContents) {
+  const index = overlayWindows.findIndex(
+    (window) =>
+      !window.isDestroyed() && window.webContents.id === sender.id,
+  );
+  return index >= 0 ? (overlayDisplays[index]?.id ?? null) : null;
+}
+
+function sendAnnotationDocument(displayId: number) {
+  const snapshot = annotationHistory.getSnapshot(displayId);
+  overlayWindows.forEach((window, index) => {
+    if (
+      !window.isDestroyed() &&
+      overlayDisplays[index]?.id === displayId
+    ) {
+      window.webContents.send("annotation-document-updated", snapshot);
+    }
+  });
+}
+
 function isMainWindow(sender: WebContents) {
   return Boolean(
     mainWindow &&
@@ -107,16 +138,29 @@ function isMainWindow(sender: WebContents) {
 }
 
 function isOverlayWindow(sender: WebContents) {
-  return overlayWindows.some(
-    (window) =>
-      !window.isDestroyed() && window.webContents.id === sender.id,
-  );
+  return displayIdForSender(sender) !== null;
 }
 
 function registerShortcut(accelerator: string, callback: () => void) {
-  if (!globalShortcut.register(accelerator, callback)) {
-    console.warn(`Global shortcut registration failed: ${accelerator}`);
-  }
+  if (globalShortcut.register(accelerator, callback)) return true;
+  console.warn(`Global shortcut registration failed: ${accelerator}`);
+  return false;
+}
+
+function cancelActiveAnnotationGestures() {
+  let canceledLiveGesture = false;
+  activeAnnotationGestures.forEach((webContentsId) => {
+    const target = overlayWindows.find(
+      (window) =>
+        !window.isDestroyed() && window.webContents.id === webContentsId,
+    );
+    if (target) {
+      canceledLiveGesture = true;
+      target.webContents.send("annotation-gesture-cancel");
+    }
+  });
+  activeAnnotationGestures.clear();
+  return canceledLiveGesture;
 }
 
 function refreshTransientAnnotationShortcuts() {
@@ -145,6 +189,7 @@ function registerAnnotationHotkeys() {
 }
 
 function setAnnotationTool(tool: AnnotationTool) {
+  if (tool !== annotationTool) cancelActiveAnnotationGestures();
   annotationTool = tool;
   const interactive = tool !== "pass-through";
   setOverlayInteractive(interactive);
@@ -153,15 +198,28 @@ function setAnnotationTool(tool: AnnotationTool) {
   sendAnnotationState();
 }
 
-function sendAnnotationCommand(command: AnnotationCommand) {
-  const liveOverlays = overlayWindows.filter((window) => !window.isDestroyed());
-  if (!liveOverlays.length) return;
+function annotationCommandDisplayId() {
+  return (
+    lastAnnotationDisplayId ??
+    screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id
+  );
+}
 
-  const target =
-    liveOverlays.find(
-      (window) => window.webContents.id === lastAnnotationOverlayId,
-    ) ?? liveOverlays[0];
-  target.webContents.send("annotation-command", command);
+function sendAnnotationCommand(command: AnnotationCommand) {
+  if (command === "undo" || command === "redo") {
+    if (cancelActiveAnnotationGestures()) return;
+
+    const displayId =
+      command === "undo"
+        ? annotationHistory.undo()
+        : annotationHistory.redo();
+    if (displayId !== null) sendAnnotationDocument(displayId);
+    return;
+  }
+
+  cancelActiveAnnotationGestures();
+  const displayId = annotationHistory.clearDisplay(annotationCommandDisplayId());
+  if (displayId !== null) sendAnnotationDocument(displayId);
 }
 
 function initializeOverlay(event: IpcMainEvent, store: SettingsStore) {
@@ -174,11 +232,16 @@ function initializeOverlay(event: IpcMainEvent, store: SettingsStore) {
 
   event.sender.send("overlay-init", {
     id: index,
+    displayId: display.id,
     width: display.bounds.width,
     height: display.bounds.height,
   });
   event.sender.send("settings-updated", readSettings(store));
   event.sender.send("annotation-state-updated", getAnnotationState());
+  event.sender.send(
+    "annotation-document-updated",
+    annotationHistory.getSnapshot(display.id),
+  );
 }
 
 function registerIpc(store: SettingsStore) {
@@ -187,7 +250,7 @@ function registerIpc(store: SettingsStore) {
   });
 
   ipcMain.on("hide-window", (event) => {
-    if (isMainWindow(event.sender)) mainWindow?.hide();
+    if (isMainWindow(event.sender)) hideMainWindow();
   });
 
   ipcMain.on("request-displays", (event) => {
@@ -197,7 +260,13 @@ function registerIpc(store: SettingsStore) {
   });
 
   ipcMain.on("save-settings", (event, settings: unknown) => {
-    if (!isMainWindow(event.sender)) return;
+    if (
+      !isMainWindow(event.sender) ||
+      !controllerSettingsRead ||
+      !controllerAnnotationStateRead
+    ) {
+      return;
+    }
 
     const normalized = normalizeOverlaySettings(settings, getDisplayCount());
     store.set("settings", normalized);
@@ -216,9 +285,34 @@ function registerIpc(store: SettingsStore) {
     }
   });
 
-  ipcMain.on("annotation-interaction", (event) => {
-    if (isOverlayWindow(event.sender)) {
-      lastAnnotationOverlayId = event.sender.id;
+  ipcMain.on("annotation-add-stroke", (event, stroke: unknown) => {
+    const displayId = displayIdForSender(event.sender);
+    if (displayId === null || !isAnnotationStroke(stroke)) return;
+
+    lastAnnotationDisplayId = displayId;
+    annotationHistory.addStroke(displayId, stroke);
+    sendAnnotationDocument(displayId);
+  });
+
+  ipcMain.on("annotation-remove-strokes", (event, value: unknown) => {
+    const displayId = displayIdForSender(event.sender);
+    const ids = readAnnotationStrokeIds(value);
+    if (displayId === null || ids === null) return;
+
+    lastAnnotationDisplayId = displayId;
+    if (annotationHistory.removeStrokes(displayId, ids) !== null) {
+      sendAnnotationDocument(displayId);
+    }
+  });
+
+  ipcMain.on("annotation-gesture-state", (event, active: unknown) => {
+    if (!isOverlayWindow(event.sender) || typeof active !== "boolean") return;
+
+    if (active) {
+      activeAnnotationGestures.add(event.sender.id);
+      lastAnnotationDisplayId = displayIdForSender(event.sender);
+    } else {
+      activeAnnotationGestures.delete(event.sender.id);
     }
   });
 
@@ -228,14 +322,18 @@ function registerIpc(store: SettingsStore) {
     if (!isMainWindow(event.sender)) {
       throw new Error("Invalid settings request");
     }
-    return readSettings(store);
+    const settings = readSettings(store);
+    controllerSettingsRead = true;
+    return settings;
   });
 
   ipcMain.handle("get-annotation-state", (event) => {
     if (!isMainWindow(event.sender)) {
       throw new Error("Invalid annotation state request");
     }
-    return getAnnotationState();
+    const state = getAnnotationState();
+    controllerAnnotationStateRead = true;
+    return state;
   });
 }
 
@@ -245,9 +343,9 @@ function registerDisplayEvents(store: SettingsStore) {
   const refresh = () => {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
+      cancelActiveAnnotationGestures();
       void createOverlayWindows(rendererUrl)
         .then(() => {
-          lastAnnotationOverlayId = null;
           const settings = readSettings(store);
           sendSettingsToOverlays(settings);
           sendAnnotationState();
@@ -345,9 +443,14 @@ async function initializeApp() {
   readSettings(store);
   registerIpc(store);
   registerOverlayLifecycle();
+  setEmergencyPassThroughHandler(() => setAnnotationTool("pass-through"));
   if (!smokeTest) createSplash();
 
-  await createWindow(rendererUrl);
+  await createWindow(rendererUrl, () => setAnnotationTool("pass-through"));
+  mainWindow?.webContents.on("did-start-loading", () => {
+    controllerSettingsRead = false;
+    controllerAnnotationStateRead = false;
+  });
   await createOverlayWindows(rendererUrl);
   startInputCapture();
 

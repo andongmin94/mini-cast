@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { AnnotationHistory } from "../dist/annotation/history.js";
+import {
+  AnnotationHistory,
+  isAnnotationStroke,
+  readAnnotationStrokeIds,
+} from "../dist/annotation/history.js";
 
 function stroke(id) {
   return {
@@ -14,54 +18,70 @@ function stroke(id) {
   };
 }
 
-function ids(history) {
-  return history.getSnapshot().map((item) => item.id);
+function ids(history, displayId) {
+  return history.getSnapshot(displayId).strokes.map((item) => item.id);
 }
 
-test("add, undo, and redo preserve stroke order", () => {
+test("global undo and redo follow chronological order across displays", () => {
   const history = new AnnotationHistory();
-  history.addStroke(stroke("a"));
-  history.addStroke(stroke("b"));
+  history.addStroke(10, stroke("a"));
+  history.addStroke(20, stroke("b"));
 
-  assert.deepEqual(ids(history), ["a", "b"]);
-  assert.equal(history.undo(), true);
-  assert.deepEqual(ids(history), ["a"]);
-  assert.equal(history.redo(), true);
-  assert.deepEqual(ids(history), ["a", "b"]);
+  assert.deepEqual(ids(history, 10), ["a"]);
+  assert.deepEqual(ids(history, 20), ["b"]);
+  assert.equal(history.undo(), 20);
+  assert.deepEqual(ids(history, 20), []);
+  assert.equal(history.undo(), 10);
+  assert.deepEqual(ids(history, 10), []);
+  assert.equal(history.redo(), 10);
+  assert.deepEqual(ids(history, 10), ["a"]);
+  assert.equal(history.redo(), 20);
+  assert.deepEqual(ids(history, 20), ["b"]);
 });
 
 test("one erase gesture restores every removed stroke in place", () => {
   const history = new AnnotationHistory();
-  history.addStroke(stroke("a"));
-  history.addStroke(stroke("b"));
-  history.addStroke(stroke("c"));
+  history.addStroke(10, stroke("a"));
+  history.addStroke(10, stroke("b"));
+  history.addStroke(10, stroke("c"));
 
-  assert.equal(history.removeStrokes(["a", "c"]), true);
-  assert.deepEqual(ids(history), ["b"]);
-  assert.equal(history.undo(), true);
-  assert.deepEqual(ids(history), ["a", "b", "c"]);
-  assert.equal(history.redo(), true);
-  assert.deepEqual(ids(history), ["b"]);
+  assert.equal(history.removeStrokes(10, ["a", "c"]), 10);
+  assert.deepEqual(ids(history, 10), ["b"]);
+  assert.equal(history.undo(), 10);
+  assert.deepEqual(ids(history, 10), ["a", "b", "c"]);
+  assert.equal(history.redo(), 10);
+  assert.deepEqual(ids(history, 10), ["b"]);
 });
 
-test("clear is undoable and a new edit drops redo history", () => {
+test("clear is scoped to one display and remains undoable", () => {
   const history = new AnnotationHistory();
-  history.addStroke(stroke("a"));
-  history.addStroke(stroke("b"));
+  history.addStroke(10, stroke("a"));
+  history.addStroke(20, stroke("b"));
 
-  assert.equal(history.clear(), true);
-  assert.deepEqual(ids(history), []);
-  assert.equal(history.undo(), true);
-  assert.deepEqual(ids(history), ["a", "b"]);
+  assert.equal(history.clearDisplay(10), 10);
+  assert.deepEqual(ids(history, 10), []);
+  assert.deepEqual(ids(history, 20), ["b"]);
+  assert.equal(history.undo(), 10);
+  assert.deepEqual(ids(history, 10), ["a"]);
+});
 
-  history.addStroke(stroke("c"));
+test("new edits drop redo history and revisions advance", () => {
+  const history = new AnnotationHistory();
+  history.addStroke(10, stroke("a"));
+  const firstRevision = history.getSnapshot(10).revision;
+  assert.equal(history.undo(), 10);
+  history.addStroke(10, stroke("b"));
+
   assert.equal(history.canRedo, false);
-  assert.equal(history.redo(), false);
-  assert.deepEqual(ids(history), ["a", "b", "c"]);
+  assert.equal(history.redo(), null);
+  assert.deepEqual(ids(history, 10), ["b"]);
+  assert.ok(history.getSnapshot(10).revision > firstRevision);
 });
 
-test("duplicate stroke ids are rejected", () => {
-  const history = new AnnotationHistory();
-  history.addStroke(stroke("a"));
-  assert.throws(() => history.addStroke(stroke("a")), /Duplicate/);
+test("runtime stroke and id validation rejects malformed payloads", () => {
+  assert.equal(isAnnotationStroke(stroke("a")), true);
+  assert.equal(isAnnotationStroke({ ...stroke("a"), width: Infinity }), false);
+  assert.equal(isAnnotationStroke({ ...stroke("a"), points: [{ x: NaN, y: 0 }] }), false);
+  assert.deepEqual(readAnnotationStrokeIds(["a", "a", "b"]), ["a", "b"]);
+  assert.equal(readAnnotationStrokeIds(["", "b"]), null);
 });

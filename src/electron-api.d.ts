@@ -1,4 +1,8 @@
 import type {
+  AnnotationDocumentSnapshot,
+  AnnotationStroke,
+} from "./annotation/history";
+import type {
   AnnotationCommand,
   AnnotationState,
   AnnotationTool,
@@ -22,7 +26,9 @@ interface MiniCastBridge {
   getAnnotationState(): Promise<AnnotationState>;
   setAnnotationTool(tool: AnnotationTool): void;
   sendAnnotationCommand(command: AnnotationCommand): void;
-  notifyAnnotationInteraction(): void;
+  commitAnnotationStroke(stroke: AnnotationStroke): void;
+  removeAnnotationStrokes(ids: readonly string[]): void;
+  setAnnotationGestureActive(active: boolean): void;
   onDisplaysUpdated(listener: (displays: DisplayInfo[]) => void): Unsubscribe;
   onSettingsUpdated(listener: (settings: OverlaySettings) => void): Unsubscribe;
   onMouseMove(listener: (position: MousePosition | null) => void): Unsubscribe;
@@ -32,7 +38,10 @@ interface MiniCastBridge {
   onAnnotationStateUpdated(
     listener: (state: AnnotationState) => void,
   ): Unsubscribe;
-  onAnnotationCommand(listener: (command: AnnotationCommand) => void): Unsubscribe;
+  onAnnotationDocumentUpdated(
+    listener: (document: AnnotationDocumentSnapshot) => void,
+  ): Unsubscribe;
+  onAnnotationGestureCancel(listener: () => void): Unsubscribe;
 }
 
 declare global {

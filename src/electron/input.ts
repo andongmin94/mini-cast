@@ -36,10 +36,15 @@ const ACTIVE_ANNOTATION_SHORTCUTS = new Set([
 let cursorTimer: ReturnType<typeof setInterval> | undefined;
 let inputStarted = false;
 let annotationInputActive = false;
+let emergencyPassThroughHandler: (() => void) | undefined;
 const keyDeduplicator = new CombinationDeduplicator();
 
 export function setAnnotationInputMode(active: boolean) {
   annotationInputActive = active;
+}
+
+export function setEmergencyPassThroughHandler(handler: () => void) {
+  emergencyPassThroughHandler = handler;
 }
 
 function contains(bounds: Rectangle, point: Point) {
@@ -67,19 +72,16 @@ function sendToOverlays(channel: string, payload: unknown) {
 
 function startCursorCapture() {
   let lastPosition: Point | undefined;
-  let lastSentAt = 0;
 
   cursorTimer = setInterval(() => {
     if (!overlayWindows.length || !overlayDisplays.length) return;
 
     const position = screen.getCursorScreenPoint();
-    const now = Date.now();
     const moved =
       !lastPosition ||
       position.x !== lastPosition.x ||
       position.y !== lastPosition.y;
-
-    if (!moved && now - lastSentAt < 100) return;
+    if (!moved) return;
 
     const activeDisplay = findDisplay(position, overlayDisplays);
     overlayWindows.forEach((window, index) => {
@@ -99,7 +101,6 @@ function startCursorCapture() {
     });
 
     lastPosition = position;
-    lastSentAt = now;
   }, 8);
 }
 
@@ -116,6 +117,10 @@ function handleKeyDown(event: UiohookKeyboardEvent) {
     meta: event.metaKey,
   };
   const combination = buildCombination(key.label, modifiers);
+
+  if (combination === "Shift + Alt + 1") {
+    emergencyPassThroughHandler?.();
+  }
   if (
     TOOL_SHORTCUTS.has(combination) ||
     (annotationInputActive && ACTIVE_ANNOTATION_SHORTCUTS.has(combination))
