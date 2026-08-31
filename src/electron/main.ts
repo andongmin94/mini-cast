@@ -93,7 +93,9 @@ let pendingSettingsStore: SettingsStore | null = null;
 let displayRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let displayRefreshExecutor: CoalescingSerialExecutor | null = null;
 
-function connectedDisplayIds(displays = overlayDisplays) {
+function connectedDisplayIds(
+  displays: readonly OverlayDisplayMeta[] = overlayDisplays,
+) {
   return displays.map((display) => display.id);
 }
 
@@ -354,7 +356,7 @@ function registerIpc(store: SettingsStore) {
       try {
         annotationHistory.addStroke(displayId, stroke);
         gestureLeases.end(event.sender.id, gestureId);
-            sendAnnotationDocument(displayId);
+        sendAnnotationDocument(displayId);
         return true;
       } catch {
         gestureLeases.end(event.sender.id, gestureId);
@@ -378,7 +380,7 @@ function registerIpc(store: SettingsStore) {
       }
 
       gestureLeases.end(event.sender.id, gestureId);
-        const changedDisplayId = annotationHistory.removeStrokes(displayId, ids);
+      const changedDisplayId = annotationHistory.removeStrokes(displayId, ids);
       if (changedDisplayId !== null) sendAnnotationDocument(changedDisplayId);
       return changedDisplayId !== null;
     },
