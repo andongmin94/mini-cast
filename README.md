@@ -40,7 +40,7 @@
 
 ## 기술 구성
 
-- Electron 40
+- Electron 44
 - React 19 + Vite 7 + TypeScript
 - Tailwind CSS 4 + 필요한 Radix UI 컴포넌트
 - HTML Canvas 2D 판서 렌더링
