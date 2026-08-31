@@ -40,8 +40,8 @@ jobs:
       - name: 린트
         run: npm run lint
 
-      - name: 배포 런타임 의존성 감사
-        run: npm audit --omit=dev --audit-level=high
+      - name: 전체 의존성 보안 감사
+        run: npm audit --audit-level=high
 
       - name: MSI 및 포터블 패키징
         run: npm run build
