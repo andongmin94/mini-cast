@@ -123,3 +123,30 @@ test("runtime stroke and id validation rejects malformed payloads", () => {
   assert.deepEqual(readAnnotationStrokeIds(["a", "a", "b"]), ["a", "b"]);
   assert.equal(readAnnotationStrokeIds(["", "b"]), null);
 });
+
+test("history checkpoints restore documents, revisions, and both stacks", () => {
+  const history = new AnnotationHistory();
+  history.setDisplayViewport(10, 100, 100);
+  history.addStroke(10, stroke("a", 25, 50, 4));
+  history.addStroke(10, stroke("b", 50, 25, 8));
+  assert.equal(history.undo(), 10);
+
+  const checkpoint = history.clone();
+  const expected = history.getSnapshot(10);
+
+  history.setDisplayViewport(10, 200, 50);
+  history.addStroke(10, stroke("c", 100, 25, 6));
+  history.restoreFrom(checkpoint);
+
+  assert.deepEqual(history.getSnapshot(10), expected);
+  assert.equal(history.canRedo, true);
+  assert.equal(history.redo(), 10);
+  assert.deepEqual(ids(history, 10), ["a", "b"]);
+  assert.deepEqual(history.getSnapshot(10).strokes[1].points[0], {
+    x: 50,
+    y: 25,
+  });
+
+  checkpoint.addStroke(10, stroke("checkpoint-only", 10, 10, 2));
+  assert.deepEqual(ids(history, 10), ["a", "b"]);
+});

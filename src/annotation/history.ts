@@ -98,6 +98,19 @@ function scaleStroke(
   };
 }
 
+function cloneHistoryEntry(entry: HistoryEntry): HistoryEntry {
+  if (entry.kind === "add") {
+    return { ...entry, stroke: cloneAnnotationStroke(entry.stroke) };
+  }
+  return {
+    ...entry,
+    strokes: entry.strokes.map(({ stroke, index }) => ({
+      stroke: cloneAnnotationStroke(stroke),
+      index,
+    })),
+  };
+}
+
 function scaleHistoryEntry(
   entry: HistoryEntry,
   displayId: number,
@@ -187,6 +200,27 @@ export class AnnotationHistory {
 
   get canRedo() {
     return this.redoStack.length > 0;
+  }
+
+  clone() {
+    const copy = new AnnotationHistory();
+    copy.restoreFrom(this);
+    return copy;
+  }
+
+  restoreFrom(source: AnnotationHistory) {
+    this.documents = new Map(
+      [...source.documents].map(([displayId, document]) => [
+        displayId,
+        {
+          viewport: document.viewport ? { ...document.viewport } : null,
+          strokes: document.strokes.map(cloneAnnotationStroke),
+        },
+      ]),
+    );
+    this.revisions = new Map(source.revisions);
+    this.undoStack = source.undoStack.map(cloneHistoryEntry);
+    this.redoStack = source.redoStack.map(cloneHistoryEntry);
   }
 
   getSnapshot(displayId: number): AnnotationDocumentSnapshot {

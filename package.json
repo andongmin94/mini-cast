@@ -1,6 +1,6 @@
 {
   "name": "mini-cast",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "type": "module",
   "author": "안동민",
   "main": "dist/electron/main.js",
@@ -13,7 +13,7 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "npm run build:electron && node --test tests/*.test.mjs",
     "smoke": "vite build && npm run build:electron && electron . --smoke-test",
-    "build": "npm run typecheck && vite build && npm run build:electron && electron-builder",
+    "build": "npm run typecheck && vite build && npm run build:electron && electron-builder --publish never",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

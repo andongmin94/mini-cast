@@ -41,6 +41,7 @@ import {
 } from "./display.js";
 import {
   configureToolShortcutFallbacks,
+  refreshCursorCapture,
   setAnnotationInputMode,
   startInputCapture,
   stopInputCapture,
@@ -92,6 +93,8 @@ let settingsSaveTimer: ReturnType<typeof setTimeout> | undefined;
 let pendingSettingsStore: SettingsStore | null = null;
 let displayRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let displayRefreshExecutor: CoalescingSerialExecutor | null = null;
+let displayRebuildInProgress = false;
+let shuttingDown = false;
 
 function connectedDisplayIds(
   displays: readonly OverlayDisplayMeta[] = overlayDisplays,
@@ -251,6 +254,8 @@ function annotationCommandDisplayId() {
 }
 
 function sendAnnotationCommand(command: AnnotationCommand) {
+  if (displayRebuildInProgress) return;
+
   if (command === "undo" || command === "redo") {
     if (cancelActiveAnnotationGestures()) return;
 
@@ -291,7 +296,9 @@ function initializeOverlay(event: IpcMainEvent) {
 
 function registerIpc(store: SettingsStore) {
   ipcMain.on("minimize-window", (event) => {
-    if (isMainWindow(event.sender)) mainWindow?.minimize();
+    if (!isMainWindow(event.sender)) return;
+    setAnnotationTool("pass-through");
+    mainWindow?.minimize();
   });
 
   ipcMain.on("hide-window", (event) => {
@@ -328,6 +335,7 @@ function registerIpc(store: SettingsStore) {
     const displayId = displayIdForSender(event.sender);
     if (
       displayId === null ||
+      displayRebuildInProgress ||
       annotationTool === "pass-through" ||
       !isGestureId(gestureId)
     ) {
@@ -346,6 +354,7 @@ function registerIpc(store: SettingsStore) {
       const displayId = displayIdForSender(event.sender);
       if (
         displayId === null ||
+        displayRebuildInProgress ||
         !isGestureId(gestureId) ||
         !gestureLeases.matches(event.sender.id, gestureId) ||
         !isAnnotationStroke(stroke)
@@ -372,6 +381,7 @@ function registerIpc(store: SettingsStore) {
       const ids = readAnnotationStrokeIds(value);
       if (
         displayId === null ||
+        displayRebuildInProgress ||
         !isGestureId(gestureId) ||
         !gestureLeases.matches(event.sender.id, gestureId) ||
         ids === null
@@ -408,10 +418,7 @@ function registerIpc(store: SettingsStore) {
   });
 }
 
-function syncDisplayState(
-  store: SettingsStore,
-  displays: readonly OverlayDisplayMeta[],
-) {
+function prepareDisplayHistory(displays: readonly OverlayDisplayMeta[]) {
   displays.forEach((display) => {
     annotationHistory.setDisplayViewport(
       display.id,
@@ -419,14 +426,15 @@ function syncDisplayState(
       display.bounds.height,
     );
   });
-  const normalized = normalizeOverlaySettings(
-    currentSettings,
-    displays.map((display) => display.id),
-  );
-  if (!overlaySettingsEqual(currentSettings, normalized)) {
-    currentSettings = normalized;
-    scheduleSettingsPersist(store);
-  }
+}
+
+function commitDisplaySettings(
+  store: SettingsStore,
+  nextSettings: OverlaySettings,
+) {
+  if (overlaySettingsEqual(currentSettings, nextSettings)) return;
+  currentSettings = nextSettings;
+  scheduleSettingsPersist(store);
 }
 
 function overlayCallbacks() {
@@ -441,20 +449,58 @@ function overlayCallbacks() {
 }
 
 async function rebuildDisplays(store: SettingsStore) {
+  if (shuttingDown) return;
+
+  displayRebuildInProgress = true;
   cancelActiveAnnotationGestures();
   const displays = getOrderedOverlayDisplays();
-  syncDisplayState(store, displays);
-  await createOverlayWindows(rendererUrl, displays, overlayCallbacks());
-  ensureMainWindowVisible();
-  sendSettingsToAll();
-  sendAnnotationState();
-  sendToWindow(mainWindow, "displays-updated", getConnectedDisplays());
+  const historyCheckpoint = annotationHistory.clone();
+
+  try {
+    prepareDisplayHistory(displays);
+    await createOverlayWindows(rendererUrl, displays, overlayCallbacks());
+    if (shuttingDown) return;
+
+    const nextSettings = normalizeOverlaySettings(
+      currentSettings,
+      displays.map((display) => display.id),
+    );
+    commitDisplaySettings(store, nextSettings);
+    ensureMainWindowVisible();
+    sendSettingsToAll();
+    sendAnnotationState();
+    displays.forEach((display) => sendAnnotationDocument(display.id));
+    refreshCursorCapture();
+    sendToWindow(mainWindow, "displays-updated", getConnectedDisplays());
+  } catch (error) {
+    annotationHistory.restoreFrom(historyCheckpoint);
+    const restoredSettings = normalizeOverlaySettings(
+      currentSettings,
+      connectedDisplayIds(),
+    );
+    commitDisplaySettings(store, restoredSettings);
+    sendSettingsToAll();
+    sendAnnotationState();
+    refreshCursorCapture();
+    throw error;
+  } finally {
+    displayRebuildInProgress = false;
+  }
+}
+
+function stopDisplayRefresh() {
+  shuttingDown = true;
+  if (displayRefreshTimer) clearTimeout(displayRefreshTimer);
+  displayRefreshTimer = undefined;
+  displayRefreshExecutor = null;
 }
 
 function scheduleDisplayRefresh(delayMs = 150) {
-  if (!displayRefreshExecutor) return;
+  if (shuttingDown || !displayRefreshExecutor) return;
   if (displayRefreshTimer) clearTimeout(displayRefreshTimer);
   displayRefreshTimer = setTimeout(() => {
+    displayRefreshTimer = undefined;
+    if (shuttingDown) return;
     void displayRefreshExecutor?.request().catch((error) => {
       console.error("Failed to refresh displays:", error);
       setAnnotationTool("pass-through");
@@ -516,6 +562,49 @@ async function inspectAllRenderers() {
   );
 }
 
+async function verifyControllerAnnotationToolWiring() {
+  const controller = mainWindow;
+  if (!controller || controller.isDestroyed()) {
+    throw new Error("controller window was not created");
+  }
+
+  const clickButton = async (label: string, titlePrefix = "") => {
+    const encodedLabel = JSON.stringify(label);
+    const encodedTitlePrefix = JSON.stringify(titlePrefix);
+    await waitFor(
+      async () =>
+        (await controller.webContents.executeJavaScript(
+          `(() => {
+            const buttons = [...document.querySelectorAll("button")];
+            const target = buttons.find((button) => {
+              const textMatches = button.textContent?.trim() === ${encodedLabel};
+              const prefix = ${encodedTitlePrefix};
+              const titleMatches = prefix
+                ? button.getAttribute("title")?.startsWith(prefix)
+                : true;
+              return textMatches && titleMatches;
+            });
+            target?.click();
+            return Boolean(target);
+          })()`,
+          true,
+        )) as boolean,
+      2_000,
+      `controller button: ${label}`,
+    );
+  };
+
+  await clickButton("판서");
+  await clickButton("펜", "펜 (");
+  await waitFor(() => annotationTool === "pen", 2_000, "controller pen tool IPC");
+  await clickButton("조작", "조작 (");
+  await waitFor(
+    () => annotationTool === "pass-through",
+    2_000,
+    "controller pass-through IPC",
+  );
+}
+
 async function waitForOverlayInput(displayId: number, interactive: boolean) {
   const index = overlayDisplays.findIndex((display) => display.id === displayId);
   const target = overlayWindows[index];
@@ -539,11 +628,59 @@ async function waitForOverlayInput(displayId: number, interactive: boolean) {
   );
 }
 
+async function committedCanvasInkPixels(displayId: number) {
+  const index = overlayDisplays.findIndex((display) => display.id === displayId);
+  const target = overlayWindows[index];
+  if (!target) throw new Error("annotation canvas overlay was not found");
+
+  return (await target.webContents.executeJavaScript(
+    `(() => {
+      const canvas = document.querySelector("canvas");
+      const context = canvas?.getContext("2d", { willReadFrequently: true });
+      if (!canvas || !context) return -1;
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let count = 0;
+      for (let index = 3; index < pixels.length; index += 4) {
+        if (pixels[index] !== 0) count += 1;
+      }
+      return count;
+    })()`,
+    true,
+  )) as number;
+}
+
+async function waitForCommittedCanvasInk(
+  displayId: number,
+  expected: boolean,
+  description: string,
+) {
+  await waitFor(async () => {
+    const pixels = await committedCanvasInkPixels(displayId);
+    return expected ? pixels > 0 : pixels === 0;
+  }, 5_000, description);
+}
+
 async function performInteractionSmoke() {
   if (process.platform !== "win32") {
     throw new Error("interaction smoke test requires Windows");
   }
   await inspectAllRenderers();
+  await verifyControllerAnnotationToolWiring();
+
+  setAnnotationTool("pen");
+  hideMainWindow();
+  if (annotationTool !== "pass-through") {
+    throw new Error("hiding the controller did not restore click-through");
+  }
+  showMainWindow();
+  setAnnotationTool("pen");
+  mainWindow?.minimize();
+  await waitFor(
+    () => annotationTool === "pass-through",
+    2_000,
+    "click-through after controller minimization",
+  );
+  showMainWindow();
 
   const primary = screen.getPrimaryDisplay();
   const area = primary.workArea;
@@ -577,8 +714,22 @@ async function performInteractionSmoke() {
   underlay.show();
   mainWindow?.hide();
 
-  const start = { x: bounds.x + 60, y: bounds.y + 80 };
-  const end = { x: bounds.x + width - 60, y: bounds.y + height - 70 };
+  const start = {
+    x: Math.round(bounds.x + width * 0.25),
+    y: Math.round(bounds.y + height * 0.35),
+  };
+  const end = {
+    x: Math.round(bounds.x + width * 0.75),
+    y: Math.round(bounds.y + height * 0.55),
+  };
+  const highlighterStart = {
+    x: Math.round(bounds.x + width * 0.25),
+    y: Math.round(bounds.y + height * 0.8),
+  };
+  const highlighterEnd = {
+    x: Math.round(bounds.x + width * 0.75),
+    y: highlighterStart.y,
+  };
 
   try {
     setAnnotationTool("pass-through");
@@ -586,7 +737,27 @@ async function performInteractionSmoke() {
     await injectWindowsClick(start.x, start.y);
     await waitFor(() => clickCount === 1, 5_000, "underlay click-through");
 
+    const primaryOverlayIndex = overlayDisplays.findIndex(
+      (display) => display.id === primary.id,
+    );
+    const primaryOverlayBounds = overlayDisplays[primaryOverlayIndex]?.bounds;
+    if (
+      !primaryOverlayBounds ||
+      primaryOverlayBounds.x !== primary.bounds.x ||
+      primaryOverlayBounds.y !== primary.bounds.y ||
+      primaryOverlayBounds.width !== primary.bounds.width ||
+      primaryOverlayBounds.height !== primary.bounds.height
+    ) {
+      throw new Error("overlay does not cover the full primary display");
+    }
+
     const beforeStrokes = annotationHistory.getSnapshot(primary.id).strokes.length;
+    await waitForCommittedCanvasInk(
+      primary.id,
+      false,
+      "an initially empty annotation canvas",
+    );
+
     setAnnotationTool("pen");
     await waitForOverlayInput(primary.id, true);
     await injectWindowsDrag(start.x, start.y, end.x, end.y);
@@ -595,9 +766,75 @@ async function performInteractionSmoke() {
       5_000,
       "OS-injected annotation stroke",
     );
+    await waitForCommittedCanvasInk(
+      primary.id,
+      true,
+      "visible committed pen pixels",
+    );
     if (clickCount !== 1) {
       throw new Error("interactive overlay leaked the pointer to the underlay");
     }
+
+    sendAnnotationCommand("undo");
+    await waitFor(
+      () => annotationHistory.getSnapshot(primary.id).strokes.length === beforeStrokes,
+      5_000,
+      "annotation undo",
+    );
+    await waitForCommittedCanvasInk(primary.id, false, "visual annotation undo");
+
+    sendAnnotationCommand("redo");
+    await waitFor(
+      () => annotationHistory.getSnapshot(primary.id).strokes.length > beforeStrokes,
+      5_000,
+      "annotation redo",
+    );
+    await waitForCommittedCanvasInk(primary.id, true, "visual annotation redo");
+
+    setAnnotationTool("eraser");
+    await waitForOverlayInput(primary.id, true);
+    await injectWindowsDrag(start.x, start.y, end.x, end.y);
+    await waitFor(
+      () => annotationHistory.getSnapshot(primary.id).strokes.length === beforeStrokes,
+      5_000,
+      "OS-injected eraser gesture",
+    );
+    await waitForCommittedCanvasInk(primary.id, false, "visual eraser result");
+
+    sendAnnotationCommand("undo");
+    await waitFor(
+      () => annotationHistory.getSnapshot(primary.id).strokes.length > beforeStrokes,
+      5_000,
+      "eraser undo",
+    );
+    await waitForCommittedCanvasInk(primary.id, true, "visual eraser undo");
+
+    const penStrokeCount = annotationHistory.getSnapshot(primary.id).strokes.length;
+    setAnnotationTool("highlighter");
+    await waitForOverlayInput(primary.id, true);
+    await injectWindowsDrag(
+      highlighterStart.x,
+      highlighterStart.y,
+      highlighterEnd.x,
+      highlighterEnd.y,
+    );
+    await waitFor(
+      () => annotationHistory.getSnapshot(primary.id).strokes.length > penStrokeCount,
+      5_000,
+      "OS-injected highlighter stroke",
+    );
+    const highlighter = annotationHistory.getSnapshot(primary.id).strokes.at(-1);
+    if (highlighter?.tool !== "highlighter" || highlighter.opacity !== 0.35) {
+      throw new Error("highlighter stroke style was not committed correctly");
+    }
+    await waitForCommittedCanvasInk(primary.id, true, "visible highlighter pixels");
+
+    sendAnnotationCommand("undo");
+    await waitFor(
+      () => annotationHistory.getSnapshot(primary.id).strokes.length === penStrokeCount,
+      5_000,
+      "highlighter undo",
+    );
 
     const persisted = annotationHistory.getSnapshot(primary.id);
     if (!displayRefreshExecutor) {
@@ -637,6 +874,29 @@ async function performInteractionSmoke() {
       5_000,
       "annotation restoration after overlay rebuild",
     );
+    await waitForCommittedCanvasInk(
+      primary.id,
+      true,
+      "visual annotation restoration after overlay rebuild",
+    );
+
+    sendAnnotationCommand("clear");
+    await waitFor(
+      () => annotationHistory.getSnapshot(primary.id).strokes.length === beforeStrokes,
+      5_000,
+      "display clear command",
+    );
+    await waitForCommittedCanvasInk(primary.id, false, "visual display clear");
+
+    sendAnnotationCommand("undo");
+    await waitFor(
+      () =>
+        annotationHistory.getSnapshot(primary.id).strokes.length ===
+        persisted.strokes.length,
+      5_000,
+      "display clear undo",
+    );
+    await waitForCommittedCanvasInk(primary.id, true, "visual display clear undo");
 
     setAnnotationTool("pass-through");
     await waitForOverlayInput(primary.id, false);
@@ -653,10 +913,11 @@ async function runSmokeTest() {
   if (!mode) return;
 
   const test = mode === "interaction" ? performInteractionSmoke() : inspectAllRenderers();
+  const timeoutMs = mode === "interaction" ? 60_000 : 30_000;
   await Promise.race([
     test,
     new Promise<never>((_resolve, reject) => {
-      setTimeout(() => reject(new Error("smoke test timed out")), 30_000);
+      setTimeout(() => reject(new Error("smoke test timed out")), timeoutMs);
     }),
   ]);
 
@@ -666,6 +927,7 @@ async function runSmokeTest() {
     timestamp: new Date().toISOString(),
   });
   console.log(`MiniCast ${mode} smoke test passed`);
+  stopDisplayRefresh();
   prepareWindowsForQuit();
   stopInputCapture();
   app.exit(0);
@@ -686,6 +948,11 @@ async function initializeApp() {
   await createWindow(rendererUrl, () => setAnnotationTool("pass-through"));
   mainWindow?.webContents.on("did-start-loading", () => {
     controllerSettingsRead = false;
+  });
+  mainWindow?.webContents.on("render-process-gone", (_event, details) => {
+    if (shuttingDown || details.reason === "clean-exit") return;
+    setAnnotationTool("pass-through");
+    mainWindow?.webContents.reload();
   });
   const displayExecutor = registerDisplayEvents(store);
   await displayExecutor.request();
@@ -709,6 +976,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", showMainWindow);
   app.on("activate", showMainWindow);
   app.on("before-quit", () => {
+    stopDisplayRefresh();
     prepareWindowsForQuit();
     persistSettingsNow();
     globalShortcut.unregisterAll();
@@ -729,6 +997,7 @@ if (!app.requestSingleInstanceLock()) {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       }).catch(() => undefined);
+      stopDisplayRefresh();
       prepareWindowsForQuit();
       stopInputCapture();
       app.exit(1);

@@ -12,6 +12,15 @@ import { fitWindowToWorkAreas } from "./window-layout.js";
 const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererFile = path.join(electronDirectory, "../index.html");
 
+function denyWindowOpen(window: BrowserWindow) {
+  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+}
+
+function lockRendererNavigation(window: BrowserWindow) {
+  window.webContents.on("will-navigate", (event) => event.preventDefault());
+  window.webContents.on("will-redirect", (event) => event.preventDefault());
+}
+
 export let mainWindow: BrowserWindow | null = null;
 export let overlayWindows: BrowserWindow[] = [];
 export let overlayDisplays: OverlayDisplayMeta[] = [];
@@ -153,10 +162,15 @@ export async function createWindow(
       nodeIntegration: false,
       sandbox: true,
       webviewTag: false,
+      navigateOnDragDrop: false,
+      safeDialogs: true,
+      spellcheck: false,
       preload: path.join(electronDirectory, "preload.cjs"),
     },
   });
 
+  denyWindowOpen(mainWindow);
+  lockRendererNavigation(mainWindow);
   mainWindow.center();
   mainWindow.webContents.on("did-finish-load", () => {
     closeSplash();
@@ -165,6 +179,7 @@ export async function createWindow(
   mainWindow.on("always-on-top-changed", (_event, alwaysOnTop) => {
     if (overlayInteractive && !alwaysOnTop && !quitting) restoreWindowOrder();
   });
+  mainWindow.on("minimize", () => beforeMainWindowHide?.());
   mainWindow.on("close", (event) => {
     if (quitting) return;
     event.preventDefault();
@@ -197,6 +212,8 @@ export async function createOverlayWindows(
   displays: readonly OverlayDisplayMeta[] = getOrderedOverlayDisplays(),
   callbacks: OverlayWindowCallbacks = {},
 ) {
+  if (quitting) return;
+
   const previousWindows = [...overlayWindows];
   const previousEntries = previousWindows
     .map((window, index) => ({ window, display: overlayDisplays[index] }))
@@ -247,12 +264,17 @@ export async function createOverlayWindows(
           nodeIntegration: false,
           sandbox: true,
           webviewTag: false,
+          navigateOnDragDrop: false,
+          safeDialogs: true,
+          spellcheck: false,
           preload: path.join(electronDirectory, "preload.cjs"),
         },
       });
       nextWindows.push(window);
       const webContentsId = window.webContents.id;
 
+      denyWindowOpen(window);
+      lockRendererNavigation(window);
       window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       applyOverlayInput(window);
       keepOverlayOnTop(window);
@@ -290,6 +312,10 @@ export async function createOverlayWindows(
     await Promise.all(
       nextWindows.map((window) => loadRenderer(window, rendererUrl, "/overlay")),
     );
+    if (quitting) {
+      destroyOverlayWindows(nextWindows);
+      return;
+    }
   } catch (error) {
     destroyOverlayWindows(nextWindows);
 

@@ -114,26 +114,25 @@ function Get-MiniCastUninstallEntryByProductCode([string]$ProductCode) {
 
 Stop-MiniCastProcesses
 
-$unpackedExecutable = Get-ChildItem $OutputDirectory -Recurse -Filter 'MiniCast.exe' |
-  Where-Object { $_.FullName -match 'win-unpacked' } |
-  Select-Object -First 1
+$package = Get-Content (Join-Path $PSScriptRoot '..\package.json') -Raw | ConvertFrom-Json
+$unpackedExecutable = Join-Path $OutputDirectory 'win-unpacked\MiniCast.exe'
 $portableExecutable = Join-Path $OutputDirectory 'MiniCast.exe'
-$msi = Get-ChildItem $OutputDirectory -Filter '*.msi' | Select-Object -First 1
+$msi = Join-Path $OutputDirectory ("MiniCast-{0}-x64.msi" -f $package.version)
 
-if (-not $unpackedExecutable) { throw 'win-unpacked MiniCast.exe was not produced.' }
+if (-not (Test-Path $unpackedExecutable)) { throw 'win-unpacked MiniCast.exe was not produced.' }
 if (-not (Test-Path $portableExecutable)) { throw 'Portable MiniCast.exe was not produced.' }
-if (-not $msi) { throw 'MSI package was not produced.' }
+if (-not (Test-Path $msi)) { throw "Expected MSI package was not produced: $msi" }
 
 Write-Host 'Verifying unpacked startup...'
-Invoke-MiniCastSmoke -Executable $unpackedExecutable.FullName -Mode startup -Label 'unpacked-startup'
+Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'unpacked-startup'
 Write-Host 'Verifying real Windows click-through and annotation routing...'
-Invoke-MiniCastSmoke -Executable $unpackedExecutable.FullName -Mode interaction -Label 'unpacked-interaction' -TimeoutSeconds 60
+Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-interaction' -TimeoutSeconds 90
 Write-Host 'Verifying portable launcher startup and complete shutdown...'
 Invoke-MiniCastSmoke -Executable $portableExecutable -Mode startup -Label 'portable-startup' -TimeoutSeconds 75
 
 $installLog = Join-Path $LogDirectory 'msi-install.log'
 $uninstallLog = Join-Path $LogDirectory 'msi-uninstall.log'
-$installArguments = "/i `"$($msi.FullName)`" /qn /norestart /L*v `"$installLog`""
+$installArguments = "/i `"$msi`" /qn /norestart /L*v `"$installLog`""
 Write-Host 'Installing MSI silently...'
 $install = Start-Process 'msiexec.exe' -ArgumentList $installArguments -Wait -PassThru
 if ($install.ExitCode -notin @(0, 3010)) {

@@ -22,6 +22,7 @@ import {
 import { overlayDisplays, overlayWindows } from "./window.js";
 
 let cursorTimer: ReturnType<typeof setInterval> | undefined;
+let lastCursorPosition: Point | undefined;
 let inputStarted = false;
 let annotationInputActive = false;
 let fallbackToolCombinations = new Set<string>();
@@ -63,38 +64,43 @@ function sendToOverlays(channel: string, payload: unknown) {
   });
 }
 
+function publishCursorPosition(force = false) {
+  if (!overlayWindows.length || !overlayDisplays.length) return;
+
+  const position = screen.getCursorScreenPoint();
+  const moved =
+    !lastCursorPosition ||
+    position.x !== lastCursorPosition.x ||
+    position.y !== lastCursorPosition.y;
+  if (!force && !moved) return;
+
+  const activeDisplay = findDisplay(position, overlayDisplays);
+  overlayWindows.forEach((window, index) => {
+    const display = overlayDisplays[index];
+    const local = display
+      ? {
+          x: Math.round(position.x - display.bounds.x),
+          y: Math.round(position.y - display.bounds.y),
+        }
+      : null;
+
+    sendToWindow(
+      window,
+      "mouse-move",
+      index === activeDisplay && local ? local : null,
+    );
+  });
+
+  lastCursorPosition = position;
+}
+
 function startCursorCapture() {
-  let lastPosition: Point | undefined;
+  publishCursorPosition(true);
+  cursorTimer = setInterval(() => publishCursorPosition(), 8);
+}
 
-  cursorTimer = setInterval(() => {
-    if (!overlayWindows.length || !overlayDisplays.length) return;
-
-    const position = screen.getCursorScreenPoint();
-    const moved =
-      !lastPosition ||
-      position.x !== lastPosition.x ||
-      position.y !== lastPosition.y;
-    if (!moved) return;
-
-    const activeDisplay = findDisplay(position, overlayDisplays);
-    overlayWindows.forEach((window, index) => {
-      const display = overlayDisplays[index];
-      const local = display
-        ? {
-            x: Math.round(position.x - display.bounds.x),
-            y: Math.round(position.y - display.bounds.y),
-          }
-        : null;
-
-      sendToWindow(
-        window,
-        "mouse-move",
-        index === activeDisplay && local ? local : null,
-      );
-    });
-
-    lastPosition = position;
-  }, 8);
+export function refreshCursorCapture() {
+  publishCursorPosition(true);
 }
 
 function handleKeyDown(event: UiohookKeyboardEvent) {
@@ -183,6 +189,7 @@ export function startInputCapture() {
 export function stopInputCapture() {
   if (cursorTimer) clearInterval(cursorTimer);
   cursorTimer = undefined;
+  lastCursorPosition = undefined;
 
   if (inputStarted) uIOhook.stop();
   inputStarted = false;

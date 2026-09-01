@@ -4,7 +4,7 @@ import { orderDisplays } from "./display-order.js";
 
 export interface OverlayDisplayMeta {
   id: number;
-  bounds: Display["workArea"];
+  bounds: Display["bounds"];
 }
 
 export function getOrderedDisplays(): Display[] {
@@ -15,12 +15,12 @@ export function getConnectedDisplays() {
   return getOrderedDisplays().map((display, index) => ({
     id: display.id,
     name: `모니터 ${index + 1}`,
-    bounds: { ...display.workArea },
+    bounds: { ...display.bounds },
   }));
 }
 
 export function toOverlayDisplayMeta(display: Display): OverlayDisplayMeta {
-  return { id: display.id, bounds: { ...display.workArea } };
+  return { id: display.id, bounds: { ...display.bounds } };
 }
 
 export function getOrderedOverlayDisplays() {

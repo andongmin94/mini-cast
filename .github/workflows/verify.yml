@@ -50,6 +50,17 @@ jobs:
         shell: pwsh
         run: ./scripts/verify-windows.ps1
 
+      - name: 산출물 SHA-256 생성
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem output -File | Where-Object { $_.Extension -eq '.msi' -or $_.Name -eq 'MiniCast.exe' })
+          if ($files.Count -ne 2) { throw "Expected one MSI and one portable EXE, found $($files.Count)." }
+          $lines = $files | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash *$($_.Name)"
+          }
+          Set-Content -LiteralPath output/SHA256SUMS.txt -Value $lines -Encoding utf8
+
       - name: Windows 산출물 업로드
         uses: actions/upload-artifact@v4
         with:
@@ -57,8 +68,9 @@ jobs:
           path: |
             output/*.msi
             output/MiniCast.exe
+            output/SHA256SUMS.txt
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
       - name: 실패 로그 업로드
         if: failure()
