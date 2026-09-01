@@ -1,5 +1,6 @@
 name: Verify
 
+# Release candidates must pass this Windows manual-QA readiness gate.
 on:
   push:
     branches: [main]
