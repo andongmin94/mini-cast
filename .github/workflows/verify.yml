@@ -1,7 +1,7 @@
 name: Verify
 
 # Release candidates must pass this Windows manual-QA readiness gate.
-# Stable controller selectors are verified through the packaged renderer.
+# Stable controller selectors are verified with native Windows clicks.
 # Packaged smoke failures retain their sentinel and process diagnostics.
 on:
   push:
