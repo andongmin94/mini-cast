@@ -823,7 +823,8 @@ async function performInteractionSmoke() {
       5_000,
       "OS-injected highlighter stroke",
     );
-    const highlighter = annotationHistory.getSnapshot(primary.id).strokes.at(-1);
+    const highlighterStrokes = annotationHistory.getSnapshot(primary.id).strokes;
+    const highlighter = highlighterStrokes[highlighterStrokes.length - 1];
     if (highlighter?.tool !== "highlighter" || highlighter.opacity !== 0.35) {
       throw new Error("highlighter stroke style was not committed correctly");
     }
