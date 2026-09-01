@@ -2,12 +2,14 @@ name: Verify
 
 # Release candidates must pass this Windows manual-QA readiness gate.
 # Controller selectors are verified with native Windows clicks.
-# Annotation mutation settlement, incremental rendering, and packaged CSP are regression-tested.
-# Default and explicit software rendering paths are both exercised.
+# Annotation mutation settlement, bounded long-session state, and packaged CSP are regression-tested.
+# Default and explicit software-rendering interaction paths are both exercised.
 # Packaged smoke failures retain their sentinel and process diagnostics.
 # MSI verification uses canonical absolute paths.
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -22,7 +24,7 @@ jobs:
   windows-package:
     name: Windows 검증 및 패키징
     runs-on: windows-2022
-    timeout-minutes: 50
+    timeout-minutes: 55
 
     steps:
       - name: 체크아웃
@@ -49,7 +51,7 @@ jobs:
         run: npm run lint
 
       - name: 전체 의존성 보안 감사
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=low
 
       - name: MSI 및 포터블 패키징
         run: npm run build

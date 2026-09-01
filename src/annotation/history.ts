@@ -53,10 +53,21 @@ type HistoryEntry = AddHistoryEntry | RemoveHistoryEntry;
 
 type UnknownRecord = Record<string, unknown>;
 
+export const MAX_ANNOTATION_COORDINATE = 1_000_000;
+export const MAX_ANNOTATION_POINTS_PER_STROKE = 50_000;
+export const MAX_ANNOTATION_POINTS_PER_DISPLAY = 1_000_000;
+export const MAX_ANNOTATION_STROKES_PER_DISPLAY = 10_000;
+export const MAX_ANNOTATION_HISTORY_ENTRIES = 2_000;
+export const MAX_ANNOTATION_HISTORY_POINTS =
+  MAX_ANNOTATION_POINTS_PER_DISPLAY;
+
+const HEX_COLOR = /^#[\da-f]{6}$/i;
+
 interface DocumentState {
   viewport: AnnotationViewport | null;
   strokes: AnnotationStroke[];
   strokeIds: Set<string>;
+  pointCount: number;
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -69,7 +80,9 @@ function isFinitePoint(value: unknown): value is AnnotationPoint {
     typeof value.x === "number" &&
     Number.isFinite(value.x) &&
     typeof value.y === "number" &&
-    Number.isFinite(value.y)
+    Number.isFinite(value.y) &&
+    Math.abs(value.x) <= MAX_ANNOTATION_COORDINATE &&
+    Math.abs(value.y) <= MAX_ANNOTATION_COORDINATE
   );
 }
 
@@ -136,6 +149,15 @@ function scaleHistoryEntry(
   };
 }
 
+function historyEntryPointCount(entry: HistoryEntry) {
+  return entry.kind === "add"
+    ? entry.stroke.points.length
+    : entry.strokes.reduce(
+        (total, { stroke }) => total + stroke.points.length,
+        0,
+      );
+}
+
 function validViewportDimension(value: number) {
   return Number.isFinite(value) && value > 0 && value <= 100_000;
 }
@@ -153,16 +175,12 @@ export function isAnnotationStroke(value: unknown): value is AnnotationStroke {
   if (
     !Array.isArray(value.points) ||
     value.points.length < 1 ||
-    value.points.length > 200_000
+    value.points.length > MAX_ANNOTATION_POINTS_PER_STROKE
   ) {
     return false;
   }
   if (!value.points.every(isFinitePoint)) return false;
-  if (
-    typeof value.color !== "string" ||
-    value.color.length < 1 ||
-    value.color.length > 128
-  ) {
+  if (typeof value.color !== "string" || !HEX_COLOR.test(value.color)) {
     return false;
   }
   if (
@@ -173,16 +191,22 @@ export function isAnnotationStroke(value: unknown): value is AnnotationStroke {
   ) {
     return false;
   }
-  return (
-    typeof value.opacity === "number" &&
-    Number.isFinite(value.opacity) &&
-    value.opacity >= 0 &&
-    value.opacity <= 1
-  );
+  if (
+    typeof value.opacity !== "number" ||
+    !Number.isFinite(value.opacity)
+  ) {
+    return false;
+  }
+  return value.tool === "pen" ? value.opacity === 1 : value.opacity === 0.35;
 }
 
 export function readAnnotationStrokeIds(value: unknown) {
-  if (!Array.isArray(value) || value.length > 10_000) return null;
+  if (
+    !Array.isArray(value) ||
+    value.length > MAX_ANNOTATION_STROKES_PER_DISPLAY
+  ) {
+    return null;
+  }
   if (
     !value.every(
       (item) =>
@@ -222,6 +246,7 @@ export class AnnotationHistory {
           viewport: document.viewport ? { ...document.viewport } : null,
           strokes: document.strokes.map(cloneAnnotationStroke),
           strokeIds: new Set(document.strokeIds),
+          pointCount: document.pointCount,
         },
       ]),
     );
@@ -238,6 +263,25 @@ export class AnnotationHistory {
       viewport: document.viewport ? { ...document.viewport } : null,
       strokes: document.strokes.map(cloneAnnotationStroke),
     };
+  }
+
+  retainDisplays(displayIds: Iterable<number>) {
+    const retained = new Set(displayIds);
+    let removedDocuments = 0;
+
+    for (const displayId of this.documents.keys()) {
+      if (retained.has(displayId)) continue;
+      this.documents.delete(displayId);
+      this.revisions.delete(displayId);
+      removedDocuments += 1;
+    }
+    this.undoStack = this.undoStack.filter((entry) =>
+      retained.has(entry.displayId),
+    );
+    this.redoStack = this.redoStack.filter((entry) =>
+      retained.has(entry.displayId),
+    );
+    return removedDocuments;
   }
 
   setDisplayViewport(displayId: number, width: number, height: number) {
@@ -271,9 +315,22 @@ export class AnnotationHistory {
   }
 
   addStroke(displayId: number, stroke: AnnotationStroke) {
+    if (!isAnnotationStroke(stroke)) {
+      throw new Error("Invalid annotation stroke");
+    }
+
     const document = this.document(displayId);
     if (document.strokeIds.has(stroke.id)) {
       throw new Error(`Duplicate annotation stroke id: ${stroke.id}`);
+    }
+    if (document.strokes.length >= MAX_ANNOTATION_STROKES_PER_DISPLAY) {
+      throw new Error("Annotation stroke limit reached");
+    }
+    if (
+      document.pointCount + stroke.points.length >
+      MAX_ANNOTATION_POINTS_PER_DISPLAY
+    ) {
+      throw new Error("Annotation point limit reached");
     }
 
     const stored = cloneAnnotationStroke(stroke);
@@ -292,12 +349,11 @@ export class AnnotationHistory {
     const idSet = new Set(ids);
     if (!idSet.size) return null;
 
-    const removed = this.document(displayId)
-      .strokes.map((stroke, index) => ({
-        stroke: cloneAnnotationStroke(stroke),
-        index,
-      }))
-      .filter(({ stroke }) => idSet.has(stroke.id));
+    const removed: IndexedStroke[] = [];
+    this.document(displayId).strokes.forEach((stroke, index) => {
+      if (!idSet.has(stroke.id)) return;
+      removed.push({ stroke: cloneAnnotationStroke(stroke), index });
+    });
     if (!removed.length) return null;
 
     const entry: RemoveHistoryEntry = {
@@ -343,6 +399,7 @@ export class AnnotationHistory {
       viewport: null,
       strokes: [],
       strokeIds: new Set(),
+      pointCount: 0,
     };
     this.documents.set(displayId, created);
     return created;
@@ -351,6 +408,19 @@ export class AnnotationHistory {
   private commit(entry: HistoryEntry) {
     this.undoStack.push(entry);
     this.redoStack = [];
+
+    let retainedPoints = this.undoStack.reduce(
+      (total, candidate) => total + historyEntryPointCount(candidate),
+      0,
+    );
+    while (
+      this.undoStack.length > MAX_ANNOTATION_HISTORY_ENTRIES ||
+      retainedPoints > MAX_ANNOTATION_HISTORY_POINTS
+    ) {
+      const removed = this.undoStack.shift();
+      if (!removed) break;
+      retainedPoints -= historyEntryPointCount(removed);
+    }
   }
 
   private touch(displayId: number) {
@@ -360,31 +430,58 @@ export class AnnotationHistory {
   private apply(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
     if (entry.kind === "add") {
+      if (document.strokeIds.has(entry.stroke.id)) {
+        throw new Error(`Duplicate annotation stroke id: ${entry.stroke.id}`);
+      }
+      if (document.strokes.length >= MAX_ANNOTATION_STROKES_PER_DISPLAY) {
+        throw new Error("Annotation stroke limit reached");
+      }
+      if (
+        document.pointCount + entry.stroke.points.length >
+        MAX_ANNOTATION_POINTS_PER_DISPLAY
+      ) {
+        throw new Error("Annotation point limit reached");
+      }
+
       document.strokes.splice(
         Math.min(entry.index, document.strokes.length),
         0,
         cloneAnnotationStroke(entry.stroke),
       );
       document.strokeIds.add(entry.stroke.id);
+      document.pointCount += entry.stroke.points.length;
       this.touch(entry.displayId);
       return;
     }
 
     const removedIds = new Set(entry.strokes.map(({ stroke }) => stroke.id));
-    document.strokes = document.strokes.filter(
-      (stroke) => !removedIds.has(stroke.id),
-    );
+    let removedPointCount = 0;
+    document.strokes = document.strokes.filter((stroke) => {
+      if (!removedIds.has(stroke.id)) return true;
+      removedPointCount += stroke.points.length;
+      return false;
+    });
     removedIds.forEach((id) => document.strokeIds.delete(id));
+    document.pointCount = Math.max(0, document.pointCount - removedPointCount);
     this.touch(entry.displayId);
   }
 
   private revert(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
     if (entry.kind === "add") {
+      const removed = document.strokes.find(
+        (stroke) => stroke.id === entry.stroke.id,
+      );
       document.strokes = document.strokes.filter(
         (stroke) => stroke.id !== entry.stroke.id,
       );
       document.strokeIds.delete(entry.stroke.id);
+      if (removed) {
+        document.pointCount = Math.max(
+          0,
+          document.pointCount - removed.points.length,
+        );
+      }
       this.touch(entry.displayId);
       return;
     }
@@ -392,13 +489,34 @@ export class AnnotationHistory {
     const ordered = [...entry.strokes].sort((left, right) => {
       return left.index - right.index;
     });
-    ordered.forEach(({ stroke, index }) => {
+    const restorable = ordered.filter(
+      ({ stroke }) => !document.strokeIds.has(stroke.id),
+    );
+    const restoredPoints = restorable.reduce(
+      (total, { stroke }) => total + stroke.points.length,
+      0,
+    );
+    if (
+      document.strokes.length + restorable.length >
+      MAX_ANNOTATION_STROKES_PER_DISPLAY
+    ) {
+      throw new Error("Annotation stroke limit reached");
+    }
+    if (
+      document.pointCount + restoredPoints >
+      MAX_ANNOTATION_POINTS_PER_DISPLAY
+    ) {
+      throw new Error("Annotation point limit reached");
+    }
+
+    restorable.forEach(({ stroke, index }) => {
       document.strokes.splice(
         Math.min(index, document.strokes.length),
         0,
         cloneAnnotationStroke(stroke),
       );
       document.strokeIds.add(stroke.id);
+      document.pointCount += stroke.points.length;
     });
     this.touch(entry.displayId);
   }

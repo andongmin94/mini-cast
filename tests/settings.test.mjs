@@ -59,6 +59,24 @@ test("partial and malformed settings fall back to current defaults", () => {
   assert.equal(settings.keyDisplayId, 101);
 });
 
+test("legacy color forms are migrated without losing their visual values", () => {
+  const settings = normalizeOverlaySettings(
+    {
+      ...DEFAULT_OVERLAY_SETTINGS,
+      cursorFillColor: "#0064FF",
+      cursorStrokeColor: "rgb(32, 38, 50)",
+      keyDisplayBackgroundColor: "#00000080",
+      keyDisplayTextColor: "rgb(255, 255, 255)",
+    },
+    [10],
+  );
+
+  assert.equal(settings.cursorFillColor, "rgba(0, 100, 255, 1)");
+  assert.equal(settings.cursorStrokeColor, "rgba(32, 38, 50, 1)");
+  assert.equal(settings.keyDisplayBackgroundColor, "rgba(0, 0, 0, 0.502)");
+  assert.equal(settings.keyDisplayTextColor, "#FFFFFF");
+});
+
 test("numeric settings and physical monitor selection are normalized", () => {
   const settings = normalizeOverlaySettings(
     {

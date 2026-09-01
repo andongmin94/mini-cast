@@ -11,6 +11,7 @@ import {
   eraserSweepHitsStroke,
   pointHitsStroke,
 } from "@/annotation/geometry";
+import { MAX_ANNOTATION_POINTS_PER_STROKE } from "@/annotation/history";
 import type {
   AnnotationDocumentSnapshot,
   AnnotationPoint,
@@ -40,9 +41,11 @@ const MIN_POINT_DISTANCE_SQUARED = 0.75 * 0.75;
 function pointerPoints(event: ReactPointerEvent<HTMLCanvasElement>) {
   const nativeEvents = event.nativeEvent.getCoalescedEvents?.() ?? [];
   const events = nativeEvents.length ? nativeEvents : [event.nativeEvent];
+  const width = Math.max(event.currentTarget.clientWidth, 1);
+  const height = Math.max(event.currentTarget.clientHeight, 1);
   return events.map<AnnotationPoint>((item) => ({
-    x: item.clientX,
-    y: item.clientY,
+    x: Math.min(width, Math.max(0, item.clientX)),
+    y: Math.min(height, Math.max(0, item.clientY)),
   }));
 }
 
@@ -71,8 +74,9 @@ function resizeCanvas(canvas: HTMLCanvasElement) {
 function configureStroke(
   context: CanvasRenderingContext2D,
   stroke: AnnotationStroke,
+  opacity = stroke.opacity,
 ) {
-  context.globalAlpha = stroke.opacity;
+  context.globalAlpha = opacity;
   context.strokeStyle = stroke.color;
   context.fillStyle = stroke.color;
   context.lineWidth = stroke.width;
@@ -117,7 +121,11 @@ function drawActiveSegments(
   if (!context) return;
 
   context.save();
-  configureStroke(context, stroke);
+  configureStroke(
+    context,
+    stroke,
+    stroke.tool === "highlighter" ? 1 : stroke.opacity,
+  );
   if (previousLength === 0) {
     const point = stroke.points[0];
     context.beginPath();
@@ -269,12 +277,24 @@ export default function AnnotationSurface({
   const finishGestureState = useCallback(
     (notifyMain: boolean) => {
       const gestureId = activeGestureIdRef.current;
+      const pointerId = activePointerRef.current;
+      const gestureCanvas = gestureCanvasRef.current;
       activePointerRef.current = null;
       activeGestureIdRef.current = null;
       activeStrokeRef.current = null;
       eraserBaseRef.current = null;
       activeErasedIdsRef.current = new Set();
       lastEraserPointRef.current = null;
+      if (
+        pointerId !== null &&
+        gestureCanvas?.hasPointerCapture(pointerId)
+      ) {
+        try {
+          gestureCanvas.releasePointerCapture(pointerId);
+        } catch {
+          // Native pointer teardown can race tool and window changes.
+        }
+      }
       clearGesture();
       if (notifyMain && gestureId && typeof miniCast !== "undefined") {
         miniCast.endAnnotationGesture(gestureId);
@@ -350,14 +370,15 @@ export default function AnnotationSurface({
     if (!active) return;
 
     const previousLength = active.points.length;
-    points.forEach((point) => {
+    for (const point of points) {
+      if (active.points.length >= MAX_ANNOTATION_POINTS_PER_STROKE) break;
       const last = active.points[active.points.length - 1];
       const dx = (last?.x ?? point.x) - point.x;
       const dy = (last?.y ?? point.y) - point.y;
       if (!last || dx * dx + dy * dy >= MIN_POINT_DISTANCE_SQUARED) {
         active.points.push(point);
       }
-    });
+    }
     if (active.points.length !== previousLength) {
       drawActiveSegments(gestureCanvasRef.current, active, previousLength);
     }
@@ -457,7 +478,7 @@ export default function AnnotationSurface({
       miniCast.beginAnnotationGesture(gestureId);
     }
 
-    const point = { x: event.clientX, y: event.clientY };
+    const point = pointerPoints(event)[0];
     if (tool === "eraser") {
       eraserBaseRef.current = visibleStrokes();
       activeErasedIdsRef.current = new Set();
@@ -524,6 +545,7 @@ export default function AnnotationSurface({
           pointerEvents: interactive ? "auto" : "none",
           touchAction: "none",
           cursor: interactive ? "none" : "default",
+          opacity: tool === "highlighter" ? 0.35 : 1,
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

@@ -162,6 +162,8 @@ Write-Host 'Verifying the explicit software-rendering fallback...'
 Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'unpacked-software-startup' -DisableHardwareAcceleration
 Write-Host 'Verifying real Windows click-through and annotation routing...'
 Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-interaction' -TimeoutSeconds 90
+Write-Host 'Verifying annotation routing with the software-rendering fallback...'
+Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-software-interaction' -TimeoutSeconds 90 -DisableHardwareAcceleration
 Write-Host 'Verifying portable launcher startup and complete shutdown...'
 Invoke-MiniCastSmoke -Executable $portableExecutable -Mode startup -Label 'portable-startup' -TimeoutSeconds 75
 

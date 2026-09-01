@@ -1,4 +1,8 @@
 import {
+  normalizeHexColor,
+  normalizeRgbaColor,
+} from "./color.js";
+import {
   DEFAULT_OVERLAY_SETTINGS,
   type KeyDisplayPosition,
   type OverlaySettings,
@@ -10,7 +14,6 @@ const POSITIONS = new Set<KeyDisplayPosition>([
   "bottom-left",
   "bottom-right",
 ]);
-const HEX_COLOR = /^#[\da-f]{6}$/i;
 
 const SETTING_KEYS = Object.keys(
   DEFAULT_OVERLAY_SETTINGS,
@@ -31,17 +34,12 @@ function readBoolean(
   return typeof value === "boolean" ? value : fallback;
 }
 
-function readColor(
+function readRgbaColor(
   source: UnknownRecord,
   key: keyof OverlaySettings,
   fallback: string,
 ) {
-  const value = source[key];
-  return typeof value === "string" &&
-    value.trim().length > 0 &&
-    value.length <= 128
-    ? value
-    : fallback;
+  return normalizeRgbaColor(source[key], fallback);
 }
 
 function readHexColor(
@@ -49,8 +47,7 @@ function readHexColor(
   key: keyof OverlaySettings,
   fallback: string,
 ) {
-  const value = source[key];
-  return typeof value === "string" && HEX_COLOR.test(value) ? value : fallback;
+  return normalizeHexColor(source[key], fallback);
 }
 
 function readNumber(
@@ -93,12 +90,12 @@ export function normalizeOverlaySettings(
   const source = isRecord(value) ? value : {};
 
   return {
-    cursorFillColor: readColor(
+    cursorFillColor: readRgbaColor(
       source,
       "cursorFillColor",
       DEFAULT_OVERLAY_SETTINGS.cursorFillColor,
     ),
-    cursorStrokeColor: readColor(
+    cursorStrokeColor: readRgbaColor(
       source,
       "cursorStrokeColor",
       DEFAULT_OVERLAY_SETTINGS.cursorStrokeColor,
@@ -139,12 +136,12 @@ export function normalizeOverlaySettings(
       60,
       true,
     ),
-    keyDisplayBackgroundColor: readColor(
+    keyDisplayBackgroundColor: readRgbaColor(
       source,
       "keyDisplayBackgroundColor",
       DEFAULT_OVERLAY_SETTINGS.keyDisplayBackgroundColor,
     ),
-    keyDisplayTextColor: readColor(
+    keyDisplayTextColor: readHexColor(
       source,
       "keyDisplayTextColor",
       DEFAULT_OVERLAY_SETTINGS.keyDisplayTextColor,

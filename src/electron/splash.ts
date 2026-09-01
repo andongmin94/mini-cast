@@ -10,7 +10,17 @@ export function createSplash() {
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webviewTag: false,
+      navigateOnDragDrop: false,
+      safeDialogs: true,
+      spellcheck: false,
+    },
   });
+  splashWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
   const html = `<!doctype html>
 <html lang="ko">

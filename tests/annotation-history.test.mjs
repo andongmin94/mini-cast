@@ -4,6 +4,11 @@ import test from "node:test";
 import {
   AnnotationHistory,
   isAnnotationStroke,
+  MAX_ANNOTATION_COORDINATE,
+  MAX_ANNOTATION_HISTORY_ENTRIES,
+  MAX_ANNOTATION_HISTORY_POINTS,
+  MAX_ANNOTATION_POINTS_PER_DISPLAY,
+  MAX_ANNOTATION_POINTS_PER_STROKE,
   readAnnotationStrokeIds,
 } from "../dist/annotation/history.js";
 
@@ -122,6 +127,103 @@ test("runtime stroke and id validation rejects malformed payloads", () => {
   );
   assert.deepEqual(readAnnotationStrokeIds(["a", "a", "b"]), ["a", "b"]);
   assert.equal(readAnnotationStrokeIds(["", "b"]), null);
+});
+
+test("history enforces its runtime validation at the domain boundary", () => {
+  const history = new AnnotationHistory();
+  assert.throws(
+    () => history.addStroke(1, { ...stroke("invalid"), color: "red" }),
+    /Invalid annotation stroke/,
+  );
+  assert.deepEqual(ids(history, 1), []);
+});
+
+test("runtime validation rejects pathological geometry and style payloads", () => {
+  assert.equal(
+    isAnnotationStroke({
+      ...stroke("too-far"),
+      points: [{ x: MAX_ANNOTATION_COORDINATE + 1, y: 0 }],
+    }),
+    false,
+  );
+  assert.equal(
+    isAnnotationStroke({
+      ...stroke("too-many"),
+      points: Array.from(
+        { length: MAX_ANNOTATION_POINTS_PER_STROKE + 1 },
+        () => ({ x: 0, y: 0 }),
+      ),
+    }),
+    false,
+  );
+  assert.equal(isAnnotationStroke({ ...stroke("bad-color"), color: "red" }), false);
+  assert.equal(
+    isAnnotationStroke({ ...stroke("bad-opacity"), opacity: 0.5 }),
+    false,
+  );
+});
+
+test("document and undo limits bound long-running session memory", () => {
+  const history = new AnnotationHistory();
+  for (let index = 0; index < MAX_ANNOTATION_HISTORY_ENTRIES + 50; index += 1) {
+    history.addStroke(1, stroke(`bounded-${index}`, index, index));
+  }
+
+  for (let index = 0; index < MAX_ANNOTATION_HISTORY_ENTRIES; index += 1) {
+    assert.equal(history.undo(), 1);
+  }
+  assert.equal(history.undo(), null);
+  assert.equal(history.getSnapshot(1).strokes.length, 50);
+
+  const pointHeavy = new AnnotationHistory();
+  const points = Array.from(
+    { length: Math.min(MAX_ANNOTATION_POINTS_PER_STROKE, 10_000) },
+    (_, index) => ({ x: index, y: 0 }),
+  );
+  let acceptedPoints = 0;
+  let index = 0;
+  while (acceptedPoints + points.length <= MAX_ANNOTATION_POINTS_PER_DISPLAY) {
+    pointHeavy.addStroke(1, {
+      ...stroke(`points-${index}`),
+      points,
+    });
+    acceptedPoints += points.length;
+    index += 1;
+  }
+  assert.throws(
+    () =>
+      pointHeavy.addStroke(1, {
+        ...stroke("points-overflow"),
+        points,
+      }),
+    /Annotation point limit reached/,
+  );
+
+  assert.equal(MAX_ANNOTATION_HISTORY_POINTS, MAX_ANNOTATION_POINTS_PER_DISPLAY);
+  assert.equal(pointHeavy.clearDisplay(1), 1);
+  assert.equal(pointHeavy.undo(), 1);
+  assert.equal(
+    pointHeavy.getSnapshot(1).strokes.reduce(
+      (total, item) => total + item.points.length,
+      0,
+    ),
+    MAX_ANNOTATION_POINTS_PER_DISPLAY,
+  );
+  assert.equal(pointHeavy.undo(), null);
+});
+
+test("disconnected displays release documents and their undo-redo entries", () => {
+  const history = new AnnotationHistory();
+  history.addStroke(10, stroke("kept"));
+  history.addStroke(20, stroke("removed"));
+  assert.equal(history.undo(), 20);
+
+  assert.equal(history.retainDisplays([10]), 1);
+  assert.equal(history.canRedo, false);
+  assert.deepEqual(ids(history, 10), ["kept"]);
+  assert.deepEqual(ids(history, 20), []);
+  assert.equal(history.undo(), 10);
+  assert.equal(history.undo(), null);
 });
 
 test("history checkpoints restore documents, revisions, and both stacks", () => {

@@ -21,6 +21,8 @@ interface MouseButtons {
   right: boolean;
 }
 
+const MAX_VISIBLE_KEY_PRESSES = 32;
+
 const POSITION_CLASSES: Record<KeyDisplayPosition, string> = {
   "top-left": "top-4 left-4 items-start",
   "top-right": "top-4 right-4 items-end",
@@ -125,6 +127,12 @@ export default function Overlay() {
   useEffect(() => {
     if (typeof miniCast === "undefined") return;
 
+    const keyPressTimers = new Set<number>();
+    const clearKeyPressTimers = () => {
+      keyPressTimers.forEach((timer) => window.clearTimeout(timer));
+      keyPressTimers.clear();
+    };
+
     const scalePosition = (position: MousePosition) => ({
       x: Math.round(
         position.x * (window.innerWidth / Math.max(sourceSize.current.width, 1)),
@@ -144,10 +152,15 @@ export default function Overlay() {
         return;
       }
 
-      setKeyPresses((items) => [...items, keyPress]);
-      window.setTimeout(() => {
+      setKeyPresses((items) => [
+        ...items.slice(-(MAX_VISIBLE_KEY_PRESSES - 1)),
+        keyPress,
+      ]);
+      const timer = window.setTimeout(() => {
+        keyPressTimers.delete(timer);
         setKeyPresses((items) => items.filter((item) => item !== keyPress));
       }, current.keyDisplayDuration);
+      keyPressTimers.add(timer);
     };
 
     const onMouseButton = ({ button, pressed }: MouseButtonEvent) => {
@@ -157,6 +170,8 @@ export default function Overlay() {
     const onOverlayInit = ({ displayId: physicalId, width, height }: OverlayInit) => {
       displayIdRef.current = physicalId;
       documentRevisionRef.current = -1;
+      clearKeyPressTimers();
+      setKeyPresses([]);
       setAnnotationDocument(null);
       setDisplayId(physicalId);
       sourceSize.current = { width, height };
@@ -175,7 +190,10 @@ export default function Overlay() {
     ];
 
     miniCast.notifyOverlayReady();
-    return () => unsubscribe.forEach((stop) => stop());
+    return () => {
+      clearKeyPressTimers();
+      unsubscribe.forEach((stop) => stop());
+    };
   }, [adoptAnnotationDocument]);
 
   const passive = annotationState.tool === "pass-through";

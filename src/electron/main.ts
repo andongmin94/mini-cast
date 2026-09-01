@@ -506,6 +506,7 @@ async function rebuildDisplays(store: SettingsStore) {
     if (shuttingDown) return;
 
     const connectedIds = displays.map((display) => display.id);
+    annotationHistory.retainDisplays(connectedIds);
     if (
       lastAnnotationDisplayId !== null &&
       !connectedIds.includes(lastAnnotationDisplayId)

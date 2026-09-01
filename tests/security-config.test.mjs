@@ -30,6 +30,8 @@ test("verification workflow pins actions and validates the distributable ZIP", a
   });
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /node-version: 24\.19\.0/);
+  assert.match(workflow, /npm audit --audit-level=low/);
+  assert.match(workflow, /pull_request:/);
   assert.match(workflow, /최종 ZIP 무결성 및 내부 해시 대조/);
   assert.match(workflow, /BUNDLE-SHA256\.txt/);
   assert.match(workflow, /MiniCast-\*-windows\.zip/);

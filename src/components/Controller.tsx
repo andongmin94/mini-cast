@@ -4,6 +4,7 @@ import { Keyboard, MousePointer2, PenLine } from "lucide-react";
 
 import AnnotationControls from "@/components/AnnotationControls";
 import TitleBar from "@/components/TitleBar";
+import { colorForEditor, rgbaFromEditor } from "@/electron/color";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,6 +25,7 @@ import type {
   KeyDisplayPosition,
   OverlaySettings,
 } from "@/electron/contract";
+import { DEFAULT_OVERLAY_SETTINGS } from "@/electron/contract";
 
 interface Settings extends AnnotationPreferences {
   cursorFillColor: string;
@@ -43,50 +45,19 @@ interface Settings extends AnnotationPreferences {
   showKeyDisplay: boolean;
 }
 
-const DEFAULT_SETTINGS: Settings = {
-  cursorFillColor: "#0064FF",
-  cursorFillOpacity: 0.5,
-  cursorStrokeColor: "#202632",
-  cursorStrokeOpacity: 0.5,
-  cursorSize: 30,
-  cursorStrokeSize: 3,
-  showCursorHighlight: true,
-  keyDisplayId: 0,
-  keyDisplayDuration: 2000,
-  keyDisplayFontSize: 16,
-  keyDisplayBackgroundColor: "#000000",
-  keyDisplayBackgroundOpacity: 0.5,
-  keyDisplayTextColor: "#FFFFFF",
-  keyDisplayPosition: "bottom-right",
-  showKeyDisplay: true,
-  annotationPenColor: "#FF3B30",
-  annotationHighlighterColor: "#FFD60A",
-  annotationPenWidth: 4,
-  annotationHighlighterWidth: 18,
-  annotationEraserWidth: 28,
-};
-
-function hexToRgba(hex: string, opacity: number) {
-  const value = Number.parseInt(hex.slice(1), 16);
-  return `rgba(${value >> 16}, ${(value >> 8) & 255}, ${value & 255}, ${1 - opacity})`;
-}
-
-function rgbaToColor(value: string) {
-  const match = value.match(
-    /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/,
-  );
-  if (!match) return { color: "#000000", opacity: 0 };
-
-  const color = `#${[match[1], match[2], match[3]]
-    .map((part) => Number(part).toString(16).padStart(2, "0"))
-    .join("")}`;
-  return { color, opacity: 1 - Number(match[4] ?? 1) };
-}
-
 function fromOverlaySettings(settings: OverlaySettings): Settings {
-  const fill = rgbaToColor(settings.cursorFillColor);
-  const stroke = rgbaToColor(settings.cursorStrokeColor);
-  const background = rgbaToColor(settings.keyDisplayBackgroundColor);
+  const fill = colorForEditor(
+    settings.cursorFillColor,
+    DEFAULT_OVERLAY_SETTINGS.cursorFillColor,
+  );
+  const stroke = colorForEditor(
+    settings.cursorStrokeColor,
+    DEFAULT_OVERLAY_SETTINGS.cursorStrokeColor,
+  );
+  const background = colorForEditor(
+    settings.keyDisplayBackgroundColor,
+    DEFAULT_OVERLAY_SETTINGS.keyDisplayBackgroundColor,
+  );
 
   return {
     cursorFillColor: fill.color,
@@ -114,11 +85,11 @@ function fromOverlaySettings(settings: OverlaySettings): Settings {
 
 function toOverlaySettings(settings: Settings): OverlaySettings {
   return {
-    cursorFillColor: hexToRgba(
+    cursorFillColor: rgbaFromEditor(
       settings.cursorFillColor,
       settings.cursorFillOpacity,
     ),
-    cursorStrokeColor: hexToRgba(
+    cursorStrokeColor: rgbaFromEditor(
       settings.cursorStrokeColor,
       settings.cursorStrokeOpacity,
     ),
@@ -128,7 +99,7 @@ function toOverlaySettings(settings: Settings): OverlaySettings {
     keyDisplayId: settings.keyDisplayId,
     keyDisplayDuration: settings.keyDisplayDuration,
     keyDisplayFontSize: settings.keyDisplayFontSize,
-    keyDisplayBackgroundColor: hexToRgba(
+    keyDisplayBackgroundColor: rgbaFromEditor(
       settings.keyDisplayBackgroundColor,
       settings.keyDisplayBackgroundOpacity,
     ),
@@ -142,6 +113,10 @@ function toOverlaySettings(settings: Settings): OverlaySettings {
     annotationEraserWidth: settings.annotationEraserWidth,
   };
 }
+
+const DEFAULT_SETTINGS: Settings = fromOverlaySettings(
+  DEFAULT_OVERLAY_SETTINGS,
+);
 
 export default function Controller() {
   const hasBridge = typeof miniCast !== "undefined";
