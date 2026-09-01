@@ -1,6 +1,7 @@
 name: Verify
 
 # Release candidates must pass this Windows manual-QA readiness gate.
+# Stable controller selectors are verified through the packaged renderer.
 on:
   push:
     branches: [main]
