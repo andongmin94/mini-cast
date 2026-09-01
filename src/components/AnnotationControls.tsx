@@ -65,6 +65,7 @@ export default function AnnotationControls({
           <button
             key={option}
             type="button"
+            data-annotation-tool={option}
             title={`${label} (${shortcut})`}
             onClick={() => onToolChange(option)}
             className={`flex h-14 flex-col items-center justify-center rounded-md text-xs transition-colors ${

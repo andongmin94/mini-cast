@@ -568,39 +568,49 @@ async function verifyControllerAnnotationToolWiring() {
     throw new Error("controller window was not created");
   }
 
-  const clickButton = async (label: string, titlePrefix = "") => {
-    const encodedLabel = JSON.stringify(label);
-    const encodedTitlePrefix = JSON.stringify(titlePrefix);
+  const clickSelector = async (selector: string, description: string) => {
+    const encodedSelector = JSON.stringify(selector);
     await waitFor(
       async () =>
         (await controller.webContents.executeJavaScript(
           `(() => {
-            const buttons = [...document.querySelectorAll("button")];
-            const target = buttons.find((button) => {
-              const textMatches = button.textContent?.trim() === ${encodedLabel};
-              const prefix = ${encodedTitlePrefix};
-              const titleMatches = prefix
-                ? button.getAttribute("title")?.startsWith(prefix)
-                : true;
-              return textMatches && titleMatches;
-            });
-            target?.click();
-            return Boolean(target);
+            const target = document.querySelector(${encodedSelector});
+            if (!(target instanceof HTMLButtonElement)) return false;
+            target.click();
+            return true;
           })()`,
           true,
         )) as boolean,
-      2_000,
-      `controller button: ${label}`,
+      5_000,
+      description,
     );
   };
 
-  await clickButton("판서");
-  await clickButton("펜", "펜 (");
-  await waitFor(() => annotationTool === "pen", 2_000, "controller pen tool IPC");
-  await clickButton("조작", "조작 (");
+  await clickSelector(
+    '[data-mini-cast-tab="annotation"]',
+    "controller annotation tab",
+  );
+  await waitFor(
+    async () =>
+      (await controller.webContents.executeJavaScript(
+        `document.querySelector('[data-mini-cast-tab="annotation"]')?.getAttribute("data-state") === "active"`,
+        true,
+      )) as boolean,
+    5_000,
+    "controller annotation tab active state",
+  );
+  await clickSelector(
+    '[data-annotation-tool="pen"]',
+    "controller pen tool button",
+  );
+  await waitFor(() => annotationTool === "pen", 5_000, "controller pen tool IPC");
+  await clickSelector(
+    '[data-annotation-tool="pass-through"]',
+    "controller pass-through tool button",
+  );
   await waitFor(
     () => annotationTool === "pass-through",
-    2_000,
+    5_000,
     "controller pass-through IPC",
   );
 }

@@ -245,7 +245,10 @@ export default function Controller() {
               <Keyboard className="mr-2 h-4 w-4" />
               키보드
             </TabsTrigger>
-            <TabsTrigger value="annotation">
+            <TabsTrigger
+              value="annotation"
+              data-mini-cast-tab="annotation"
+            >
               <PenLine className="mr-2 h-4 w-4" />
               판서
             </TabsTrigger>
