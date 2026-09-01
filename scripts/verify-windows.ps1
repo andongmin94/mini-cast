@@ -24,6 +24,11 @@ function Wait-ForNoMiniCastProcess([int]$TimeoutSeconds = 15) {
   throw "MiniCast process did not exit cleanly.`n$details"
 }
 
+function Read-SmokeLog([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path)) { return '' }
+  return Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+}
+
 function Invoke-MiniCastSmoke {
   param(
     [Parameter(Mandatory = $true)][string]$Executable,
@@ -38,33 +43,53 @@ function Invoke-MiniCastSmoke {
 
   Stop-MiniCastProcesses
   $sentinel = Join-Path $env:RUNNER_TEMP ("mini-cast-{0}-{1}.json" -f $Label, [Guid]::NewGuid())
+  $stdoutLog = Join-Path $LogDirectory ("{0}-stdout.log" -f $Label)
+  $stderrLog = Join-Path $LogDirectory ("{0}-stderr.log" -f $Label)
+  Remove-Item $stdoutLog, $stderrLog -Force -ErrorAction SilentlyContinue
   $modeArgument = if ($Mode -eq 'interaction') {
     '--interaction-smoke-test'
   } else {
     '--smoke-test'
   }
   $arguments = @($modeArgument, "--smoke-sentinel=$sentinel")
-  $launcher = Start-Process -FilePath $Executable -ArgumentList $arguments -PassThru
+  $launcher = Start-Process -FilePath $Executable -ArgumentList $arguments -PassThru `
+    -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $payload = $null
 
   try {
     do {
-      if ($launcher.HasExited -and $launcher.ExitCode -ne 0) {
-        throw "$Label launcher failed with exit code $($launcher.ExitCode)."
-      }
       if (Test-Path $sentinel) {
         $payload = Get-Content $sentinel -Raw | ConvertFrom-Json
         break
+      }
+      if ($launcher.HasExited) {
+        $graceDeadline = [DateTime]::UtcNow.AddSeconds(2)
+        do {
+if (Test-Path $sentinel) {
+  $payload = Get-Content $sentinel -Raw | ConvertFrom-Json
+  break
+}
+Start-Sleep -Milliseconds 100
+        } while ([DateTime]::UtcNow -lt $graceDeadline)
+        if ($null -ne $payload) { break }
+
+        $stdout = Read-SmokeLog $stdoutLog
+        $stderr = Read-SmokeLog $stderrLog
+        throw "$Label launcher exited with code $($launcher.ExitCode) before producing a smoke sentinel.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
       }
       Start-Sleep -Milliseconds 200
     } while ([DateTime]::UtcNow -lt $deadline)
 
     if ($null -eq $payload) {
-      throw "$Label did not produce its smoke sentinel within $TimeoutSeconds seconds."
+      $stdout = Read-SmokeLog $stdoutLog
+      $stderr = Read-SmokeLog $stderrLog
+      throw "$Label did not produce its smoke sentinel within $TimeoutSeconds seconds.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
     }
     if (-not $payload.success) {
-      throw "$Label reported smoke failure: $($payload.error)"
+      $stdout = Read-SmokeLog $stdoutLog
+      $stderr = Read-SmokeLog $stderrLog
+      throw "$Label reported smoke failure: $($payload.error)`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
     }
 
     Wait-ForNoMiniCastProcess -TimeoutSeconds 20
@@ -82,7 +107,6 @@ function Invoke-MiniCastSmoke {
     Stop-MiniCastProcesses
   }
 }
-
 function Read-MsiLogProperty {
   param(
     [Parameter(Mandatory = $true)][string]$LogPath,
