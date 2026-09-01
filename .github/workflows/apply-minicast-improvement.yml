@@ -24,29 +24,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply audited improvement and remove staging files
+      - name: Apply audited source improvement
         shell: bash
         run: |
           set -euo pipefail
+          patch_source='.github/improvement/minicast-0.3.1.patch.gz.b64'
+          verify_source='.github/improvement/verify.yml'
+          if [[ ! -f "$patch_source" || ! -f "$verify_source" ]]; then
+            echo 'Improvement source was already applied.'
+            exit 0
+          fi
+
           expected_base='4958ba66f522e358fc0e8b44079e08ae8cd540b2'
           if ! git merge-base --is-ancestor "$expected_base" HEAD; then
             echo "Expected base is not an ancestor of the staging commit." >&2
             exit 1
           fi
 
-          base64 --decode .github/improvement/minicast-0.3.1.patch.gz.b64 \
-            | gzip --decompress > /tmp/minicast-0.3.1.patch
+          base64 --decode "$patch_source" | gzip --decompress > /tmp/minicast-0.3.1.patch
           echo '68aa5c6dee5fa7f4217aa19768d30908c5d73cf7fd36d8402a1b8bca1ed7724e  /tmp/minicast-0.3.1.patch' \
             | sha256sum --check
 
           git apply --check --exclude=.github/workflows/verify.yml /tmp/minicast-0.3.1.patch
           git apply --index --exclude=.github/workflows/verify.yml /tmp/minicast-0.3.1.patch
-          cp .github/improvement/verify.yml .github/workflows/verify.yml
-          git add .github/workflows/verify.yml
-          git rm \
-            .github/improvement/minicast-0.3.1.patch.gz.b64 \
-            .github/improvement/verify.yml \
-            .github/workflows/apply-minicast-improvement.yml
+          git rm "$patch_source" "$verify_source"
           git diff --cached --check
 
           git config user.name '안동민'
