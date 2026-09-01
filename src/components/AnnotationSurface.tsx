@@ -344,6 +344,7 @@ export default function AnnotationSurface({
         })
         .catch(() => pendingStrokesRef.current.delete(committed.id))
         .finally(() => {
+          pendingStrokesRef.current.delete(committed.id);
           miniCast.endAnnotationGesture(gestureId);
           renderCommitted();
         });
@@ -360,6 +361,7 @@ export default function AnnotationSurface({
           erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
         })
         .finally(() => {
+          erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
           miniCast.endAnnotationGesture(gestureId);
           renderCommitted();
         });

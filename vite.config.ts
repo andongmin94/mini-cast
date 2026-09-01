@@ -18,7 +18,13 @@ export default defineConfig(({ command }) => ({
           command === "serve"
             ? "script-src 'self' 'unsafe-inline';"
             : "script-src 'self';";
-        return html.replace("script-src 'self';", scriptPolicy);
+        const connectPolicy =
+          command === "serve"
+            ? "connect-src 'self' http://127.0.0.1:3000 ws://127.0.0.1:3000;"
+            : "connect-src 'none';";
+        return html
+          .replace("script-src 'self';", scriptPolicy)
+          .replace("connect-src 'none';", connectPolicy);
       },
     },
     react(),
