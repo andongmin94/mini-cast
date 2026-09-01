@@ -1,8 +1,9 @@
 name: Verify
 
 # Release candidates must pass this Windows manual-QA readiness gate.
-# Stable controller selectors are verified with native Windows clicks.
-# Optimistic renderer settlement and packaged CSP are regression-tested.
+# Controller selectors are verified with native Windows clicks.
+# Annotation mutation settlement, incremental rendering, and packaged CSP are regression-tested.
+# Default and explicit software rendering paths are both exercised.
 # Packaged smoke failures retain their sentinel and process diagnostics.
 # MSI verification uses canonical absolute paths.
 on:
@@ -25,12 +26,14 @@ jobs:
 
     steps:
       - name: 체크아웃
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
 
       - name: Node.js 24 설치
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 24
+          node-version: 24.19.0
           cache: npm
 
       - name: 잠금 파일로 의존성 설치
@@ -66,20 +69,55 @@ jobs:
           }
           Set-Content -LiteralPath output/SHA256SUMS.txt -Value $lines -Encoding utf8
 
+      - name: 최종 ZIP 무결성 및 내부 해시 대조
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $msiFiles = @(Get-ChildItem output -File -Filter 'MiniCast-*-x64.msi')
+          if ($msiFiles.Count -ne 1) { throw "Expected one MSI, found $($msiFiles.Count)." }
+          $msi = $msiFiles[0]
+          $exe = Get-Item output/MiniCast.exe
+          $sums = Get-Item output/SHA256SUMS.txt
+          $bundle = Join-Path $PWD ("output/MiniCast-$version-windows.zip")
+          Compress-Archive -LiteralPath $msi.FullName, $exe.FullName, $sums.FullName -DestinationPath $bundle -Force
+
+          $extract = Join-Path $env:RUNNER_TEMP ("mini-cast-bundle-" + [Guid]::NewGuid())
+          Expand-Archive -LiteralPath $bundle -DestinationPath $extract -Force
+          try {
+            $entries = @(Get-ChildItem -LiteralPath $extract -File)
+            if ($entries.Count -ne 3) { throw "Expected 3 ZIP entries, found $($entries.Count)." }
+            $hashLines = @(Get-Content -LiteralPath (Join-Path $extract 'SHA256SUMS.txt'))
+            if ($hashLines.Count -ne 2) { throw "Expected 2 internal hashes, found $($hashLines.Count)." }
+            foreach ($line in $hashLines) {
+              if ($line -notmatch '^([0-9a-f]{64}) \*(.+)$') { throw "Invalid SHA256SUMS line: $line" }
+              $target = Join-Path $extract $Matches[2]
+              if (-not (Test-Path -LiteralPath $target)) { throw "Missing ZIP entry: $($Matches[2])" }
+              $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -ne $Matches[1]) { throw "Hash mismatch for $($Matches[2])." }
+            }
+          } finally {
+            Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+          $bundleHash = (Get-FileHash -LiteralPath $bundle -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath output/BUNDLE-SHA256.txt -Value "$bundleHash *$(Split-Path $bundle -Leaf)" -Encoding utf8
+
       - name: Windows 산출물 업로드
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mini-cast-windows
           path: |
             output/*.msi
             output/MiniCast.exe
             output/SHA256SUMS.txt
+            output/MiniCast-*-windows.zip
+            output/BUNDLE-SHA256.txt
           if-no-files-found: error
           retention-days: 14
 
       - name: 실패 로그 업로드
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mini-cast-verification-logs
           path: verification-logs/**/*
