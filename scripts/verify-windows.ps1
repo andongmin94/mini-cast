@@ -1,8 +1,9 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$OutputDirectory = Join-Path $PSScriptRoot '..\output'
-$LogDirectory = Join-Path $PSScriptRoot '..\verification-logs'
+$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$OutputDirectory = Join-Path $RepositoryRoot 'output'
+$LogDirectory = Join-Path $RepositoryRoot 'verification-logs'
 New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
 
 function Stop-MiniCastProcesses {
@@ -66,11 +67,11 @@ function Invoke-MiniCastSmoke {
       if ($launcher.HasExited) {
         $graceDeadline = [DateTime]::UtcNow.AddSeconds(2)
         do {
-if (Test-Path $sentinel) {
-  $payload = Get-Content $sentinel -Raw | ConvertFrom-Json
-  break
-}
-Start-Sleep -Milliseconds 100
+          if (Test-Path $sentinel) {
+            $payload = Get-Content $sentinel -Raw | ConvertFrom-Json
+            break
+          }
+          Start-Sleep -Milliseconds 100
         } while ([DateTime]::UtcNow -lt $graceDeadline)
         if ($null -ne $payload) { break }
 
@@ -107,6 +108,7 @@ Start-Sleep -Milliseconds 100
     Stop-MiniCastProcesses
   }
 }
+
 function Read-MsiLogProperty {
   param(
     [Parameter(Mandatory = $true)][string]$LogPath,
