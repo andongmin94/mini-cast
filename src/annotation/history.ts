@@ -26,6 +26,11 @@ export interface AnnotationDocumentSnapshot {
   strokes: readonly AnnotationStroke[];
 }
 
+export interface AnnotationMutationResult {
+  accepted: boolean;
+  document: AnnotationDocumentSnapshot | null;
+}
+
 interface IndexedStroke {
   stroke: AnnotationStroke;
   index: number;
@@ -51,6 +56,7 @@ type UnknownRecord = Record<string, unknown>;
 interface DocumentState {
   viewport: AnnotationViewport | null;
   strokes: AnnotationStroke[];
+  strokeIds: Set<string>;
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -215,6 +221,7 @@ export class AnnotationHistory {
         {
           viewport: document.viewport ? { ...document.viewport } : null,
           strokes: document.strokes.map(cloneAnnotationStroke),
+          strokeIds: new Set(document.strokeIds),
         },
       ]),
     );
@@ -265,7 +272,7 @@ export class AnnotationHistory {
 
   addStroke(displayId: number, stroke: AnnotationStroke) {
     const document = this.document(displayId);
-    if (document.strokes.some((item) => item.id === stroke.id)) {
+    if (document.strokeIds.has(stroke.id)) {
       throw new Error(`Duplicate annotation stroke id: ${stroke.id}`);
     }
 
@@ -332,7 +339,11 @@ export class AnnotationHistory {
     const existing = this.documents.get(displayId);
     if (existing) return existing;
 
-    const created: DocumentState = { viewport: null, strokes: [] };
+    const created: DocumentState = {
+      viewport: null,
+      strokes: [],
+      strokeIds: new Set(),
+    };
     this.documents.set(displayId, created);
     return created;
   }
@@ -354,6 +365,7 @@ export class AnnotationHistory {
         0,
         cloneAnnotationStroke(entry.stroke),
       );
+      document.strokeIds.add(entry.stroke.id);
       this.touch(entry.displayId);
       return;
     }
@@ -362,6 +374,7 @@ export class AnnotationHistory {
     document.strokes = document.strokes.filter(
       (stroke) => !removedIds.has(stroke.id),
     );
+    removedIds.forEach((id) => document.strokeIds.delete(id));
     this.touch(entry.displayId);
   }
 
@@ -371,6 +384,7 @@ export class AnnotationHistory {
       document.strokes = document.strokes.filter(
         (stroke) => stroke.id !== entry.stroke.id,
       );
+      document.strokeIds.delete(entry.stroke.id);
       this.touch(entry.displayId);
       return;
     }
@@ -384,6 +398,7 @@ export class AnnotationHistory {
         0,
         cloneAnnotationStroke(stroke),
       );
+      document.strokeIds.add(stroke.id);
     });
     this.touch(entry.displayId);
   }

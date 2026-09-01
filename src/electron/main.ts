@@ -19,12 +19,18 @@ import {
   AnnotationHistory,
   isAnnotationStroke,
   readAnnotationStrokeIds,
+  type AnnotationDocumentSnapshot,
+  type AnnotationMutationResult,
 } from "../annotation/history.js";
 import {
   ACTIVE_COMMAND_SHORTCUTS,
   ESCAPE_SHORTCUT,
   TOOL_SHORTCUTS,
 } from "./annotation-shortcuts.js";
+import {
+  resolveClearDisplayId,
+  type AnnotationCommandOrigin,
+} from "./annotation-target.js";
 import {
   DEFAULT_OVERLAY_SETTINGS,
   isAnnotationCommand,
@@ -79,7 +85,7 @@ const smokeOptions = readSmokeOptions(process.argv);
 const rendererUrl =
   app.isPackaged || smokeOptions.mode ? null : "http://127.0.0.1:3000";
 
-if (smokeOptions.mode) app.disableHardwareAcceleration();
+if (smokeOptions.disableHardwareAcceleration) app.disableHardwareAcceleration();
 
 type SettingsStore = Store<{ settings: OverlaySettings }>;
 
@@ -87,6 +93,7 @@ const annotationHistory = new AnnotationHistory();
 const gestureLeases = new GestureLeaseRegistry();
 const unavailableShortcuts = new Set<string>();
 let annotationTool: AnnotationTool = "pass-through";
+let lastAnnotationDisplayId: number | null = null;
 let controllerSettingsRead = false;
 let currentSettings = DEFAULT_OVERLAY_SETTINGS;
 let settingsSaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -162,13 +169,31 @@ function displayIdForSender(sender: WebContents) {
   return index >= 0 ? (overlayDisplays[index]?.id ?? null) : null;
 }
 
-function sendAnnotationDocument(displayId: number) {
-  const snapshot = annotationHistory.getSnapshot(displayId);
+function sendAnnotationDocument(
+  displayId: number,
+  snapshot: AnnotationDocumentSnapshot = annotationHistory.getSnapshot(displayId),
+  excludedWebContentsId: number | null = null,
+) {
   overlayWindows.forEach((window, index) => {
-    if (overlayDisplays[index]?.id === displayId) {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) return;
+    if (
+      overlayDisplays[index]?.id === displayId &&
+      window.webContents.id !== excludedWebContentsId
+    ) {
       sendToWindow(window, "annotation-document-updated", snapshot);
     }
   });
+}
+
+function annotationMutationResult(
+  displayId: number | null,
+  accepted: boolean,
+): AnnotationMutationResult {
+  return {
+    accepted,
+    document:
+      displayId === null ? null : annotationHistory.getSnapshot(displayId),
+  };
 }
 
 function isMainWindow(sender: WebContents) {
@@ -253,7 +278,10 @@ function annotationCommandDisplayId() {
   return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id;
 }
 
-function sendAnnotationCommand(command: AnnotationCommand) {
+function sendAnnotationCommand(
+  command: AnnotationCommand,
+  origin: AnnotationCommandOrigin = "shortcut",
+) {
   if (displayRebuildInProgress) return;
 
   if (command === "undo" || command === "redo") {
@@ -266,7 +294,15 @@ function sendAnnotationCommand(command: AnnotationCommand) {
   }
 
   cancelActiveAnnotationGestures();
-  const displayId = annotationHistory.clearDisplay(annotationCommandDisplayId());
+  const targetDisplayId = resolveClearDisplayId(
+    origin,
+    annotationCommandDisplayId(),
+    lastAnnotationDisplayId,
+    connectedDisplayIds(),
+  );
+  if (targetDisplayId === null) return;
+
+  const displayId = annotationHistory.clearDisplay(targetDisplayId);
   if (displayId !== null) sendAnnotationDocument(displayId);
 }
 
@@ -327,7 +363,7 @@ function registerIpc(store: SettingsStore) {
 
   ipcMain.on("annotation-command", (event, command: unknown) => {
     if (isMainWindow(event.sender) && isAnnotationCommand(command)) {
-      sendAnnotationCommand(command);
+      sendAnnotationCommand(command, "controller");
     }
   });
 
@@ -342,6 +378,7 @@ function registerIpc(store: SettingsStore) {
       return;
     }
 
+    lastAnnotationDisplayId = displayId;
     const previous = gestureLeases.begin(event.sender.id, gestureId);
     if (previous && previous !== gestureId) {
       sendToWebContents(event.sender, "annotation-gesture-cancel", previous);
@@ -359,17 +396,18 @@ function registerIpc(store: SettingsStore) {
         !gestureLeases.matches(event.sender.id, gestureId) ||
         !isAnnotationStroke(stroke)
       ) {
-        return false;
+        return annotationMutationResult(displayId, false);
       }
 
       try {
         annotationHistory.addStroke(displayId, stroke);
         gestureLeases.end(event.sender.id, gestureId);
-        sendAnnotationDocument(displayId);
-        return true;
+        const document = annotationHistory.getSnapshot(displayId);
+        sendAnnotationDocument(displayId, document, event.sender.id);
+        return { accepted: true, document };
       } catch {
         gestureLeases.end(event.sender.id, gestureId);
-        return false;
+        return annotationMutationResult(displayId, false);
       }
     },
   );
@@ -386,13 +424,16 @@ function registerIpc(store: SettingsStore) {
         !gestureLeases.matches(event.sender.id, gestureId) ||
         ids === null
       ) {
-        return false;
+        return annotationMutationResult(displayId, false);
       }
 
       gestureLeases.end(event.sender.id, gestureId);
       const changedDisplayId = annotationHistory.removeStrokes(displayId, ids);
-      if (changedDisplayId !== null) sendAnnotationDocument(changedDisplayId);
-      return changedDisplayId !== null;
+      const document = annotationHistory.getSnapshot(displayId);
+      if (changedDisplayId !== null) {
+        sendAnnotationDocument(changedDisplayId, document, event.sender.id);
+      }
+      return { accepted: changedDisplayId !== null, document };
     },
   );
 
@@ -452,19 +493,26 @@ async function rebuildDisplays(store: SettingsStore) {
   if (shuttingDown) return;
 
   displayRebuildInProgress = true;
-  cancelActiveAnnotationGestures();
-  const displays = getOrderedOverlayDisplays();
-  const historyCheckpoint = annotationHistory.clone();
+  let historyCheckpoint: AnnotationHistory | null = null;
+  let overlaySwapCommitted = false;
 
   try {
+    cancelActiveAnnotationGestures();
+    const displays = getOrderedOverlayDisplays();
+    historyCheckpoint = annotationHistory.clone();
     prepareDisplayHistory(displays);
     await createOverlayWindows(rendererUrl, displays, overlayCallbacks());
+    overlaySwapCommitted = true;
     if (shuttingDown) return;
 
-    const nextSettings = normalizeOverlaySettings(
-      currentSettings,
-      displays.map((display) => display.id),
-    );
+    const connectedIds = displays.map((display) => display.id);
+    if (
+      lastAnnotationDisplayId !== null &&
+      !connectedIds.includes(lastAnnotationDisplayId)
+    ) {
+      lastAnnotationDisplayId = null;
+    }
+    const nextSettings = normalizeOverlaySettings(currentSettings, connectedIds);
     commitDisplaySettings(store, nextSettings);
     ensureMainWindowVisible();
     sendSettingsToAll();
@@ -473,15 +521,22 @@ async function rebuildDisplays(store: SettingsStore) {
     refreshCursorCapture();
     sendToWindow(mainWindow, "displays-updated", getConnectedDisplays());
   } catch (error) {
-    annotationHistory.restoreFrom(historyCheckpoint);
-    const restoredSettings = normalizeOverlaySettings(
-      currentSettings,
-      connectedDisplayIds(),
-    );
-    commitDisplaySettings(store, restoredSettings);
-    sendSettingsToAll();
-    sendAnnotationState();
-    refreshCursorCapture();
+    if (!overlaySwapCommitted && historyCheckpoint) {
+      annotationHistory.restoreFrom(historyCheckpoint);
+    }
+
+    try {
+      const restoredSettings = normalizeOverlaySettings(
+        currentSettings,
+        connectedDisplayIds(),
+      );
+      commitDisplaySettings(store, restoredSettings);
+      sendSettingsToAll();
+      sendAnnotationState();
+      refreshCursorCapture();
+    } catch (recoveryError) {
+      console.error("Failed to recover display state:", recoveryError);
+    }
     throw error;
   } finally {
     displayRebuildInProgress = false;
@@ -963,6 +1018,8 @@ async function runSmokeTest() {
   await writeSmokeSentinel(smokeOptions.sentinelPath, {
     mode,
     success: true,
+    hardwareAccelerationDisabled: smokeOptions.disableHardwareAcceleration,
+    gpuFeatureStatus: app.getGPUFeatureStatus(),
     timestamp: new Date().toISOString(),
   });
   console.log(`MiniCast ${mode} smoke test passed`);

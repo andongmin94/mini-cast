@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { shouldAdoptAnnotationDocument } from "@/annotation/document-order";
 import {
   eraserSweepHitsStroke,
   pointHitsStroke,
@@ -16,6 +17,10 @@ import type {
   AnnotationStroke,
   StrokeTool,
 } from "@/annotation/history";
+import {
+  planCommittedRender,
+  type CommittedRenderState,
+} from "@/annotation/render-plan";
 import type { AnnotationTool, OverlaySettings } from "@/electron/contract";
 
 interface AnnotationSurfaceProps {
@@ -23,6 +28,7 @@ interface AnnotationSurfaceProps {
   settings: OverlaySettings;
   displayId: number | null;
   document: AnnotationDocumentSnapshot | null;
+  onAuthoritativeDocument(document: AnnotationDocumentSnapshot): void;
 }
 
 interface ActiveStroke extends Omit<AnnotationStroke, "points"> {
@@ -152,10 +158,13 @@ export default function AnnotationSurface({
   settings,
   displayId,
   document,
+  onAuthoritativeDocument,
 }: AnnotationSurfaceProps) {
   const committedCanvasRef = useRef<HTMLCanvasElement>(null);
   const gestureCanvasRef = useRef<HTMLCanvasElement>(null);
   const documentRef = useRef<AnnotationDocumentSnapshot | null>(document);
+  const currentDisplayIdRef = useRef<number | null>(displayId);
+  const committedRenderStateRef = useRef<CommittedRenderState | null>(null);
   const pendingStrokesRef = useRef<Map<string, AnnotationStroke>>(new Map());
   const pendingRemovalIdsRef = useRef<Set<string>>(new Set());
   const activePointerRef = useRef<number | null>(null);
@@ -167,6 +176,10 @@ export default function AnnotationSurface({
   const eraserRadiusRef = useRef(settings.annotationEraserWidth / 2);
 
   const interactive = tool !== "pass-through" && displayId !== null;
+
+  useLayoutEffect(() => {
+    currentDisplayIdRef.current = displayId;
+  }, [displayId]);
 
   const visibleStrokes = useCallback(() => {
     const committed = documentRef.current?.strokes ?? [];
@@ -183,15 +196,71 @@ export default function AnnotationSurface({
     );
   }, []);
 
-  const renderCommitted = useCallback(() => {
-    const canvas = committedCanvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
+  const renderCommitted = useCallback(
+    (forceReset = false) => {
+      const canvas = committedCanvasRef.current;
+      if (!canvas) return;
+      const context = canvas.getContext("2d");
+      if (!context) return;
 
-    context.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-    visibleStrokes().forEach((stroke) => drawStroke(context, stroke));
-  }, [visibleStrokes]);
+      const strokes = visibleStrokes();
+      const viewport = documentRef.current?.viewport ?? null;
+      const nextState: CommittedRenderState = {
+        displayId: currentDisplayIdRef.current,
+        viewportWidth: viewport?.width ?? null,
+        viewportHeight: viewport?.height ?? null,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height,
+        strokeIds: strokes.map((stroke) => stroke.id),
+      };
+      const plan = forceReset
+        ? { reset: true, appendFrom: 0 }
+        : planCommittedRender(committedRenderStateRef.current, nextState);
+
+      if (plan.reset) {
+        context.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      }
+      for (let index = plan.appendFrom; index < strokes.length; index += 1) {
+        drawStroke(context, strokes[index]);
+      }
+      committedRenderStateRef.current = nextState;
+    },
+    [visibleStrokes],
+  );
+
+  const reconcilePendingWithDocument = useCallback(
+    (next: AnnotationDocumentSnapshot) => {
+      const committedIds = new Set(next.strokes.map((stroke) => stroke.id));
+      pendingStrokesRef.current.forEach((_stroke, id) => {
+        if (committedIds.has(id)) pendingStrokesRef.current.delete(id);
+      });
+      pendingRemovalIdsRef.current.forEach((id) => {
+        if (!committedIds.has(id)) pendingRemovalIdsRef.current.delete(id);
+      });
+    },
+    [],
+  );
+
+  const adoptAuthoritativeDocument = useCallback(
+    (next: AnnotationDocumentSnapshot, publish: boolean) => {
+      const currentRevision = documentRef.current?.revision ?? -1;
+      if (
+        !shouldAdoptAnnotationDocument(
+          currentDisplayIdRef.current,
+          currentRevision,
+          next,
+        )
+      ) {
+        return false;
+      }
+
+      documentRef.current = next;
+      reconcilePendingWithDocument(next);
+      if (publish) onAuthoritativeDocument(next);
+      return true;
+    },
+    [onAuthoritativeDocument, reconcilePendingWithDocument],
+  );
 
   const clearGesture = useCallback(() => {
     clearCanvas(gestureCanvasRef.current);
@@ -238,7 +307,7 @@ export default function AnnotationSurface({
       resizeCanvas(committed);
       resizeCanvas(gesture);
       clearGesture();
-      renderCommitted();
+      renderCommitted(true);
     };
     resize();
 
@@ -248,24 +317,24 @@ export default function AnnotationSurface({
   }, [clearGesture, renderCommitted]);
 
   useEffect(() => {
-    documentRef.current = document;
-    if (document) {
-      const committedIds = new Set(document.strokes.map((stroke) => stroke.id));
-      pendingStrokesRef.current.forEach((_stroke, id) => {
-        if (committedIds.has(id)) pendingStrokesRef.current.delete(id);
-      });
-      pendingRemovalIdsRef.current.forEach((id) => {
-        if (!committedIds.has(id)) pendingRemovalIdsRef.current.delete(id);
-      });
-    }
-    renderCommitted();
-  }, [document, renderCommitted]);
-
-  useEffect(() => {
+    documentRef.current = null;
+    committedRenderStateRef.current = null;
     pendingStrokesRef.current.clear();
     pendingRemovalIdsRef.current.clear();
     cancelGesture();
-  }, [cancelGesture, displayId]);
+    renderCommitted(true);
+  }, [cancelGesture, displayId, renderCommitted]);
+
+  useEffect(() => {
+    if (!document) {
+      documentRef.current = null;
+      committedRenderStateRef.current = null;
+      renderCommitted(true);
+      return;
+    }
+
+    if (adoptAuthoritativeDocument(document, false)) renderCommitted();
+  }, [adoptAuthoritativeDocument, document, renderCommitted]);
 
   useEffect(() => {
     cancelGesture();
@@ -339,32 +408,34 @@ export default function AnnotationSurface({
       pendingStrokesRef.current.set(committed.id, committed);
       void miniCast
         .commitAnnotationStroke(gestureId, committed)
-        .then((accepted) => {
-          if (!accepted) pendingStrokesRef.current.delete(committed.id);
-        })
-        .catch(() => pendingStrokesRef.current.delete(committed.id))
-        .finally(() => {
+        .then((result) => {
+          if (result.document) {
+            adoptAuthoritativeDocument(result.document, true);
+          }
           pendingStrokesRef.current.delete(committed.id);
-          miniCast.endAnnotationGesture(gestureId);
           renderCommitted();
-        });
+        })
+        .catch(() => {
+          pendingStrokesRef.current.delete(committed.id);
+          renderCommitted();
+        })
+        .finally(() => miniCast.endAnnotationGesture(gestureId));
     } else if (erasedIds.length) {
       erasedIds.forEach((id) => pendingRemovalIdsRef.current.add(id));
       void miniCast
         .removeAnnotationStrokes(gestureId, erasedIds)
-        .then((accepted) => {
-          if (!accepted) {
-            erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
+        .then((result) => {
+          if (result.document) {
+            adoptAuthoritativeDocument(result.document, true);
           }
+          erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
+          renderCommitted();
         })
         .catch(() => {
           erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
-        })
-        .finally(() => {
-          erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
-          miniCast.endAnnotationGesture(gestureId);
           renderCommitted();
-        });
+        })
+        .finally(() => miniCast.endAnnotationGesture(gestureId));
     } else {
       miniCast.endAnnotationGesture(gestureId);
     }

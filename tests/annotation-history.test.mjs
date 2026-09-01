@@ -150,3 +150,50 @@ test("history checkpoints restore documents, revisions, and both stacks", () => 
   checkpoint.addStroke(10, stroke("checkpoint-only", 10, 10, 2));
   assert.deepEqual(ids(history, 10), ["a", "b"]);
 });
+
+test("large append histories preserve ids and chronological undo/redo", () => {
+  const history = new AnnotationHistory();
+  const total = 5_000;
+  for (let index = 0; index < total; index += 1) {
+    history.addStroke(1, stroke(`large-${index}`, index, index));
+  }
+  assert.equal(history.getSnapshot(1).strokes.length, total);
+
+  for (let index = 0; index < 1_000; index += 1) history.undo();
+  assert.equal(history.getSnapshot(1).strokes.length, total - 1_000);
+
+  for (let index = 0; index < 1_000; index += 1) history.redo();
+  const snapshot = history.getSnapshot(1);
+  assert.equal(snapshot.strokes.length, total);
+  assert.equal(snapshot.strokes[0].id, "large-0");
+  assert.equal(snapshot.strokes[total - 1].id, `large-${total - 1}`);
+});
+
+test("stroke id index stays consistent across remove and undo/redo", () => {
+  const history = new AnnotationHistory();
+  history.addStroke(1, stroke("stable-id"));
+  assert.throws(
+    () => history.addStroke(1, stroke("stable-id")),
+    /Duplicate annotation stroke id/,
+  );
+
+  history.removeStrokes(1, ["stable-id"]);
+  history.addStroke(1, stroke("stable-id", 3, 4));
+  assert.equal(history.getSnapshot(1).strokes.length, 1);
+
+  history.undo();
+  history.undo();
+  assert.equal(history.getSnapshot(1).strokes[0].id, "stable-id");
+  assert.throws(
+    () => history.addStroke(1, stroke("stable-id")),
+    /Duplicate annotation stroke id/,
+  );
+
+  history.redo();
+  history.redo();
+  assert.equal(history.getSnapshot(1).strokes[0].id, "stable-id");
+  assert.throws(
+    () => history.addStroke(1, stroke("stable-id")),
+    /Duplicate annotation stroke id/,
+  );
+});

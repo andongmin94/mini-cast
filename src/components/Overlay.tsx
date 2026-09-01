@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { shouldAdoptAnnotationDocument } from "@/annotation/document-order";
 import type { AnnotationDocumentSnapshot } from "@/annotation/history";
 import AnnotationSurface from "@/components/AnnotationSurface";
 import type {
@@ -105,6 +106,22 @@ export default function Overlay() {
     settingsRef.current = settings;
   }, [settings]);
 
+  const adoptAnnotationDocument = useCallback(
+    (document: AnnotationDocumentSnapshot) => {
+      if (
+        shouldAdoptAnnotationDocument(
+          displayIdRef.current,
+          documentRevisionRef.current,
+          document,
+        )
+      ) {
+        documentRevisionRef.current = document.revision;
+        setAnnotationDocument(document);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (typeof miniCast === "undefined") return;
 
@@ -145,20 +162,10 @@ export default function Overlay() {
       sourceSize.current = { width, height };
     };
 
-    const onDocumentUpdated = (document: AnnotationDocumentSnapshot) => {
-      if (
-        document.displayId === displayIdRef.current &&
-        document.revision >= documentRevisionRef.current
-      ) {
-        documentRevisionRef.current = document.revision;
-        setAnnotationDocument(document);
-      }
-    };
-
     const unsubscribe = [
       miniCast.onSettingsUpdated(setSettings),
       miniCast.onAnnotationStateUpdated(setAnnotationState),
-      miniCast.onAnnotationDocumentUpdated(onDocumentUpdated),
+      miniCast.onAnnotationDocumentUpdated(adoptAnnotationDocument),
       miniCast.onMouseMove((position) =>
         setMousePosition(position ? scalePosition(position) : null),
       ),
@@ -169,7 +176,7 @@ export default function Overlay() {
 
     miniCast.notifyOverlayReady();
     return () => unsubscribe.forEach((stop) => stop());
-  }, []);
+  }, [adoptAnnotationDocument]);
 
   const passive = annotationState.tool === "pass-through";
   const cursorPressed =
@@ -191,6 +198,7 @@ export default function Overlay() {
         settings={settings}
         displayId={displayId}
         document={annotationDocument}
+        onAuthoritativeDocument={adoptAnnotationDocument}
       />
 
       {mousePosition && passive && settings.showCursorHighlight && (

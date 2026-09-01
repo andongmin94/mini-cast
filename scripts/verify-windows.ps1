@@ -35,7 +35,8 @@ function Invoke-MiniCastSmoke {
     [Parameter(Mandatory = $true)][string]$Executable,
     [Parameter(Mandatory = $true)][ValidateSet('startup', 'interaction')][string]$Mode,
     [Parameter(Mandatory = $true)][string]$Label,
-    [int]$TimeoutSeconds = 45
+    [int]$TimeoutSeconds = 45,
+    [switch]$DisableHardwareAcceleration
   )
 
   if (-not (Test-Path $Executable)) {
@@ -53,6 +54,9 @@ function Invoke-MiniCastSmoke {
     '--smoke-test'
   }
   $arguments = @($modeArgument, "--smoke-sentinel=$sentinel")
+  if ($DisableHardwareAcceleration) {
+    $arguments += '--disable-hardware-acceleration'
+  }
   $launcher = Start-Process -FilePath $Executable -ArgumentList $arguments -PassThru `
     -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
@@ -91,6 +95,9 @@ function Invoke-MiniCastSmoke {
       $stdout = Read-SmokeLog $stdoutLog
       $stderr = Read-SmokeLog $stderrLog
       throw "$Label reported smoke failure: $($payload.error)`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
+    }
+    if ([bool]$payload.hardwareAccelerationDisabled -ne [bool]$DisableHardwareAcceleration) {
+      throw "$Label did not run with the requested rendering mode."
     }
 
     Wait-ForNoMiniCastProcess -TimeoutSeconds 20
@@ -149,8 +156,10 @@ if (-not (Test-Path $unpackedExecutable)) { throw 'win-unpacked MiniCast.exe was
 if (-not (Test-Path $portableExecutable)) { throw 'Portable MiniCast.exe was not produced.' }
 if (-not (Test-Path $msi)) { throw "Expected MSI package was not produced: $msi" }
 
-Write-Host 'Verifying unpacked startup...'
+Write-Host 'Verifying unpacked startup with the default rendering path...'
 Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'unpacked-startup'
+Write-Host 'Verifying the explicit software-rendering fallback...'
+Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'unpacked-software-startup' -DisableHardwareAcceleration
 Write-Host 'Verifying real Windows click-through and annotation routing...'
 Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-interaction' -TimeoutSeconds 90
 Write-Host 'Verifying portable launcher startup and complete shutdown...'

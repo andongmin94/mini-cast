@@ -6,6 +6,7 @@ export type SmokeMode = "startup" | "interaction";
 export interface SmokeOptions {
   mode: SmokeMode | null;
   sentinelPath: string | null;
+  disableHardwareAcceleration: boolean;
 }
 
 export function readSmokeOptions(argv: readonly string[]): SmokeOptions {
@@ -20,6 +21,9 @@ export function readSmokeOptions(argv: readonly string[]): SmokeOptions {
   return {
     mode,
     sentinelPath: sentinel ? sentinel.slice("--smoke-sentinel=".length) : null,
+    disableHardwareAcceleration: argv.includes(
+      "--disable-hardware-acceleration",
+    ),
   };
 }
 

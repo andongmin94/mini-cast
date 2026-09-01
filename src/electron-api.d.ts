@@ -1,5 +1,6 @@
 import type {
   AnnotationDocumentSnapshot,
+  AnnotationMutationResult,
   AnnotationStroke,
 } from "./annotation/history";
 import type {
@@ -30,11 +31,11 @@ interface MiniCastBridge {
   commitAnnotationStroke(
     gestureId: string,
     stroke: AnnotationStroke,
-  ): Promise<boolean>;
+  ): Promise<AnnotationMutationResult>;
   removeAnnotationStrokes(
     gestureId: string,
     ids: readonly string[],
-  ): Promise<boolean>;
+  ): Promise<AnnotationMutationResult>;
   endAnnotationGesture(gestureId: string): void;
   onDisplaysUpdated(listener: (displays: DisplayInfo[]) => void): Unsubscribe;
   onSettingsUpdated(listener: (settings: OverlaySettings) => void): Unsubscribe;
