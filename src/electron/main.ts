@@ -562,31 +562,57 @@ async function inspectAllRenderers() {
   );
 }
 
+async function controllerElementScreenPoint(
+  controller: BrowserWindow,
+  selector: string,
+) {
+  const encodedSelector = JSON.stringify(selector);
+  const center = (await controller.webContents.executeJavaScript(
+    `(() => {
+      const target = document.querySelector(${encodedSelector});
+      if (!(target instanceof HTMLElement)) return null;
+      const bounds = target.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return null;
+      return {
+        x: bounds.left + bounds.width / 2,
+        y: bounds.top + bounds.height / 2
+      };
+    })()`,
+    true,
+  )) as { x: number; y: number } | null;
+  if (!center) return null;
+
+  const contentBounds = controller.getContentBounds();
+  return {
+    x: Math.round(contentBounds.x + center.x),
+    y: Math.round(contentBounds.y + center.y),
+  };
+}
+
+async function clickControllerElement(
+  controller: BrowserWindow,
+  selector: string,
+  description: string,
+) {
+  showMainWindow();
+  await waitFor(
+    async () => Boolean(await controllerElementScreenPoint(controller, selector)),
+    5_000,
+    description,
+  );
+  const point = await controllerElementScreenPoint(controller, selector);
+  if (!point) throw new Error(`${description} was not visible`);
+  await injectWindowsClick(point.x, point.y);
+}
+
 async function verifyControllerAnnotationToolWiring() {
   const controller = mainWindow;
   if (!controller || controller.isDestroyed()) {
     throw new Error("controller window was not created");
   }
 
-  const clickSelector = async (selector: string, description: string) => {
-    const encodedSelector = JSON.stringify(selector);
-    await waitFor(
-      async () =>
-        (await controller.webContents.executeJavaScript(
-          `(() => {
-            const target = document.querySelector(${encodedSelector});
-            if (!(target instanceof HTMLButtonElement)) return false;
-            target.click();
-            return true;
-          })()`,
-          true,
-        )) as boolean,
-      5_000,
-      description,
-    );
-  };
-
-  await clickSelector(
+  await clickControllerElement(
+    controller,
     '[data-mini-cast-tab="annotation"]',
     "controller annotation tab",
   );
@@ -599,12 +625,14 @@ async function verifyControllerAnnotationToolWiring() {
     5_000,
     "controller annotation tab active state",
   );
-  await clickSelector(
+  await clickControllerElement(
+    controller,
     '[data-annotation-tool="pen"]',
     "controller pen tool button",
   );
   await waitFor(() => annotationTool === "pen", 5_000, "controller pen tool IPC");
-  await clickSelector(
+  await clickControllerElement(
+    controller,
     '[data-annotation-tool="pass-through"]',
     "controller pass-through tool button",
   );
