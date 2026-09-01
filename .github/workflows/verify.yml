@@ -4,6 +4,7 @@ name: Verify
 # Stable controller selectors are verified with native Windows clicks.
 # Optimistic renderer settlement and packaged CSP are regression-tested.
 # Packaged smoke failures retain their sentinel and process diagnostics.
+# MSI verification uses canonical absolute paths.
 on:
   push:
     branches: [main]
