@@ -1,3 +1,5 @@
+import type { AnnotationTextDraft } from "../annotation/text.js";
+
 export type KeyDisplayPosition =
   "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
@@ -6,6 +8,11 @@ export const ANNOTATION_TOOLS = [
   "pen",
   "highlighter",
   "eraser",
+  "line",
+  "arrow",
+  "rectangle",
+  "ellipse",
+  "text",
 ] as const;
 export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
 
@@ -13,6 +20,7 @@ export const ANNOTATION_COMMANDS = ["undo", "redo", "clear"] as const;
 export type AnnotationCommand = (typeof ANNOTATION_COMMANDS)[number];
 
 export interface AnnotationState {
+  textDraft: AnnotationTextDraft | null;
   tool: AnnotationTool;
   unavailableShortcuts: readonly string[];
   canUndo: boolean;

@@ -1,5 +1,12 @@
+import AnnotationTextComposer from "./AnnotationTextComposer";
+import type { AnnotationTextDraft } from "@/annotation/text";
 import {
   Eraser,
+  Minus,
+  ArrowUpRight,
+  Square,
+  Circle,
+  Type,
   Highlighter,
   MousePointer2,
   PenLine,
@@ -17,6 +24,8 @@ import type {
 } from "@/shared/contract";
 
 interface AnnotationControlsProps {
+  textDraft: AnnotationTextDraft | null;
+  onPrepareText(draft: AnnotationTextDraft): Promise<boolean>;
   tool: AnnotationTool;
   settings: AnnotationPreferences;
   onToolChange(tool: AnnotationTool): void;
@@ -50,9 +59,16 @@ const TOOL_OPTIONS = [
     shortcut: "Alt+Shift+5",
     Icon: Eraser,
   },
+  { tool: "line", label: "직선", shortcut: "드래그 · Shift 45°", Icon: Minus },
+  { tool: "arrow", label: "화살표", shortcut: "드래그 · Shift 45°", Icon: ArrowUpRight },
+  { tool: "rectangle", label: "사각형", shortcut: "드래그 · Shift 정사각형", Icon: Square },
+  { tool: "ellipse", label: "타원", shortcut: "드래그 · Shift 원", Icon: Circle },
+  { tool: "text", label: "텍스트", shortcut: "입력 후 클릭 배치", Icon: Type },
 ] as const;
 
 export default function AnnotationControls({
+  textDraft,
+  onPrepareText,
   tool,
   settings,
   onToolChange,
@@ -64,7 +80,7 @@ export default function AnnotationControls({
 }: AnnotationControlsProps) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {TOOL_OPTIONS.map(({ tool: option, label, shortcut, Icon }) => (
           <button
             key={option}
@@ -73,11 +89,10 @@ export default function AnnotationControls({
             aria-pressed={tool === option}
             title={`${label} (${shortcut})`}
             onClick={() => onToolChange(option)}
-            className={`flex h-14 flex-col items-center justify-center rounded-md text-xs transition-colors ${
-              tool === option
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted hover:bg-accent"
-            }`}
+            className={`flex h-14 flex-col items-center justify-center rounded-md text-xs transition-colors ${tool === option
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted hover:bg-accent"
+              }`}
           >
             <Icon className="mb-1 size-4" />
             {label}
@@ -85,6 +100,7 @@ export default function AnnotationControls({
         ))}
       </div>
 
+      {tool === "text" && <AnnotationTextComposer draft={textDraft} onPrepare={onPrepareText} />}
       <p className="text-muted-foreground text-center text-[11px]">
         판서 중에는 커서 하이라이트와 클릭 효과가 자동으로 숨겨집니다.
       </p>
@@ -97,7 +113,7 @@ export default function AnnotationControls({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex items-center justify-center gap-3">
-          <Label htmlFor="annotation-pen-color">펜 색상</Label>
+          <Label htmlFor="annotation-pen-color">그리기 색상</Label>
           <input
             id="annotation-pen-color"
             type="color"
@@ -124,7 +140,7 @@ export default function AnnotationControls({
 
       <div className="space-y-1">
         <AnnotationSlider
-          label="펜 굵기"
+          label="펜·도형 굵기"
           value={settings.annotationPenWidth}
           min={1}
           max={24}

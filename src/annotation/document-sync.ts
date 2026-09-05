@@ -1,8 +1,8 @@
 import type { AnnotationFailureReason } from "./errors.js";
 import {
-  isAnnotationStroke,
+  isAnnotationElement,
   type AnnotationDocumentSnapshot,
-  type AnnotationStroke,
+  type AnnotationElement,
 } from "./history.js";
 
 export interface AnnotationDelta {
@@ -14,7 +14,7 @@ export interface AnnotationDelta {
   /** Indices refer to the final document after removals and all insertions. */
   readonly inserted: readonly {
     readonly index: number;
-    readonly stroke: AnnotationStroke;
+    readonly stroke: AnnotationElement;
   }[];
 }
 
@@ -22,18 +22,18 @@ export type AnnotationDocumentUpdate =
   | { readonly kind: "snapshot"; readonly document: AnnotationDocumentSnapshot }
   | AnnotationDelta
   | {
-      readonly kind: "revision";
-      readonly displayId: number;
-      readonly revision: number;
-    };
+    readonly kind: "revision";
+    readonly displayId: number;
+    readonly revision: number;
+  };
 
 export type AnnotationMutationResult =
   | { accepted: true; update: AnnotationDocumentUpdate }
   | {
-      accepted: false;
-      reason: AnnotationFailureReason;
-      update: AnnotationDocumentUpdate | null;
-    };
+    accepted: false;
+    reason: AnnotationFailureReason;
+    update: AnnotationDocumentUpdate | null;
+  };
 
 /** Immutable history references let us inspect IDs without traversing old point arrays. */
 export function createAnnotationUpdate(
@@ -50,21 +50,21 @@ export function createAnnotationUpdate(
     return { kind: "snapshot", document: next };
   }
   const oldById = new Map(
-    previous.strokes.map((stroke) => [stroke.id, stroke]),
+    previous.elements.map((stroke) => [stroke.id, stroke]),
   );
-  const newById = new Map(next.strokes.map((stroke) => [stroke.id, stroke]));
-  const removedIds = previous.strokes
+  const newById = new Map(next.elements.map((stroke) => [stroke.id, stroke]));
+  const removedIds = previous.elements
     .filter((stroke) => newById.get(stroke.id) !== stroke)
     .map((stroke) => stroke.id);
-  const inserted = next.strokes.flatMap((stroke, index) =>
+  const inserted = next.elements.flatMap((stroke, index) =>
     oldById.get(stroke.id) === stroke ? [] : [{ index, stroke }],
   );
   // Reordering existing objects is a document reset, not an append/remove operation.
-  const retained = previous.strokes.filter(
+  const retained = previous.elements.filter(
     (stroke) => newById.get(stroke.id) === stroke,
   );
   let cursor = 0;
-  for (const stroke of next.strokes) {
+  for (const stroke of next.elements) {
     if (oldById.get(stroke.id) === stroke && retained[cursor++] !== stroke)
       return { kind: "snapshot", document: next };
   }
@@ -112,13 +112,13 @@ export function reduceAnnotationUpdate(
     return { kind: "resync" };
 
   const removed = new Set(update.removedIds);
-  const currentIds = new Set(current.strokes.map((stroke) => stroke.id));
+  const currentIds = new Set(current.elements.map((stroke) => stroke.id));
   if (
     removed.size !== update.removedIds.length ||
     update.removedIds.some((id) => !currentIds.has(id))
   )
     return { kind: "resync" };
-  const survivors = current.strokes.filter((stroke) => !removed.has(stroke.id));
+  const survivors = current.elements.filter((stroke) => !removed.has(stroke.id));
   const finalLength = survivors.length + update.inserted.length;
   const ids = new Set(survivors.map((stroke) => stroke.id));
   let previousIndex = -1;
@@ -127,24 +127,24 @@ export function reduceAnnotationUpdate(
       !Number.isSafeInteger(index) ||
       index <= previousIndex ||
       index >= finalLength ||
-      !isAnnotationStroke(stroke) ||
+      !isAnnotationElement(stroke) ||
       ids.has(stroke.id)
     )
       return { kind: "resync" };
     ids.add(stroke.id);
     previousIndex = index;
   }
-  // One linear merge, including Undo of thousands of deleted strokes.
-  const strokes: AnnotationStroke[] = [];
+  // One linear merge, including Undo of thousands of deleted elements.
+  const elements: AnnotationElement[] = [];
   let insertion = 0;
   let survivor = 0;
-  for (let index = 0; index < finalLength; index += 1) {
+  for (let index = 0;index < finalLength;index += 1) {
     const item = update.inserted[insertion];
     if (item?.index === index) {
-      strokes.push(item.stroke);
+      elements.push(item.stroke);
       insertion += 1;
     } else {
-      strokes.push(survivors[survivor++]);
+      elements.push(survivors[survivor++]);
     }
   }
   return {
@@ -153,7 +153,7 @@ export function reduceAnnotationUpdate(
       displayId,
       revision,
       viewport: current.viewport,
-      strokes,
+      elements,
     },
   };
 }
@@ -168,7 +168,7 @@ export class AnnotationReplica {
   constructor(
     private readonly fetchSnapshot: () => Promise<AnnotationDocumentSnapshot>,
     private readonly onDocument: (document: AnnotationDocumentSnapshot) => void,
-  ) {}
+  ) { }
 
   get document() {
     return this.current;
@@ -202,7 +202,7 @@ export class AnnotationReplica {
       update.kind === "snapshot" ? update.document.revision : update.revision;
     // A recovery already in flight can predate this update. Join it, then fetch once
     // more if necessary. Requests started after the update must observe its revision.
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0;attempt < 2;attempt += 1) {
       if (!this.recovery) {
         const request = Promise.resolve()
           .then(() => this.fetchSnapshot())

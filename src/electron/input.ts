@@ -25,6 +25,10 @@ let cursorTimer: ReturnType<typeof setInterval> | undefined;
 let lastCursorPosition: Point | undefined;
 let inputStarted = false;
 let annotationInputActive = false;
+let keyboardInputSuppressed = false;
+export function setKeyboardInputSuppressed(suppressed: boolean) {
+  keyboardInputSuppressed = suppressed;
+}
 let fallbackToolCombinations = new Set<string>();
 let fallbackToolHandler: ((combination: string) => void) | undefined;
 const keyDeduplicator = new CombinationDeduplicator();
@@ -79,9 +83,9 @@ function publishCursorPosition(force = false) {
     const display = overlayDisplays[index];
     const local = display
       ? {
-          x: Math.round(position.x - display.bounds.x),
-          y: Math.round(position.y - display.bounds.y),
-        }
+        x: Math.round(position.x - display.bounds.x),
+        y: Math.round(position.y - display.bounds.y),
+      }
       : null;
 
     sendToWindow(
@@ -127,6 +131,7 @@ function handleKeyDown(event: UiohookKeyboardEvent) {
     return;
   }
 
+  if (keyboardInputSuppressed) return;
   const timestamp = Date.now();
   if (!keyDeduplicator.shouldEmit(combination, timestamp)) return;
 

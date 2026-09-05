@@ -1,3 +1,6 @@
+import { constrainedShapeEnd, hasShapeExtent } from "@/annotation/shape-geometry";
+import { isShapeTool, type StrokeElement, type ShapeElement, type TextElement } from "@/annotation/history";
+import { annotationTextFont, createTextElement, type AnnotationTextDraft } from "@/annotation/text";
 import {
   memo,
   useCallback,
@@ -9,19 +12,19 @@ import {
 } from "react";
 
 import type { AnnotationDocumentUpdate } from "@/annotation/document-sync";
-import { paintCommittedAnnotations } from "@/annotation/canvas-renderer";
+import { paintCommittedAnnotations, drawAnnotationElement } from "@/annotation/canvas-renderer";
 import { annotationFailureMessage } from "@/annotation/errors";
 import { shouldAdoptAnnotationDocument } from "@/annotation/document-order";
 import {
-  prepareEraserStroke,
-  eraserSweepHitsPreparedStroke,
-  type PreparedEraserStroke,
+  prepareEraserElement,
+  eraserSweepHitsPreparedElement,
+  type PreparedEraserElement,
 } from "@/annotation/eraser-index";
 import { MAX_ANNOTATION_POINTS_PER_STROKE } from "@/annotation/history";
 import type {
   AnnotationDocumentSnapshot,
   AnnotationPoint,
-  AnnotationStroke,
+  AnnotationElement,
   StrokeTool,
 } from "@/annotation/history";
 import { type CommittedRenderState } from "@/annotation/render-plan";
@@ -29,6 +32,7 @@ import type { AnnotationTool, OverlaySettings } from "@/shared/contract";
 
 interface AnnotationSurfaceProps {
   tool: AnnotationTool;
+  textDraft: AnnotationTextDraft | null;
   settings: OverlaySettings;
   displayId: number | null;
   document: AnnotationDocumentSnapshot | null;
@@ -37,7 +41,7 @@ interface AnnotationSurfaceProps {
   ): Promise<AnnotationDocumentSnapshot | null>;
 }
 
-interface ActiveStroke extends Omit<AnnotationStroke, "points"> {
+interface ActiveStroke extends Omit<StrokeElement, "points"> {
   points: AnnotationPoint[];
 }
 
@@ -78,7 +82,7 @@ function resizeCanvas(canvas: HTMLCanvasElement) {
 
 function configureStroke(
   context: CanvasRenderingContext2D,
-  stroke: AnnotationStroke,
+  stroke: StrokeElement,
   opacity = stroke.opacity,
 ) {
   context.globalAlpha = opacity;
@@ -116,7 +120,7 @@ function drawActiveSegments(
     context.beginPath();
     const start = stroke.points[startIndex - 1];
     context.moveTo(start.x, start.y);
-    for (let index = startIndex; index < stroke.points.length; index += 1) {
+    for (let index = startIndex;index < stroke.points.length;index += 1) {
       const point = stroke.points[index];
       context.lineTo(point.x, point.y);
     }
@@ -128,19 +132,20 @@ function drawActiveSegments(
 function strokeStyle(tool: StrokeTool, settings: OverlaySettings) {
   return tool === "highlighter"
     ? {
-        color: settings.annotationHighlighterColor,
-        width: settings.annotationHighlighterWidth,
-        opacity: 0.35,
-      }
+      color: settings.annotationHighlighterColor,
+      width: settings.annotationHighlighterWidth,
+      opacity: 0.35,
+    }
     : {
-        color: settings.annotationPenColor,
-        width: settings.annotationPenWidth,
-        opacity: 1,
-      };
+      color: settings.annotationPenColor,
+      width: settings.annotationPenWidth,
+      opacity: 1,
+    };
 }
 
 function AnnotationSurface({
   tool,
+  textDraft,
   settings,
   displayId,
   document,
@@ -152,12 +157,15 @@ function AnnotationSurface({
   const documentRef = useRef<AnnotationDocumentSnapshot | null>(document);
   const currentDisplayIdRef = useRef<number | null>(displayId);
   const committedRenderStateRef = useRef<CommittedRenderState | null>(null);
-  const pendingStrokesRef = useRef<Map<string, AnnotationStroke>>(new Map());
+  const pendingElementsRef = useRef<Map<string, AnnotationElement>>(new Map());
   const pendingRemovalIdsRef = useRef<Set<string>>(new Set());
   const activePointerRef = useRef<number | null>(null);
   const activeGestureIdRef = useRef<string | null>(null);
+  const fontsReadyRef = useRef(false);
+  const activeObjectRef = useRef<ShapeElement | TextElement | null>(null);
+  const objectFrameRef = useRef<number | null>(null);
   const activeStrokeRef = useRef<ActiveStroke | null>(null);
-  const eraserBaseRef = useRef<readonly PreparedEraserStroke[] | null>(null);
+  const eraserBaseRef = useRef<readonly PreparedEraserElement[] | null>(null);
   const eraserFrameRef = useRef<number | null>(null);
   const activeErasedIdsRef = useRef<Set<string>>(new Set());
   const lastEraserPointRef = useRef<AnnotationPoint | null>(null);
@@ -170,15 +178,15 @@ function AnnotationSurface({
   }, [displayId]);
 
   const visibleStrokes = useCallback(() => {
-    const committed = documentRef.current?.strokes ?? [];
+    const committed = documentRef.current?.elements ?? [];
     if (
-      !pendingStrokesRef.current.size &&
+      !pendingElementsRef.current.size &&
       !pendingRemovalIdsRef.current.size &&
       !activeErasedIdsRef.current.size
     )
       return committed;
     const committedIds = new Set(committed.map((stroke) => stroke.id));
-    const pending = [...pendingStrokesRef.current.values()].filter(
+    const pending = [...pendingElementsRef.current.values()].filter(
       (stroke) => !committedIds.has(stroke.id),
     );
     const hidden = new Set([
@@ -197,7 +205,7 @@ function AnnotationSurface({
       const context = canvas.getContext("2d");
       if (!context) return;
 
-      const strokes = visibleStrokes();
+      const elements = visibleStrokes();
       const viewport = documentRef.current?.viewport ?? null;
       const nextState: CommittedRenderState = {
         displayId: currentDisplayIdRef.current,
@@ -206,7 +214,7 @@ function AnnotationSurface({
         canvasWidth: canvas.width,
         canvasHeight: canvas.height,
         pixelRatio: Math.max(window.devicePixelRatio || 1, 1),
-        strokes,
+        elements,
       };
       paintCommittedAnnotations(
         context,
@@ -220,11 +228,11 @@ function AnnotationSurface({
 
   const reconcilePendingWithDocument = useCallback(
     (next: AnnotationDocumentSnapshot) => {
-      if (!pendingStrokesRef.current.size && !pendingRemovalIdsRef.current.size)
+      if (!pendingElementsRef.current.size && !pendingRemovalIdsRef.current.size)
         return;
-      const committedIds = new Set(next.strokes.map((stroke) => stroke.id));
-      pendingStrokesRef.current.forEach((_stroke, id) => {
-        if (committedIds.has(id)) pendingStrokesRef.current.delete(id);
+      const committedIds = new Set(next.elements.map((stroke) => stroke.id));
+      pendingElementsRef.current.forEach((_stroke, id) => {
+        if (committedIds.has(id)) pendingElementsRef.current.delete(id);
       });
       pendingRemovalIdsRef.current.forEach((id) => {
         if (!committedIds.has(id)) pendingRemovalIdsRef.current.delete(id);
@@ -260,6 +268,8 @@ function AnnotationSurface({
   }, []);
 
   const clearGesture = useCallback(() => {
+    if (objectFrameRef.current !== null) cancelAnimationFrame(objectFrameRef.current);
+    objectFrameRef.current = null;
     clearCanvas(gestureCanvasRef.current);
   }, []);
 
@@ -273,6 +283,7 @@ function AnnotationSurface({
       activePointerRef.current = null;
       activeGestureIdRef.current = null;
       activeStrokeRef.current = null;
+      activeObjectRef.current = null;
       eraserBaseRef.current = null;
       activeErasedIdsRef.current = new Set();
       lastEraserPointRef.current = null;
@@ -329,7 +340,7 @@ function AnnotationSurface({
   useEffect(() => {
     documentRef.current = null;
     committedRenderStateRef.current = null;
-    pendingStrokesRef.current.clear();
+    pendingElementsRef.current.clear();
     pendingRemovalIdsRef.current.clear();
     cancelGesture();
     renderCommitted(true);
@@ -354,6 +365,39 @@ function AnnotationSurface({
     if (typeof miniCast === "undefined") return;
     return miniCast.onAnnotationGestureCancel(cancelGesture);
   }, [cancelGesture]);
+
+  useEffect(() => {
+    let active = true;
+    void window.document.fonts.load(annotationTextFont(28), "가나다ABC")
+      .then(faces => {
+        if (!active) return;
+        if (!faces.length) throw new Error("Annotation font is not available");
+        fontsReadyRef.current = true;
+        renderCommitted(true);
+      })
+      .catch(() => { if (active) setNotice("판서 글꼴을 불러오지 못했습니다. 텍스트 배치를 사용할 수 없습니다."); });
+    return () => { active = false; };
+  }, [renderCommitted]);
+
+  function paintActiveObject() {
+    const canvas = gestureCanvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context || !activeObjectRef.current) return;
+    clearCanvas(canvas);
+    drawAnnotationElement(context, activeObjectRef.current);
+  }
+
+  function updateObjectPreview(point: AnnotationPoint, shift: boolean) {
+    const object = activeObjectRef.current;
+    if (!object || object.tool === "text") return;
+    activeObjectRef.current = { ...object, points: [object.points[0], constrainedShapeEnd(object.tool, object.points[0], point, shift)] };
+    if (objectFrameRef.current !== null) return;
+    const gestureId = activeGestureIdRef.current;
+    objectFrameRef.current = requestAnimationFrame(() => {
+      objectFrameRef.current = null;
+      if (activeGestureIdRef.current === gestureId) paintActiveObject();
+    });
+  }
 
   function appendStrokePoints(points: readonly AnnotationPoint[]) {
     const active = activeStrokeRef.current;
@@ -390,7 +434,7 @@ function AnnotationSurface({
       base.forEach((prepared) => {
         if (activeErasedIdsRef.current.has(prepared.stroke.id)) return;
         if (
-          eraserSweepHitsPreparedStroke(
+          eraserSweepHitsPreparedElement(
             previous ?? point,
             point,
             prepared,
@@ -414,7 +458,7 @@ function AnnotationSurface({
 
   function commitGesture() {
     const gestureId = activeGestureIdRef.current;
-    const stroke = activeStrokeRef.current;
+    const stroke = activeStrokeRef.current ?? activeObjectRef.current;
     const erasedIds = [...activeErasedIdsRef.current];
     if (!gestureId || typeof miniCast === "undefined") {
       finishGestureState(true);
@@ -422,14 +466,19 @@ function AnnotationSurface({
       return;
     }
 
+    if (stroke && isShapeTool(stroke.tool) && !hasShapeExtent(stroke.tool, stroke.points[0], stroke.points[1])) {
+      finishGestureState(true);
+      renderCommitted();
+      return;
+    }
     if (stroke) {
-      const committed: AnnotationStroke = {
+      const committed: AnnotationElement = {
         ...stroke,
         points: [...stroke.points],
       };
-      pendingStrokesRef.current.set(committed.id, committed);
+      pendingElementsRef.current.set(committed.id, committed);
       void miniCast
-        .commitAnnotationStroke(gestureId, committed)
+        .commitAnnotationElement(gestureId, committed)
         .then(async (result) => {
           const next = result.update
             ? await onDocumentUpdate(result.update)
@@ -437,11 +486,11 @@ function AnnotationSurface({
           if (next) adoptAuthoritativeDocument(next);
           if (!result.accepted)
             setNotice(annotationFailureMessage(result.reason));
-          pendingStrokesRef.current.delete(committed.id);
+          pendingElementsRef.current.delete(committed.id);
           renderCommitted();
         })
         .catch(() => {
-          pendingStrokesRef.current.delete(committed.id);
+          pendingElementsRef.current.delete(committed.id);
           setNotice("판서 통신이 끊겼습니다. 저장 상태를 다시 확인합니다.");
           renderCommitted();
           void miniCast
@@ -464,7 +513,7 @@ function AnnotationSurface({
     } else if (erasedIds.length) {
       erasedIds.forEach((id) => pendingRemovalIdsRef.current.add(id));
       void miniCast
-        .removeAnnotationStrokes(gestureId, erasedIds)
+        .removeAnnotationElements(gestureId, erasedIds)
         .then(async (result) => {
           const next = result.update
             ? await onDocumentUpdate(result.update)
@@ -521,11 +570,35 @@ function AnnotationSurface({
 
     const point = pointerPoints(event)[0];
     if (tool === "eraser") {
-      eraserBaseRef.current = visibleStrokes().map(prepareEraserStroke);
+      eraserBaseRef.current = visibleStrokes().map(prepareEraserElement);
       activeErasedIdsRef.current = new Set();
       lastEraserPointRef.current = null;
       eraserRadiusRef.current = settings.annotationEraserWidth / 2;
       previewErase([point]);
+      return;
+    }
+
+    if (tool === "text") {
+      if (!textDraft || !fontsReadyRef.current) {
+        cancelGesture();
+        setNotice(textDraft ? "글꼴을 준비 중입니다. 잠시 뒤 다시 배치해 주세요." : "컨트롤러에서 글자를 입력하고 ‘화면에 배치’를 눌러 주세요.");
+        return;
+      }
+      const context = gestureCanvasRef.current?.getContext("2d");
+      if (!context) { cancelGesture(); return; }
+      try {
+        activeObjectRef.current = createTextElement(context, crypto.randomUUID(), textDraft, point, settings.annotationPenColor);
+        clearGesture();
+        paintActiveObject();
+      } catch {
+        cancelGesture();
+        setNotice("텍스트를 준비하지 못했습니다. 입력 내용과 글꼴을 확인해 주세요.");
+      }
+      return;
+    }
+    if (isShapeTool(tool)) {
+      activeObjectRef.current = { id: crypto.randomUUID(), tool, points: [point, point], color: settings.annotationPenColor, width: settings.annotationPenWidth, opacity: 1 };
+      clearGesture();
       return;
     }
 
@@ -546,6 +619,7 @@ function AnnotationSurface({
 
     const points = pointerPoints(event);
     if (eraserBaseRef.current) previewErase(points);
+    else if (activeObjectRef.current) updateObjectPreview(points[points.length - 1], event.shiftKey);
     else appendStrokePoints(points);
   }
 
@@ -585,7 +659,7 @@ function AnnotationSurface({
           zIndex: 2,
           pointerEvents: interactive ? "auto" : "none",
           touchAction: "none",
-          cursor: interactive ? "none" : "default",
+          cursor: !interactive ? "default" : tool === "text" ? "text" : isShapeTool(tool) ? "crosshair" : "none",
           opacity: tool === "highlighter" ? 0.35 : 1,
         }}
         onPointerDown={handlePointerDown}

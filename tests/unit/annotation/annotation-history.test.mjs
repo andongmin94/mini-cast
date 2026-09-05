@@ -3,13 +3,13 @@ import test from "node:test";
 
 import {
   AnnotationHistory,
-  isAnnotationStroke,
+  isAnnotationElement,
   MAX_ANNOTATION_COORDINATE,
   MAX_ANNOTATION_HISTORY_ENTRIES,
   MAX_ANNOTATION_HISTORY_POINTS,
   MAX_ANNOTATION_POINTS_PER_DISPLAY,
   MAX_ANNOTATION_POINTS_PER_STROKE,
-  readAnnotationStrokeIds,
+  readAnnotationElementIds,
 } from "../../../dist/annotation/history.js";
 
 function stroke(id, x = 1, y = 2, width = 4) {
@@ -24,13 +24,13 @@ function stroke(id, x = 1, y = 2, width = 4) {
 }
 
 function ids(history, displayId) {
-  return history.getSnapshot(displayId).strokes.map((item) => item.id);
+  return history.getSnapshot(displayId).elements.map((item) => item.id);
 }
 
 test("global undo and redo follow chronological order across displays", () => {
   const history = new AnnotationHistory();
-  history.addStroke(10, stroke("a"));
-  history.addStroke(20, stroke("b"));
+  history.addElement(10, stroke("a"));
+  history.addElement(20, stroke("b"));
 
   assert.deepEqual(ids(history, 10), ["a"]);
   assert.deepEqual(ids(history, 20), ["b"]);
@@ -46,11 +46,11 @@ test("global undo and redo follow chronological order across displays", () => {
 
 test("one erase gesture restores every removed stroke in place", () => {
   const history = new AnnotationHistory();
-  history.addStroke(10, stroke("a"));
-  history.addStroke(10, stroke("b"));
-  history.addStroke(10, stroke("c"));
+  history.addElement(10, stroke("a"));
+  history.addElement(10, stroke("b"));
+  history.addElement(10, stroke("c"));
 
-  assert.equal(history.removeStrokes(10, ["a", "c"]), 10);
+  assert.equal(history.removeElements(10, ["a", "c"]), 10);
   assert.deepEqual(ids(history, 10), ["b"]);
   assert.equal(history.undo(), 10);
   assert.deepEqual(ids(history, 10), ["a", "b", "c"]);
@@ -60,8 +60,8 @@ test("one erase gesture restores every removed stroke in place", () => {
 
 test("clear is scoped to one display and remains undoable", () => {
   const history = new AnnotationHistory();
-  history.addStroke(10, stroke("a"));
-  history.addStroke(20, stroke("b"));
+  history.addElement(10, stroke("a"));
+  history.addElement(20, stroke("b"));
 
   assert.equal(history.clearDisplay(10), 10);
   assert.deepEqual(ids(history, 10), []);
@@ -72,10 +72,10 @@ test("clear is scoped to one display and remains undoable", () => {
 
 test("new edits drop redo history and revisions advance", () => {
   const history = new AnnotationHistory();
-  history.addStroke(10, stroke("a"));
+  history.addElement(10, stroke("a"));
   const firstRevision = history.getSnapshot(10).revision;
   assert.equal(history.undo(), 10);
-  history.addStroke(10, stroke("b"));
+  history.addElement(10, stroke("b"));
 
   assert.equal(history.canRedo, false);
   assert.equal(history.redo(), null);
@@ -86,20 +86,20 @@ test("new edits drop redo history and revisions advance", () => {
 test("viewport changes rescale documents and both history stacks", () => {
   const history = new AnnotationHistory();
   history.setDisplayViewport(10, 100, 100);
-  history.addStroke(10, stroke("a", 25, 50, 4));
-  history.addStroke(10, stroke("b", 50, 25, 8));
+  history.addElement(10, stroke("a", 25, 50, 4));
+  history.addElement(10, stroke("b", 50, 25, 8));
   assert.equal(history.undo(), 10);
 
   history.setDisplayViewport(10, 200, 50);
   let snapshot = history.getSnapshot(10);
   assert.deepEqual(snapshot.viewport, { width: 200, height: 50 });
-  assert.deepEqual(snapshot.strokes[0].points[0], { x: 50, y: 25 });
-  assert.equal(snapshot.strokes[0].width, 4);
+  assert.deepEqual(snapshot.elements[0].points[0], { x: 50, y: 25 });
+  assert.equal(snapshot.elements[0].width, 4);
 
   assert.equal(history.redo(), 10);
   snapshot = history.getSnapshot(10);
-  assert.deepEqual(snapshot.strokes[1].points[0], { x: 100, y: 12.5 });
-  assert.equal(snapshot.strokes[1].width, 8);
+  assert.deepEqual(snapshot.elements[1].points[0], { x: 100, y: 12.5 });
+  assert.equal(snapshot.elements[1].width, 8);
   assert.equal(history.undo(), 10);
   assert.deepEqual(ids(history, 10), ["a"]);
 });
@@ -107,49 +107,49 @@ test("viewport changes rescale documents and both history stacks", () => {
 test("snapshots and input objects cannot mutate stored history", () => {
   const history = new AnnotationHistory();
   const source = stroke("a", 10, 20);
-  history.addStroke(10, source);
+  history.addElement(10, source);
   source.points[0].x = 999;
 
   const snapshot = history.getSnapshot(10);
   assert.throws(() => {
-    snapshot.strokes[0].points[0].x = 777;
+    snapshot.elements[0].points[0].x = 777;
   }, TypeError);
-  assert.deepEqual(history.getSnapshot(10).strokes[0].points[0], {
+  assert.deepEqual(history.getSnapshot(10).elements[0].points[0], {
     x: 10,
     y: 20,
   });
 });
 
 test("runtime stroke and id validation rejects malformed payloads", () => {
-  assert.equal(isAnnotationStroke(stroke("a")), true);
-  assert.equal(isAnnotationStroke({ ...stroke("a"), width: Infinity }), false);
+  assert.equal(isAnnotationElement(stroke("a")), true);
+  assert.equal(isAnnotationElement({ ...stroke("a"), width: Infinity }), false);
   assert.equal(
-    isAnnotationStroke({ ...stroke("a"), points: [{ x: NaN, y: 0 }] }),
+    isAnnotationElement({ ...stroke("a"), points: [{ x: NaN, y: 0 }] }),
     false,
   );
-  assert.deepEqual(readAnnotationStrokeIds(["a", "a", "b"]), ["a", "b"]);
-  assert.equal(readAnnotationStrokeIds(["", "b"]), null);
+  assert.deepEqual(readAnnotationElementIds(["a", "a", "b"]), ["a", "b"]);
+  assert.equal(readAnnotationElementIds(["", "b"]), null);
 });
 
 test("history enforces its runtime validation at the domain boundary", () => {
   const history = new AnnotationHistory();
   assert.throws(
-    () => history.addStroke(1, { ...stroke("invalid"), color: "red" }),
-    /Invalid annotation stroke/,
+    () => history.addElement(1, { ...stroke("invalid"), color: "red" }),
+    /Invalid annotation element/,
   );
   assert.deepEqual(ids(history, 1), []);
 });
 
 test("runtime validation rejects pathological geometry and style payloads", () => {
   assert.equal(
-    isAnnotationStroke({
+    isAnnotationElement({
       ...stroke("too-far"),
       points: [{ x: MAX_ANNOTATION_COORDINATE + 1, y: 0 }],
     }),
     false,
   );
   assert.equal(
-    isAnnotationStroke({
+    isAnnotationElement({
       ...stroke("too-many"),
       points: Array.from(
         { length: MAX_ANNOTATION_POINTS_PER_STROKE + 1 },
@@ -159,26 +159,26 @@ test("runtime validation rejects pathological geometry and style payloads", () =
     false,
   );
   assert.equal(
-    isAnnotationStroke({ ...stroke("bad-color"), color: "red" }),
+    isAnnotationElement({ ...stroke("bad-color"), color: "red" }),
     false,
   );
   assert.equal(
-    isAnnotationStroke({ ...stroke("bad-opacity"), opacity: 0.5 }),
+    isAnnotationElement({ ...stroke("bad-opacity"), opacity: 0.5 }),
     false,
   );
 });
 
 test("document and undo limits bound long-running session memory", () => {
   const history = new AnnotationHistory();
-  for (let index = 0; index < MAX_ANNOTATION_HISTORY_ENTRIES + 50; index += 1) {
-    history.addStroke(1, stroke(`bounded-${index}`, index, index));
+  for (let index = 0;index < MAX_ANNOTATION_HISTORY_ENTRIES + 50;index += 1) {
+    history.addElement(1, stroke(`bounded-${index}`, index, index));
   }
 
-  for (let index = 0; index < MAX_ANNOTATION_HISTORY_ENTRIES; index += 1) {
+  for (let index = 0;index < MAX_ANNOTATION_HISTORY_ENTRIES;index += 1) {
     assert.equal(history.undo(), 1);
   }
   assert.equal(history.undo(), null);
-  assert.equal(history.getSnapshot(1).strokes.length, 50);
+  assert.equal(history.getSnapshot(1).elements.length, 50);
 
   const pointHeavy = new AnnotationHistory();
   const points = Array.from(
@@ -188,7 +188,7 @@ test("document and undo limits bound long-running session memory", () => {
   let acceptedPoints = 0;
   let index = 0;
   while (acceptedPoints + points.length <= MAX_ANNOTATION_POINTS_PER_DISPLAY) {
-    pointHeavy.addStroke(1, {
+    pointHeavy.addElement(1, {
       ...stroke(`points-${index}`),
       points,
     });
@@ -197,7 +197,7 @@ test("document and undo limits bound long-running session memory", () => {
   }
   assert.throws(
     () =>
-      pointHeavy.addStroke(1, {
+      pointHeavy.addElement(1, {
         ...stroke("points-overflow"),
         points,
       }),
@@ -213,7 +213,7 @@ test("document and undo limits bound long-running session memory", () => {
   assert.equal(
     pointHeavy
       .getSnapshot(1)
-      .strokes.reduce((total, item) => total + item.points.length, 0),
+      .elements.reduce((total, item) => total + item.points.length, 0),
     MAX_ANNOTATION_POINTS_PER_DISPLAY,
   );
   assert.equal(pointHeavy.undo(), null);
@@ -221,8 +221,8 @@ test("document and undo limits bound long-running session memory", () => {
 
 test("disconnected displays release documents and their undo-redo entries", () => {
   const history = new AnnotationHistory();
-  history.addStroke(10, stroke("kept"));
-  history.addStroke(20, stroke("removed"));
+  history.addElement(10, stroke("kept"));
+  history.addElement(20, stroke("removed"));
   assert.equal(history.undo(), 20);
 
   assert.equal(history.retainDisplays([10]), 1);
@@ -236,73 +236,73 @@ test("disconnected displays release documents and their undo-redo entries", () =
 test("history checkpoints restore documents, revisions, and both stacks", () => {
   const history = new AnnotationHistory();
   history.setDisplayViewport(10, 100, 100);
-  history.addStroke(10, stroke("a", 25, 50, 4));
-  history.addStroke(10, stroke("b", 50, 25, 8));
+  history.addElement(10, stroke("a", 25, 50, 4));
+  history.addElement(10, stroke("b", 50, 25, 8));
   assert.equal(history.undo(), 10);
 
   const checkpoint = history.clone();
   const expected = history.getSnapshot(10);
 
   history.setDisplayViewport(10, 200, 50);
-  history.addStroke(10, stroke("c", 100, 25, 6));
+  history.addElement(10, stroke("c", 100, 25, 6));
   history.restoreFrom(checkpoint);
 
   assert.deepEqual(history.getSnapshot(10), expected);
   assert.equal(history.canRedo, true);
   assert.equal(history.redo(), 10);
   assert.deepEqual(ids(history, 10), ["a", "b"]);
-  assert.deepEqual(history.getSnapshot(10).strokes[1].points[0], {
+  assert.deepEqual(history.getSnapshot(10).elements[1].points[0], {
     x: 50,
     y: 25,
   });
 
-  checkpoint.addStroke(10, stroke("checkpoint-only", 10, 10, 2));
+  checkpoint.addElement(10, stroke("checkpoint-only", 10, 10, 2));
   assert.deepEqual(ids(history, 10), ["a", "b"]);
 });
 
 test("large append histories preserve ids and chronological undo/redo", () => {
   const history = new AnnotationHistory();
   const total = 5_000;
-  for (let index = 0; index < total; index += 1) {
-    history.addStroke(1, stroke(`large-${index}`, index, index));
+  for (let index = 0;index < total;index += 1) {
+    history.addElement(1, stroke(`large-${index}`, index, index));
   }
-  assert.equal(history.getSnapshot(1).strokes.length, total);
+  assert.equal(history.getSnapshot(1).elements.length, total);
 
-  for (let index = 0; index < 1_000; index += 1) history.undo();
-  assert.equal(history.getSnapshot(1).strokes.length, total - 1_000);
+  for (let index = 0;index < 1_000;index += 1) history.undo();
+  assert.equal(history.getSnapshot(1).elements.length, total - 1_000);
 
-  for (let index = 0; index < 1_000; index += 1) history.redo();
+  for (let index = 0;index < 1_000;index += 1) history.redo();
   const snapshot = history.getSnapshot(1);
-  assert.equal(snapshot.strokes.length, total);
-  assert.equal(snapshot.strokes[0].id, "large-0");
-  assert.equal(snapshot.strokes[total - 1].id, `large-${total - 1}`);
+  assert.equal(snapshot.elements.length, total);
+  assert.equal(snapshot.elements[0].id, "large-0");
+  assert.equal(snapshot.elements[total - 1].id, `large-${total - 1}`);
 });
 
 test("stroke id index stays consistent across remove and undo/redo", () => {
   const history = new AnnotationHistory();
-  history.addStroke(1, stroke("stable-id"));
+  history.addElement(1, stroke("stable-id"));
   assert.throws(
-    () => history.addStroke(1, stroke("stable-id")),
-    /Duplicate annotation stroke id/,
+    () => history.addElement(1, stroke("stable-id")),
+    /Duplicate annotation element id/,
   );
 
-  history.removeStrokes(1, ["stable-id"]);
-  history.addStroke(1, stroke("stable-id", 3, 4));
-  assert.equal(history.getSnapshot(1).strokes.length, 1);
+  history.removeElements(1, ["stable-id"]);
+  history.addElement(1, stroke("stable-id", 3, 4));
+  assert.equal(history.getSnapshot(1).elements.length, 1);
 
   history.undo();
   history.undo();
-  assert.equal(history.getSnapshot(1).strokes[0].id, "stable-id");
+  assert.equal(history.getSnapshot(1).elements[0].id, "stable-id");
   assert.throws(
-    () => history.addStroke(1, stroke("stable-id")),
-    /Duplicate annotation stroke id/,
+    () => history.addElement(1, stroke("stable-id")),
+    /Duplicate annotation element id/,
   );
 
   history.redo();
   history.redo();
-  assert.equal(history.getSnapshot(1).strokes[0].id, "stable-id");
+  assert.equal(history.getSnapshot(1).elements[0].id, "stable-id");
   assert.throws(
-    () => history.addStroke(1, stroke("stable-id")),
-    /Duplicate annotation stroke id/,
+    () => history.addElement(1, stroke("stable-id")),
+    /Duplicate annotation element id/,
   );
 });

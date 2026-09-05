@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { eraserSweepHitsStroke } from "../../../dist/annotation/geometry.js";
 import {
-  prepareEraserStroke,
-  eraserSweepHitsPreparedStroke,
+  prepareEraserElement,
+  eraserSweepHitsPreparedElement,
 } from "../../../dist/annotation/eraser-index.js";
 
 const stroke = (points, width = 4, id = "s") => ({
@@ -15,10 +15,10 @@ const stroke = (points, width = 4, id = "s") => ({
   points,
 });
 const hits = (points, start, end, radius, width = 4) =>
-  eraserSweepHitsPreparedStroke(
+  eraserSweepHitsPreparedElement(
     start,
     end,
-    prepareEraserStroke(stroke(points, width)),
+    prepareEraserElement(stroke(points, width)),
     radius,
   );
 const counters = () => ({
@@ -27,7 +27,7 @@ const counters = () => ({
   segmentTests: 0,
 });
 
-test("prepared erasing handles empty strokes, dots and repeated points", () => {
+test("prepared erasing handles empty elements, dots and repeated points", () => {
   const p = { x: -20, y: 30 };
   assert.equal(hits([], p, p, 1), false);
   assert.equal(hits([p], p, p, 0), true);
@@ -70,13 +70,13 @@ test("wide-stroke and negative-coordinate queries agree with exact reference geo
     { x: 200, y: -800 },
   ];
   const source = stroke(points, 128);
-  const prepared = prepareEraserStroke(source);
-  for (let x = -600; x <= 300; x += 17) {
+  const prepared = prepareEraserElement(source);
+  for (let x = -600;x <= 300;x += 17) {
     const a = { x, y: -500 };
     const b = { x: x + 4, y: -250 };
     for (const radius of [-1, 0, 14, 40]) {
       assert.equal(
-        eraserSweepHitsPreparedStroke(a, b, prepared, radius),
+        eraserSweepHitsPreparedElement(a, b, prepared, radius),
         eraserSweepHitsStroke(a, b, source, radius),
       );
     }
@@ -90,7 +90,7 @@ test("seeded randomized sweeps exactly match the original exhaustive kernel", ()
     return seed / 4294967296;
   };
   const coordinate = () => (random() - 0.5) * 2000;
-  for (let trial = 0; trial < 3000; trial += 1) {
+  for (let trial = 0;trial < 3000;trial += 1) {
     const count = 1 + Math.floor(random() * 140);
     const origin = { x: coordinate(), y: coordinate() };
     const points = Array.from({ length: count }, (_, i) =>
@@ -99,13 +99,13 @@ test("seeded randomized sweeps exactly match the original exhaustive kernel", ()
         : { x: origin.x + random() * 60, y: origin.y + random() * 60 },
     );
     const source = stroke(points, 0.5 + random() * 127.5);
-    const prepared = prepareEraserStroke(source);
+    const prepared = prepareEraserElement(source);
     const a =
       trial % 3 === 0 ? { ...origin } : { x: coordinate(), y: coordinate() };
     const b = trial % 5 === 0 ? { ...a } : { x: coordinate(), y: coordinate() };
     const radius = random() * 40;
     assert.equal(
-      eraserSweepHitsPreparedStroke(a, b, prepared, radius),
+      eraserSweepHitsPreparedElement(a, b, prepared, radius),
       eraserSweepHitsStroke(a, b, source, radius),
       `trial=${trial}`,
     );
@@ -123,8 +123,8 @@ test("a local query avoids almost all exact segment tests in a 128k-point docume
   const a = { x: 64, y: 2000 };
   const stats = counters();
   const actual = sources
-    .map(prepareEraserStroke)
-    .filter((p) => eraserSweepHitsPreparedStroke(a, a, p, 1, stats))
+    .map(prepareEraserElement)
+    .filter((p) => eraserSweepHitsPreparedElement(a, a, p, 1, stats))
     .map((p) => p.stroke.id);
   const expected = sources
     .filter((s) => eraserSweepHitsStroke(a, a, s, 1))
@@ -145,11 +145,11 @@ test("a local query avoids almost all exact segment tests in a 128k-point docume
 
 test("segment-block bounds also accelerate a single long stroke", () => {
   const points = Array.from({ length: 10000 }, (_, x) => ({ x, y: 0 }));
-  const prepared = prepareEraserStroke(stroke(points, 1));
+  const prepared = prepareEraserElement(stroke(points, 1));
   const stats = counters();
   const a = { x: 8000, y: -2 };
   const b = { x: 8000, y: 2 };
-  assert.equal(eraserSweepHitsPreparedStroke(a, b, prepared, 0, stats), true);
+  assert.equal(eraserSweepHitsPreparedElement(a, b, prepared, 0, stats), true);
   assert.ok(stats.segmentTests <= 64, JSON.stringify(stats));
   assert.ok(stats.blockBoundsTests < 313);
 });

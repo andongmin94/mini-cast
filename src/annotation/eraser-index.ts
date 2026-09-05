@@ -1,5 +1,6 @@
-import { segmentToSegmentDistanceSquared } from "./geometry.js";
-import type { AnnotationPoint, AnnotationStroke } from "./history.js";
+import { segmentToSegmentDistanceSquared, pointInsideBounds, rectangleOutline } from "./geometry.js";
+import { elementInkPaths, elementInkBounds, ELLIPSE_FLATTENING_ERROR } from "./shape-geometry.js";
+import type { AnnotationPoint, AnnotationElement } from "./history.js";
 
 interface Bounds {
   minX: number;
@@ -14,10 +15,12 @@ interface SegmentBlock {
   endSegment: number;
 }
 
-export interface PreparedEraserStroke {
-  readonly stroke: AnnotationStroke;
+export interface PreparedEraserElement {
+  readonly stroke: AnnotationElement;
   readonly bounds: Bounds | null;
-  readonly blocks: readonly SegmentBlock[];
+  readonly paths: readonly { points: readonly AnnotationPoint[]; blocks: readonly SegmentBlock[] }[];
+  readonly tolerance: number;
+  readonly filled: boolean;
 }
 
 /** Optional counters measure work, not wall-clock latency. */
@@ -41,28 +44,24 @@ function include(bounds: Bounds, point: AnnotationPoint) {
   bounds.maxY = Math.max(bounds.maxY, point.y);
 }
 
-/** Build once per gesture; the source stroke must not change during the gesture. */
-export function prepareEraserStroke(
-  stroke: AnnotationStroke,
-): PreparedEraserStroke {
-  if (!stroke.points.length) return { stroke, bounds: null, blocks: [] };
-  const bounds = pointBounds(stroke.points[0]);
-  const blocks: SegmentBlock[] = [];
-  for (
-    let first = 1;
-    first < stroke.points.length;
-    first += SEGMENTS_PER_BLOCK
-  ) {
-    const end = Math.min(first + SEGMENTS_PER_BLOCK, stroke.points.length);
-    const blockBounds = pointBounds(stroke.points[first - 1]);
-    for (let index = first; index < end; index += 1) {
-      const point = stroke.points[index];
-      include(blockBounds, point);
-      include(bounds, point);
+/** Build once per gesture; all committed elements are immutable. */
+export function prepareEraserElement(stroke: AnnotationElement): PreparedEraserElement {
+  if (!stroke.points.length) return { stroke, bounds: null, paths: [], tolerance: 0, filled: false };
+  const filled = stroke.tool === "text";
+  const outlines = filled ? [rectangleOutline(elementInkBounds(stroke))] : elementInkPaths(stroke);
+  const bounds = pointBounds(outlines[0][0]);
+  const paths = outlines.map(points => {
+    const blocks: SegmentBlock[] = [];
+    include(bounds, points[0]);
+    for (let first = 1;first < points.length;first += SEGMENTS_PER_BLOCK) {
+      const end = Math.min(first + SEGMENTS_PER_BLOCK, points.length);
+      const blockBounds = pointBounds(points[first - 1]);
+      for (let i = first;i < end;i++) { include(blockBounds, points[i]); include(bounds, points[i]); }
+      blocks.push({ bounds: blockBounds, firstSegment: first, endSegment: end });
     }
-    blocks.push({ bounds: blockBounds, firstSegment: first, endSegment: end });
-  }
-  return { stroke, bounds, blocks };
+    return { points, blocks };
+  });
+  return { stroke, bounds, paths, filled, tolerance: stroke.tool === "text" ? 0 : stroke.width / 2 + (stroke.tool === "ellipse" ? ELLIPSE_FLATTENING_ERROR : 0) };
 }
 
 function overlaps(left: Bounds, right: Bounds) {
@@ -75,16 +74,16 @@ function overlaps(left: Bounds, right: Bounds) {
 }
 
 /** Broad-phase bounds only reject impossible hits; the existing exact kernel decides hits. */
-export function eraserSweepHitsPreparedStroke(
+export function eraserSweepHitsPreparedElement(
   start: AnnotationPoint,
   end: AnnotationPoint,
-  prepared: PreparedEraserStroke,
+  prepared: PreparedEraserElement,
   eraserRadius: number,
   stats?: EraserQueryStats,
 ) {
-  const { stroke, bounds, blocks } = prepared;
+  const { bounds, paths, filled } = prepared;
   if (!bounds) return false;
-  const tolerance = Math.max(0, eraserRadius) + stroke.width / 2;
+  const tolerance = Math.max(0, eraserRadius) + prepared.tolerance;
   const padding = tolerance + BOUNDS_EPSILON;
   const query = {
     minX: Math.min(start.x, end.x) - padding,
@@ -95,31 +94,19 @@ export function eraserSweepHitsPreparedStroke(
   if (stats) stats.strokeBoundsTests += 1;
   if (!overlaps(bounds, query)) return false;
   const toleranceSquared = tolerance * tolerance;
-  if (stroke.points.length === 1) {
-    if (stats) stats.segmentTests += 1;
-    return (
-      segmentToSegmentDistanceSquared(
-        start,
-        end,
-        stroke.points[0],
-        stroke.points[0],
-      ) <= toleranceSquared
-    );
-  }
-  for (const block of blocks) {
-    if (stats) stats.blockBoundsTests += 1;
-    if (!overlaps(block.bounds, query)) continue;
-    for (let index = block.firstSegment; index < block.endSegment; index += 1) {
-      if (stats) stats.segmentTests += 1;
-      if (
-        segmentToSegmentDistanceSquared(
-          start,
-          end,
-          stroke.points[index - 1],
-          stroke.points[index],
-        ) <= toleranceSquared
-      )
-        return true;
+  if (filled && (pointInsideBounds(start, bounds) || pointInsideBounds(end, bounds))) return true;
+  for (const { points, blocks } of paths) {
+    if (points.length === 1) {
+      if (stats) stats.segmentTests++;
+      if (segmentToSegmentDistanceSquared(start, end, points[0], points[0]) <= toleranceSquared) return true;
+    }
+    for (const block of blocks) {
+      if (stats) stats.blockBoundsTests++;
+      if (!overlaps(block.bounds, query)) continue;
+      for (let index = block.firstSegment;index < block.endSegment;index++) {
+        if (stats) stats.segmentTests++;
+        if (segmentToSegmentDistanceSquared(start, end, points[index - 1], points[index]) <= toleranceSquared) return true;
+      }
     }
   }
   return false;

@@ -1,10 +1,11 @@
+import type { AnnotationTextDraft } from "../annotation/text";
 import type {
   AnnotationDocumentUpdate,
   AnnotationMutationResult,
 } from "../annotation/document-sync";
 import type {
   AnnotationDocumentSnapshot,
-  AnnotationStroke,
+  AnnotationElement,
 } from "../annotation/history";
 import type {
   AnnotationCommand,
@@ -37,13 +38,15 @@ interface MiniCastBridge {
   ): Unsubscribe;
   getAnnotationState(): Promise<AnnotationState>;
   setAnnotationTool(tool: AnnotationTool): void;
+  setAnnotationTextDraft(draft: AnnotationTextDraft): Promise<boolean>;
+  setAnnotationTextEditing(editing: boolean): void;
   sendAnnotationCommand(command: AnnotationCommand): void;
   beginAnnotationGesture(gestureId: string): void;
-  commitAnnotationStroke(
+  commitAnnotationElement(
     gestureId: string,
-    stroke: AnnotationStroke,
+    stroke: AnnotationElement,
   ): Promise<AnnotationMutationResult>;
-  removeAnnotationStrokes(
+  removeAnnotationElements(
     gestureId: string,
     ids: readonly string[],
   ): Promise<AnnotationMutationResult>;

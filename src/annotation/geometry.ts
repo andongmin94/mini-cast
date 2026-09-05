@@ -1,4 +1,5 @@
-import type { AnnotationPoint, AnnotationStroke } from "./history.js";
+import type { AnnotationPoint, AnnotationElement } from "./history.js";
+import { elementInkBounds, elementInkPaths, ELLIPSE_FLATTENING_ERROR, type InkBounds } from "./shape-geometry.js";
 
 export function distanceSquared(left: AnnotationPoint, right: AnnotationPoint) {
   const dx = left.x - right.x;
@@ -98,63 +99,37 @@ export function segmentToSegmentDistanceSquared(
   );
 }
 
-export function pointHitsStroke(
-  point: AnnotationPoint,
-  stroke: AnnotationStroke,
-  eraserRadius: number,
-) {
-  if (!stroke.points.length) return false;
-
-  const tolerance = Math.max(0, eraserRadius) + stroke.width / 2;
-  const toleranceSquared = tolerance * tolerance;
-  if (stroke.points.length === 1) {
-    return distanceSquared(point, stroke.points[0]) <= toleranceSquared;
-  }
-
-  for (let index = 1; index < stroke.points.length; index += 1) {
-    if (
-      pointToSegmentDistanceSquared(
-        point,
-        stroke.points[index - 1],
-        stroke.points[index],
-      ) <= toleranceSquared
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+export function pointInsideBounds(point: AnnotationPoint, bounds: InkBounds) {
+  return point.x >= bounds.minX && point.x <= bounds.maxX && point.y >= bounds.minY && point.y <= bounds.maxY;
 }
 
-export function eraserSweepHitsStroke(
-  start: AnnotationPoint,
-  end: AnnotationPoint,
-  stroke: AnnotationStroke,
-  eraserRadius: number,
-) {
-  if (!stroke.points.length) return false;
+export function rectangleOutline(bounds: InkBounds): readonly AnnotationPoint[] {
+  const a = { x: bounds.minX, y: bounds.minY };
+  return [a, { x: bounds.maxX, y: bounds.minY }, { x: bounds.maxX, y: bounds.maxY }, { x: bounds.minX, y: bounds.maxY }, a];
+}
 
-  const tolerance = Math.max(0, eraserRadius) + stroke.width / 2;
-  const toleranceSquared = tolerance * tolerance;
-  if (stroke.points.length === 1) {
-    return (
-      pointToSegmentDistanceSquared(stroke.points[0], start, end) <=
-      toleranceSquared
-    );
+export function pointHitsStroke(point: AnnotationPoint, element: AnnotationElement, eraserRadius: number) {
+  return eraserSweepHitsStroke(point, point, element, eraserRadius);
+}
+
+/** Exhaustive reference kernel for object erasing; no interior hit for hollow shapes. */
+export function eraserSweepHitsStroke(start: AnnotationPoint, end: AnnotationPoint, element: AnnotationElement, eraserRadius: number) {
+  if (!element.points.length) return false;
+  let paths: readonly (readonly AnnotationPoint[])[];
+  let tolerance = Math.max(0, eraserRadius);
+  if (element.tool === "text") {
+    const bounds = elementInkBounds(element);
+    if (pointInsideBounds(start, bounds) || pointInsideBounds(end, bounds)) return true;
+    paths = [rectangleOutline(bounds)];
+  } else {
+    paths = elementInkPaths(element);
+    tolerance += element.width / 2 + (element.tool === "ellipse" ? ELLIPSE_FLATTENING_ERROR : 0);
   }
-
-  for (let index = 1; index < stroke.points.length; index += 1) {
-    if (
-      segmentToSegmentDistanceSquared(
-        start,
-        end,
-        stroke.points[index - 1],
-        stroke.points[index],
-      ) <= toleranceSquared
-    ) {
-      return true;
+  for (const points of paths) {
+    if (points.length === 1 && pointToSegmentDistanceSquared(points[0], start, end) <= tolerance * tolerance) return true;
+    for (let i = 1;i < points.length;i++) {
+      if (segmentToSegmentDistanceSquared(start, end, points[i - 1], points[i]) <= tolerance * tolerance) return true;
     }
   }
-
   return false;
 }

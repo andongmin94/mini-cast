@@ -1,3 +1,4 @@
+import { readAnnotationTextDraft, type AnnotationTextDraft } from "../annotation/text.js";
 import {
   createAnnotationUpdate,
   type AnnotationMutationResult,
@@ -31,8 +32,8 @@ import {
 } from "../annotation/gesture-leases.js";
 import {
   AnnotationHistory,
-  isAnnotationStroke,
-  readAnnotationStrokeIds,
+  isAnnotationElement,
+  readAnnotationElementIds,
   type AnnotationDocumentSnapshot,
 } from "../annotation/history.js";
 import {
@@ -63,6 +64,7 @@ import {
   configureToolShortcutFallbacks,
   refreshCursorCapture,
   setAnnotationInputMode,
+  setKeyboardInputSuppressed,
   startInputCapture,
   stopInputCapture,
 } from "./input.js";
@@ -108,6 +110,8 @@ const publishedDocuments = new Map<number, AnnotationDocumentSnapshot>();
 const gestureLeases = new GestureLeaseRegistry();
 const unavailableShortcuts = new Set<string>();
 let annotationTool: AnnotationTool = "pass-through";
+let textDraft: AnnotationTextDraft | null = null;
+let controllerTextEditing = false;
 let lastAnnotationDisplayId: number | null = null;
 let controllerSettingsRead = false;
 let currentSettings = DEFAULT_OVERLAY_SETTINGS;
@@ -172,6 +176,7 @@ function sendSettingsToAll() {
 function getAnnotationState(): AnnotationState {
   return {
     tool: annotationTool,
+    textDraft,
     unavailableShortcuts: [...unavailableShortcuts].sort(),
     canUndo: annotationHistory.canUndo || gestureLeases.size > 0,
     canRedo: annotationHistory.canRedo,
@@ -230,10 +235,10 @@ function annotationMutationResult(
       displayId === null
         ? null
         : {
-            kind: "revision",
-            displayId,
-            revision: annotationHistory.getSnapshot(displayId).revision,
-          },
+          kind: "revision",
+          displayId,
+          revision: annotationHistory.getSnapshot(displayId).revision,
+        },
   };
 }
 
@@ -291,7 +296,7 @@ function refreshTransientAnnotationShortcuts() {
     globalShortcut.unregister(accelerator);
     unavailableShortcuts.delete(accelerator);
   });
-  if (annotationTool === "pass-through") return;
+  if (annotationTool === "pass-through" || controllerTextEditing) return;
 
   registerShortcut(ESCAPE_SHORTCUT, () => setAnnotationTool("pass-through"));
   ACTIVE_COMMAND_SHORTCUTS.forEach(({ accelerator, command }) => {
@@ -316,7 +321,16 @@ function registerAnnotationHotkeys() {
   sendAnnotationState();
 }
 
+function setControllerTextEditing(editing: boolean) {
+  if (controllerTextEditing === editing) return;
+  controllerTextEditing = editing;
+  setKeyboardInputSuppressed(editing);
+  refreshTransientAnnotationShortcuts();
+  sendAnnotationState();
+}
+
 function setAnnotationTool(tool: AnnotationTool) {
+  if (tool !== "text") setControllerTextEditing(false);
   if (tool !== annotationTool) cancelActiveAnnotationGestures();
   annotationTool = tool;
   const interactive = tool !== "pass-through";
@@ -425,6 +439,21 @@ function registerIpc() {
     }
   });
 
+  ipcMain.handle("set-annotation-text-draft", (event, value: unknown) => {
+    if (!isControllerEvent(event) || annotationTool !== "text") return false;
+    const draft = readAnnotationTextDraft(value);
+    if (!draft) return false;
+    textDraft = draft;
+    setControllerTextEditing(false);
+    setAnnotationTool("text");
+    return true;
+  });
+  ipcMain.on("annotation-text-editing", (event, value: unknown) => {
+    if (!isControllerEvent(event) || typeof value !== "boolean") return;
+    if (value && (!mainWindow?.isFocused() || annotationTool !== "text")) return;
+    setControllerTextEditing(value);
+  });
+
   ipcMain.on("annotation-command", (event, command: unknown) => {
     if (isControllerEvent(event) && isAnnotationCommand(command)) {
       sendAnnotationCommand(command, "controller");
@@ -452,7 +481,7 @@ function registerIpc() {
   });
 
   ipcMain.handle(
-    "annotation-add-stroke",
+    "annotation-add-element",
     (event, gestureId: unknown, stroke: unknown): AnnotationMutationResult => {
       const displayId = isTopLevelSender(event)
         ? displayIdForSender(event.sender)
@@ -465,9 +494,9 @@ function registerIpc() {
       )
         return annotationMutationResult(displayId, "stale-gesture");
       try {
-        if (!isAnnotationStroke(stroke))
-          return annotationMutationResult(displayId, "invalid-stroke");
-        annotationHistory.addStroke(displayId, stroke);
+        if (!isAnnotationElement(stroke))
+          return annotationMutationResult(displayId, "invalid-element");
+        annotationHistory.addElement(displayId, stroke);
         const update = sendAnnotationDocument(
           displayId,
           undefined,
@@ -489,7 +518,7 @@ function registerIpc() {
   );
 
   ipcMain.handle(
-    "annotation-remove-strokes",
+    "annotation-remove-elements",
     (event, gestureId: unknown, value: unknown): AnnotationMutationResult => {
       const displayId = isTopLevelSender(event)
         ? displayIdForSender(event.sender)
@@ -502,10 +531,10 @@ function registerIpc() {
       )
         return annotationMutationResult(displayId, "stale-gesture");
       try {
-        const ids = readAnnotationStrokeIds(value);
+        const ids = readAnnotationElementIds(value);
         if (ids === null)
-          return annotationMutationResult(displayId, "invalid-stroke");
-        const changedDisplayId = annotationHistory.removeStrokes(
+          return annotationMutationResult(displayId, "invalid-element");
+        const changedDisplayId = annotationHistory.removeElements(
           displayId,
           ids,
         );
@@ -783,7 +812,9 @@ async function initializeApp() {
   createSplash();
 
   await createWindow(rendererUrl, () => setAnnotationTool("pass-through"));
+  mainWindow?.on("blur", () => setControllerTextEditing(false));
   mainWindow?.webContents.on("did-start-loading", () => {
+    setControllerTextEditing(false);
     controllerSettingsRead = false;
   });
   mainWindow?.webContents.on("render-process-gone", (_event, details) => {

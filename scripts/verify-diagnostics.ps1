@@ -10,6 +10,11 @@ foreach ($file in $files) {
     throw "Missing successful delta/Canvas/cancellation checks: $($file.Name)"
   }
   if ($result.diagnostics.dirtyCanvasReference.exactPixelComparisons -lt 500) { throw 'Canvas reference coverage was reduced.' }
+  foreach ($name in @('line', 'arrow', 'rectangle', 'ellipse', 'text', 'textEditorUndo', 'textReload')) {
+    if (-not $result.diagnostics.shapeAndTextTools.$name) {
+      throw "Missing shape/text verification '$name': $($file.Name)"
+    }
+  }
   Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
   Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
 }

@@ -1,5 +1,5 @@
 import { verifyDirtyCanvasRendering } from "./rendering-smoke.js";
-import { app, BrowserWindow, screen, type WebContents } from "electron";
+import { app, BrowserWindow, globalShortcut, screen, type WebContents } from "electron";
 import {
   existsSync,
   mkdirSync,
@@ -9,8 +9,8 @@ import {
 } from "node:fs";
 import { performance } from "node:perf_hooks";
 import {
-  prepareEraserStroke,
-  eraserSweepHitsPreparedStroke,
+  prepareEraserElement,
+  eraserSweepHitsPreparedElement,
 } from "../../annotation/eraser-index.js";
 import { eraserSweepHitsStroke } from "../../annotation/geometry.js";
 import type { AnnotationHistory } from "../../annotation/history.js";
@@ -76,7 +76,7 @@ export function createSmokeChecks(context: SmokeContext) {
   async function canvasAlphaAt(displayId: number, x: number, y: number) {
     const target =
       overlayWindows[
-        overlayDisplays.findIndex((item) => item.id === displayId)
+      overlayDisplays.findIndex((item) => item.id === displayId)
       ];
     if (!target) throw new Error("Missing annotation surface");
     return (await target.webContents.executeJavaScript(`(() => {
@@ -152,8 +152,8 @@ export function createSmokeChecks(context: SmokeContext) {
     if (!viewport) throw new Error("Missing benchmark viewport");
     const beforePixels = await committedCanvasInkPixels(displayId);
     const begin = performance.now();
-    for (let index = 0; index < 1000; index += 1) {
-      annotationHistory.addStroke(displayId, {
+    for (let index = 0;index < 1000;index += 1) {
+      annotationHistory.addElement(displayId, {
         id: `stress-${index}`,
         tool: "pen",
         color: "#007AFF",
@@ -174,13 +174,13 @@ export function createSmokeChecks(context: SmokeContext) {
     const snapshot = annotationHistory.getSnapshot(displayId);
     const snapshotMs = performance.now() - snapshotStart;
     const cacheStart = performance.now();
-    for (let iteration = 0; iteration < 1000; iteration += 1) {
+    for (let iteration = 0;iteration < 1000;iteration += 1) {
       if (annotationHistory.getSnapshot(displayId) !== snapshot)
         throw new Error("Stable revision was unnecessarily cloned");
     }
     const cachedSnapshotReads1000Ms = performance.now() - cacheStart;
     const prepareStart = performance.now();
-    const prepared = snapshot.strokes.map(prepareEraserStroke);
+    const prepared = snapshot.elements.map(prepareEraserElement);
     const eraserPrepareMs = performance.now() - prepareStart;
     const sweepStart = { x: 350, y: 10 };
     const sweepEnd = { x: 450, y: 10 };
@@ -192,7 +192,7 @@ export function createSmokeChecks(context: SmokeContext) {
     const indexedStart = performance.now();
     const indexedIds = prepared
       .filter((item) =>
-        eraserSweepHitsPreparedStroke(
+        eraserSweepHitsPreparedElement(
           sweepStart,
           sweepEnd,
           item,
@@ -203,7 +203,7 @@ export function createSmokeChecks(context: SmokeContext) {
       .map((item) => item.stroke.id);
     const indexedEraserMs = performance.now() - indexedStart;
     const referenceStart = performance.now();
-    const referenceIds = snapshot.strokes
+    const referenceIds = snapshot.elements
       .filter((item) => eraserSweepHitsStroke(sweepStart, sweepEnd, item, 4))
       .map((item) => item.id);
     const exhaustiveEraserMs = performance.now() - referenceStart;
@@ -220,7 +220,7 @@ export function createSmokeChecks(context: SmokeContext) {
     context.publishDocument(displayId);
     const target =
       overlayWindows[
-        overlayDisplays.findIndex((item) => item.id === displayId)
+      overlayDisplays.findIndex((item) => item.id === displayId)
       ];
     if (!target) throw new Error("Missing benchmark renderer");
     diagnostics.dirtyCanvasReference = await verifyDirtyCanvasRendering(
@@ -230,9 +230,9 @@ export function createSmokeChecks(context: SmokeContext) {
       async () =>
         Number(
           await target.webContents.executeJavaScript(
-            "document.querySelector('[data-mini-cast-overlay]')?.dataset.annotationStrokes",
+            "document.querySelector('[data-mini-cast-overlay]')?.dataset.annotationElements",
           ),
-        ) === snapshot.strokes.length,
+        ) === snapshot.elements.length,
       10_000,
       "128k-point snapshot reaches the renderer",
     );
@@ -258,7 +258,7 @@ export function createSmokeChecks(context: SmokeContext) {
       const gestureId = crypto.randomUUID();
       miniCast.beginAnnotationGesture(gestureId);
       try {
-        const result = await miniCast.commitAnnotationStroke(gestureId, {
+        const result = await miniCast.commitAnnotationElement(gestureId, {
           id: crypto.randomUUID(), tool: 'pen', color: '#123456', width: 4, opacity: 1,
           points: [{ x: 1, y: 1 }, { x: 2, y: 2 }],
         });
@@ -278,7 +278,7 @@ export function createSmokeChecks(context: SmokeContext) {
       async () => {
         const expected = annotationHistory.getSnapshot(displayId);
         return (
-          expected.strokes.length === snapshot.strokes.length &&
+          expected.elements.length === snapshot.elements.length &&
           Number(
             await target.webContents.executeJavaScript(
               "document.querySelector('[data-mini-cast-overlay]')?.dataset.annotationRevision",
@@ -298,8 +298,8 @@ export function createSmokeChecks(context: SmokeContext) {
     await injectWindowsDrag(start.x, start.y, end.x, end.y);
     await waitFor(
       () =>
-        annotationHistory.getSnapshot(displayId).strokes.length ===
-        snapshot.strokes.length + 1,
+        annotationHistory.getSnapshot(displayId).elements.length ===
+        snapshot.elements.length + 1,
       10_000,
       "native drawing still commits over a 128k-point document",
     );
@@ -307,8 +307,8 @@ export function createSmokeChecks(context: SmokeContext) {
     await shortcutCommand("undo");
     await waitFor(
       () =>
-        annotationHistory.getSnapshot(displayId).strokes.length ===
-        snapshot.strokes.length,
+        annotationHistory.getSnapshot(displayId).elements.length ===
+        snapshot.elements.length,
       10_000,
       "native Undo on the large document",
     );
@@ -318,8 +318,8 @@ export function createSmokeChecks(context: SmokeContext) {
     await injectWindowsDrag(start.x, start.y, end.x, end.y);
     await waitFor(
       () =>
-        annotationHistory.getSnapshot(displayId).strokes.length <
-        snapshot.strokes.length,
+        annotationHistory.getSnapshot(displayId).elements.length <
+        snapshot.elements.length,
       10_000,
       "native indexed erasing on the 128k-point document",
     );
@@ -327,14 +327,14 @@ export function createSmokeChecks(context: SmokeContext) {
     await shortcutCommand("undo");
     await waitFor(
       () =>
-        annotationHistory.getSnapshot(displayId).strokes.length ===
-        snapshot.strokes.length,
+        annotationHistory.getSnapshot(displayId).elements.length ===
+        snapshot.elements.length,
       10_000,
       "Undo restores every stroke removed by the indexed eraser",
     );
     if (
-      JSON.stringify(annotationHistory.getSnapshot(displayId).strokes) !==
-      JSON.stringify(snapshot.strokes)
+      JSON.stringify(annotationHistory.getSnapshot(displayId).elements) !==
+      JSON.stringify(snapshot.elements)
     )
       throw new Error("Large eraser Undo changed the document geometry");
     const wireUpdates = await target.webContents.executeJavaScript(`(() => {
@@ -372,6 +372,117 @@ export function createSmokeChecks(context: SmokeContext) {
       JSON.stringify(metrics),
     );
     return metrics;
+  }
+
+  async function verifyShapeAndTextTools(
+    displayId: number,
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+  ) {
+    const controller = mainWindow;
+    const display = screen.getAllDisplays().find(item => item.id === displayId);
+    if (!controller || !display) throw new Error("Missing shape test windows");
+    const area = display.workArea;
+    const controllerBounds = controller.getBounds();
+    controller.setPosition(area.x + area.width - controllerBounds.width - 8, area.y + 8);
+    const localStart = { x: start.x - display.bounds.x, y: start.y - display.bounds.y };
+    const localEnd = { x: end.x - display.bounds.x, y: end.y - display.bounds.y };
+    async function clearDocument() {
+      await injectWindowsMouseMove(start.x, start.y);
+      await shortcutCommand("clear");
+      await waitFor(() => annotationHistory.getSnapshot(displayId).elements.length === 0, 5000, "clear shape fixture");
+      await waitForCommittedCanvasInk(displayId, false, "empty shape fixture pixels");
+    }
+    const inputWindow = overlayWindows[overlayDisplays.findIndex(item => item.id === displayId)];
+    await inputWindow.webContents.executeJavaScript(`(() => {
+      window.__miniCastToolTrace = [];
+      const trace = item => {
+        window.__miniCastToolTrace.push(item);
+        if (window.__miniCastToolTrace.length > 30) window.__miniCastToolTrace.shift();
+      };
+      for (const name of ['pointerdown','pointerup','pointercancel','lostpointercapture']) {
+        document.addEventListener(name, event => trace({ name, x:event.clientX, y:event.clientY,
+          pointerId:event.pointerId, target:event.target.tagName, buttons:event.buttons }), true);
+      }
+      window.addEventListener('error', event => trace({ error: event.message, stack: event.error?.stack }));
+    })()`);
+    for (const tool of ["line", "arrow", "rectangle", "ellipse"] as const) {
+      await clickControllerElement(controller, `[data-annotation-tool="${tool}"]`, tool + " button");
+      await waitFor(() => context.state().tool === tool, 5000, tool + " selected");
+      await clearDocument();
+      await waitForOverlayInput(displayId, true);
+      await injectWindowsDrag(start.x, start.y, end.x, end.y);
+      try {
+        await waitFor(() => annotationHistory.getSnapshot(displayId).elements.length === 1, 5000, tool + " commit");
+      } catch (error) {
+        const renderer = await inputWindow.webContents.executeJavaScript(`(() => {
+          const canvas = document.querySelectorAll('canvas')[1];
+          return { trace:window.__miniCastToolTrace, notice:document.querySelector('[data-annotation-notice]')?.textContent,
+            canvas:{ width:canvas?.clientWidth, height:canvas?.clientHeight, active:canvas?.dataset.activeGesture,
+              cursor:canvas?.style.cursor, pointerEvents:canvas?.style.pointerEvents },
+            root:document.querySelector('[data-mini-cast-overlay]')?.dataset };
+        })()`);
+        console.error('SHAPE_INPUT_DIAGNOSTIC', JSON.stringify({ tool, start, end,
+          controller:controller.getBounds(), overlay:inputWindow.getBounds(), state:context.state(),
+          document:annotationHistory.getSnapshot(displayId), renderer }));
+        throw error;
+      }
+      const element = annotationHistory.getSnapshot(displayId).elements[0];
+      if (element.tool !== tool || element.points.length !== 2) throw new Error(tool + " anchors were not stored");
+      await waitForCommittedCanvasInk(displayId, true, tool + " pixels");
+      const testPoint = tool === "ellipse" ? { x: localEnd.x, y: (localStart.y + localEnd.y) / 2 }
+        : tool === "rectangle" ? { x: (localStart.x + localEnd.x) / 2, y: localStart.y }
+          : { x: (localStart.x + localEnd.x) / 2, y: (localStart.y + localEnd.y) / 2 };
+      await waitFor(async () => await canvasAlphaAt(displayId, testPoint.x, testPoint.y) > 0, 5000, tool + " outline pixels");
+      await shortcutCommand("undo");
+      await waitForCommittedCanvasInk(displayId, false, tool + " Undo pixels");
+      await shortcutCommand("redo");
+      await waitForCommittedCanvasInk(displayId, true, tool + " Redo pixels");
+      await selectTool("eraser");
+      await injectWindowsDrag(start.x, start.y, end.x, end.y);
+      await waitFor(() => annotationHistory.getSnapshot(displayId).elements.length === 0, 5000, tool + " object erase");
+      await waitForCommittedCanvasInk(displayId, false, tool + " erased pixels");
+    }
+    await clickControllerElement(controller, '[data-annotation-tool="text"]', "text tool");
+    await waitFor(() => context.state().tool === "text", 5000, "text tool state");
+    // An existing element makes a mistakenly captured text-editor Undo observable.
+    annotationHistory.addElement(displayId, { id: "text-undo-probe", tool: "pen", points: [localStart], color: "#007AFF", width: 4, opacity: 1 });
+    context.publishDocument(displayId);
+    const beforeEditing = annotationHistory.getSnapshot(displayId).revision;
+    await clickControllerElement(controller, "#annotation-text-content", "text editor focus");
+    await waitFor(
+      () => !globalShortcut.isRegistered("CommandOrControl+Z"),
+      5000,
+      "drawing Undo released while editing text",
+    );
+    // Chromium text insertion supplies the fixture; this is not a physical IME test.
+    await controller.webContents.insertText("한글 제목\nPlain <b>text</b>");
+    await injectWindowsShortcut("CommandOrControl+Z");
+    await waitFor(async () => await controller.webContents.executeJavaScript(`document.querySelector('#annotation-text-content').value === ''`), 5000, "native Undo edits the textarea");
+    if (annotationHistory.getSnapshot(displayId).revision !== beforeEditing) throw new Error("Text-editor Undo modified the drawing history");
+    await controller.webContents.insertText("한글 제목\nPlain <b>text</b>");
+    await clickControllerElement(controller, "[data-annotation-text-prepare]", "text placement button");
+    await waitFor(() => context.state().textDraft?.text === "한글 제목\nPlain <b>text</b>", 5000, "text draft IPC");
+    await clearDocument();
+    await injectWindowsClick(start.x, start.y);
+    await waitFor(() => annotationHistory.getSnapshot(displayId).elements[0]?.tool === "text", 5000, "native text placement");
+    await waitForCommittedCanvasInk(displayId, true, "isolated text pixels");
+    const element = annotationHistory.getSnapshot(displayId).elements[0];
+    if (element.tool !== "text") throw new Error("Text element missing");
+    const target = overlayWindows[overlayDisplays.findIndex(item => item.id === displayId)];
+    const loaded = new Promise<void>(resolve => target.webContents.once("did-finish-load", () => resolve()));
+    target.webContents.reload(); await loaded;
+    await waitForCommittedCanvasInk(displayId, true, "text pixels restored after renderer reload");
+    await shortcutCommand("undo"); await waitForCommittedCanvasInk(displayId, false, "text Undo pixels");
+    await shortcutCommand("redo"); await waitForCommittedCanvasInk(displayId, true, "text Redo pixels");
+    await selectTool("eraser");
+    const center = {
+      x: display.bounds.x + element.points[0].x + (element.box.minX + element.box.maxX) * element.scaleX / 2,
+      y: display.bounds.y + element.points[0].y + (element.box.minY + element.box.maxY) * element.scaleY / 2
+    };
+    await injectWindowsClick(Math.round(center.x), Math.round(center.y));
+    await waitForCommittedCanvasInk(displayId, false, "text object erase");
+    diagnostics.shapeAndTextTools = { line: true, arrow: true, rectangle: true, ellipse: true, text: true, textEditorUndo: true, textReload: true };
   }
 
   interface SmokeState {
@@ -430,6 +541,7 @@ export function createSmokeChecks(context: SmokeContext) {
       `(() => {
         const target = document.querySelector(${encodedSelector});
         if (!(target instanceof HTMLElement)) return null;
+        target.scrollIntoView({block: "center", inline: "nearest"});
         const bounds = target.getBoundingClientRect();
         if (bounds.width <= 0 || bounds.height <= 0) return null;
         return {
@@ -664,7 +776,7 @@ export function createSmokeChecks(context: SmokeContext) {
         throw new Error("overlay does not cover the full primary display");
       }
 
-      const beforeStrokes = annotationHistory.getSnapshot(primary.id).strokes
+      const beforeStrokes = annotationHistory.getSnapshot(primary.id).elements
         .length;
       await waitForCommittedCanvasInk(
         primary.id,
@@ -677,7 +789,7 @@ export function createSmokeChecks(context: SmokeContext) {
       await injectWindowsDrag(start.x, start.y, end.x, end.y);
       await waitFor(
         () =>
-          annotationHistory.getSnapshot(primary.id).strokes.length >
+          annotationHistory.getSnapshot(primary.id).elements.length >
           beforeStrokes,
         5_000,
         "OS-injected annotation stroke",
@@ -696,7 +808,7 @@ export function createSmokeChecks(context: SmokeContext) {
       await shortcutCommand("undo");
       await waitFor(
         () =>
-          annotationHistory.getSnapshot(primary.id).strokes.length ===
+          annotationHistory.getSnapshot(primary.id).elements.length ===
           beforeStrokes,
         5_000,
         "annotation undo",
@@ -710,7 +822,7 @@ export function createSmokeChecks(context: SmokeContext) {
       await shortcutCommand("redo");
       await waitFor(
         () =>
-          annotationHistory.getSnapshot(primary.id).strokes.length >
+          annotationHistory.getSnapshot(primary.id).elements.length >
           beforeStrokes,
         5_000,
         "annotation redo",
@@ -726,7 +838,7 @@ export function createSmokeChecks(context: SmokeContext) {
       await injectWindowsDrag(start.x, start.y, end.x, end.y);
       await waitFor(
         () =>
-          annotationHistory.getSnapshot(primary.id).strokes.length ===
+          annotationHistory.getSnapshot(primary.id).elements.length ===
           beforeStrokes,
         5_000,
         "OS-injected eraser gesture",
@@ -740,14 +852,14 @@ export function createSmokeChecks(context: SmokeContext) {
       await shortcutCommand("undo");
       await waitFor(
         () =>
-          annotationHistory.getSnapshot(primary.id).strokes.length >
+          annotationHistory.getSnapshot(primary.id).elements.length >
           beforeStrokes,
         5_000,
         "eraser undo",
       );
       await waitForCommittedCanvasInk(primary.id, true, "visual eraser undo");
 
-      const penStrokeCount = annotationHistory.getSnapshot(primary.id).strokes
+      const penStrokeCount = annotationHistory.getSnapshot(primary.id).elements
         .length;
       await selectTool("highlighter");
       await waitForOverlayInput(primary.id, true);
@@ -759,14 +871,14 @@ export function createSmokeChecks(context: SmokeContext) {
       );
       await waitFor(
         () =>
-          annotationHistory.getSnapshot(primary.id).strokes.length >
+          annotationHistory.getSnapshot(primary.id).elements.length >
           penStrokeCount,
         5_000,
         "OS-injected highlighter stroke",
       );
       const highlighterStrokes = annotationHistory.getSnapshot(
         primary.id,
-      ).strokes;
+      ).elements;
       const highlighter = highlighterStrokes[highlighterStrokes.length - 1];
       if (highlighter?.tool !== "highlighter" || highlighter.opacity !== 0.35) {
         throw new Error("highlighter stroke style was not committed correctly");
@@ -791,7 +903,7 @@ export function createSmokeChecks(context: SmokeContext) {
       await shortcutCommand("undo");
       await waitFor(
         () =>
-          annotationHistory.getSnapshot(primary.id).strokes.length ===
+          annotationHistory.getSnapshot(primary.id).elements.length ===
           penStrokeCount,
         5_000,
         "highlighter undo",
@@ -849,15 +961,15 @@ export function createSmokeChecks(context: SmokeContext) {
               return root
                 ? {
                     revision: Number(root.getAttribute("data-annotation-revision")),
-                    strokes: Number(root.getAttribute("data-annotation-strokes"))
+                    elements: Number(root.getAttribute("data-annotation-elements"))
                   }
                 : null;
             })()`,
             true,
-          )) as { revision: number; strokes: number } | null;
+          )) as { revision: number; elements: number } | null;
           return (
             state?.revision === persisted.revision &&
-            state.strokes === persisted.strokes.length
+            state.elements === persisted.elements.length
           );
         },
         5_000,
@@ -880,12 +992,12 @@ export function createSmokeChecks(context: SmokeContext) {
             .executeJavaScript(`(() => {
           const root = document.querySelector('[data-mini-cast-overlay]');
           return root && Number(root.dataset.annotationRevision) === ${persisted.revision}
-            && Number(root.dataset.annotationStrokes) === ${persisted.strokes.length};
+            && Number(root.dataset.annotationElements) === ${persisted.elements.length};
         })()`);
           return Boolean(restored);
         },
         5_000,
-        "real renderer reload restores the document revision and strokes",
+        "real renderer reload restores the document revision and elements",
       );
       await waitForCommittedCanvasInk(
         primary.id,
@@ -995,7 +1107,7 @@ export function createSmokeChecks(context: SmokeContext) {
       await shortcutCommand("clear");
       await waitFor(
         () =>
-          annotationHistory.getSnapshot(primary.id).strokes.length ===
+          annotationHistory.getSnapshot(primary.id).elements.length ===
           beforeStrokes,
         5_000,
         "display clear command",
@@ -1009,8 +1121,8 @@ export function createSmokeChecks(context: SmokeContext) {
       await shortcutCommand("undo");
       await waitFor(
         () =>
-          annotationHistory.getSnapshot(primary.id).strokes.length ===
-          persisted.strokes.length,
+          annotationHistory.getSnapshot(primary.id).elements.length ===
+          persisted.elements.length,
         5_000,
         "display clear undo",
       );
@@ -1029,6 +1141,7 @@ export function createSmokeChecks(context: SmokeContext) {
         start,
         end,
       );
+      await verifyShapeAndTextTools(primary.id, start, end);
     } finally {
       if (!underlay.isDestroyed()) underlay.destroy();
       await selectTool("pass-through");

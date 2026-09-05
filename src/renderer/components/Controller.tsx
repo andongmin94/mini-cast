@@ -1,3 +1,4 @@
+import type { AnnotationTextDraft } from "@/annotation/text";
 import { useEffect, useState } from "react";
 
 import { Keyboard, MousePointer2, PenLine } from "lucide-react";
@@ -127,6 +128,7 @@ export default function Controller() {
     unavailableShortcuts: [],
     canUndo: false,
     canRedo: false,
+    textDraft: null,
   });
   const [saveStatus, setSaveStatus] = useState<SettingsSaveStatus>({
     state: "saved",
@@ -209,6 +211,11 @@ export default function Controller() {
   function chooseAnnotationTool(tool: AnnotationTool) {
     setAnnotationState((current) => ({ ...current, tool }));
     if (hasBridge) miniCast.setAnnotationTool(tool);
+  }
+
+  async function prepareAnnotationText(draft: AnnotationTextDraft) {
+    const accepted = hasBridge && await miniCast.setAnnotationTextDraft(draft);
+    return accepted;
   }
 
   function sendAnnotationCommand(command: AnnotationCommand) {
@@ -475,6 +482,8 @@ export default function Controller() {
 
           <TabsContent value="annotation">
             <AnnotationControls
+              textDraft={annotationState.textDraft}
+              onPrepareText={prepareAnnotationText}
               tool={annotationState.tool}
               settings={{
                 annotationPenColor: settings.annotationPenColor,

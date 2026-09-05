@@ -23,7 +23,7 @@ test("eraser hit testing includes stroke thickness", () => {
   assert.equal(pointHitsStroke({ x: 20, y: 16 }, stroke, 3), false);
 });
 
-test("eraser hit testing handles single-point strokes", () => {
+test("eraser hit testing handles single-point elements", () => {
   const dot = { ...stroke, points: [{ x: 10, y: 10 }] };
   assert.equal(pointHitsStroke({ x: 13, y: 10 }, dot, 1), true);
   assert.equal(pointHitsStroke({ x: 14, y: 10 }, dot, 1), false);

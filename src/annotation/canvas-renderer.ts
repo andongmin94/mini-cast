@@ -1,4 +1,6 @@
-import type { AnnotationStroke } from "./history.js";
+import type { AnnotationElement } from "./history.js";
+import { elementInkPaths } from "./shape-geometry.js";
+import { annotationTextFont, TEXT_LINE_HEIGHT } from "./text.js";
 import {
   planCommittedRender,
   type CommittedRenderState,
@@ -13,40 +15,55 @@ interface StagingSurface {
 // One reusable off-DOM surface per committed canvas; no per-stroke bitmap cache.
 const stagingSurfaces = new WeakMap<CanvasRenderingContext2D, StagingSurface>();
 
-export function drawAnnotationStroke(
-  context: CanvasRenderingContext2D,
-  stroke: AnnotationStroke,
-) {
-  if (!stroke.points.length) return;
+export function drawAnnotationElement(context: CanvasRenderingContext2D, element: AnnotationElement) {
+  if (!element.points.length) return;
   context.save();
   try {
-    context.globalAlpha = stroke.opacity;
-    context.strokeStyle = stroke.color;
-    context.fillStyle = stroke.color;
-    context.lineWidth = stroke.width;
+    context.globalAlpha = element.opacity;
+    context.strokeStyle = element.color;
+    context.fillStyle = element.color;
+    if (element.tool === "text") {
+      context.translate(element.points[0].x, element.points[0].y);
+      context.scale(element.scaleX, element.scaleY);
+      context.font = annotationTextFont(element.fontSize);
+      context.textAlign = "left";
+      context.textBaseline = "alphabetic";
+      context.direction = "ltr";
+      element.text.split("\n").forEach((line, index) => {
+        context.fillText(line, 0, element.fontSize * (1 + index * TEXT_LINE_HEIGHT));
+      });
+      return;
+    }
+    context.lineWidth = element.width;
     context.lineCap = "round";
     context.lineJoin = "round";
     context.beginPath();
-    if (stroke.points.length === 1) {
-      const point = stroke.points[0];
-      context.arc(point.x, point.y, stroke.width / 2, 0, Math.PI * 2);
-      context.fill();
+    if (element.tool === "ellipse") {
+      const [a, b] = element.points;
+      const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
+      if (rx && ry) context.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, rx, ry, 0, 0, Math.PI * 2);
+      else { context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); }
     } else {
-      context.moveTo(stroke.points[0].x, stroke.points[0].y);
-      for (let index = 1; index < stroke.points.length; index += 1)
-        context.lineTo(stroke.points[index].x, stroke.points[index].y);
-      context.stroke();
+      for (const points of elementInkPaths(element)) {
+        if (points.length === 1) {
+          context.moveTo(points[0].x + element.width / 2, points[0].y);
+          context.arc(points[0].x, points[0].y, element.width / 2, 0, Math.PI * 2);
+          context.fill();
+          return;
+        }
+        context.moveTo(points[0].x, points[0].y);
+        for (let i = 1;i < points.length;i++) context.lineTo(points[i].x, points[i].y);
+      }
     }
-  } finally {
-    context.restore();
-  }
+    context.stroke();
+  } finally { context.restore(); }
 }
 
 function composeDirtyRegion(
   target: CanvasRenderingContext2D,
   state: CommittedRenderState,
   region: PixelRect,
-  strokes: readonly AnnotationStroke[],
+  elements: readonly AnnotationElement[],
 ) {
   let surface = stagingSurfaces.get(target);
   if (!surface) {
@@ -69,7 +86,7 @@ function composeDirtyRegion(
     // Chromium's clipped stroke rasterization can change antialiasing at clip edges.
     // Pixels outside region are scratch data and are never copied; every copied
     // region is cleared before recomposition on its next use.
-    for (const stroke of strokes) drawAnnotationStroke(context, stroke);
+    for (const stroke of elements) drawAnnotationElement(context, stroke);
   } finally {
     context.restore();
   }
@@ -85,10 +102,10 @@ export function paintCommittedAnnotations(
   const plan = planCommittedRender(previous, next);
   if (plan.kind === "none") return plan;
   let patch: HTMLCanvasElement | null = null;
-  if (plan.kind === "dirty" && plan.strokes.length) {
+  if (plan.kind === "dirty" && plan.elements.length) {
     if (!plan.clear) throw new Error("Dirty annotation plan requires a region");
     // Do not damage the visible canvas if recomposition itself fails.
-    patch = composeDirtyRegion(context, next, plan.clear, plan.strokes);
+    patch = composeDirtyRegion(context, next, plan.clear, plan.elements);
   }
   context.save();
   try {
@@ -105,7 +122,7 @@ export function paintCommittedAnnotations(
       }
     }
     context.setTransform(next.pixelRatio, 0, 0, next.pixelRatio, 0, 0);
-    for (const stroke of plan.strokes) drawAnnotationStroke(context, stroke);
+    for (const stroke of plan.elements) drawAnnotationElement(context, stroke);
   } finally {
     context.restore();
   }

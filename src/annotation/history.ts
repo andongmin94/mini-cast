@@ -1,4 +1,5 @@
 import { AnnotationError } from "./errors.js";
+import { readAnnotationTextDraft, type TextInkBox } from "./text.js";
 
 export interface AnnotationPoint {
   readonly x: number;
@@ -7,13 +8,48 @@ export interface AnnotationPoint {
 
 export type StrokeTool = "pen" | "highlighter";
 
-export interface AnnotationStroke {
+interface ElementStyle {
   readonly id: string;
+  readonly color: string;
+  readonly opacity: number;
+}
+
+export type ShapeTool = "line" | "arrow" | "rectangle" | "ellipse";
+export const SHAPE_TOOLS: readonly ShapeTool[] = ["line", "arrow", "rectangle", "ellipse"];
+export function isShapeTool(value: unknown): value is ShapeTool {
+  return typeof value === "string" && (SHAPE_TOOLS as readonly string[]).includes(value);
+}
+
+export interface StrokeElement extends ElementStyle {
   readonly tool: StrokeTool;
   readonly points: readonly AnnotationPoint[];
-  readonly color: string;
   readonly width: number;
-  readonly opacity: number;
+}
+
+export interface ShapeElement extends ElementStyle {
+  readonly tool: ShapeTool;
+  /** Start and end anchors, not a sampled freehand approximation. */
+  readonly points: readonly AnnotationPoint[];
+  readonly width: number;
+}
+
+export interface TextElement extends ElementStyle {
+  readonly tool: "text";
+  readonly points: readonly AnnotationPoint[];
+  readonly text: string;
+  readonly fontSize: number;
+  readonly scaleX: number;
+  readonly scaleY: number;
+  /** Local glyph/layout bounds before viewport scaling. */
+  readonly box: TextInkBox;
+}
+
+export type InkElement = StrokeElement | ShapeElement;
+export type AnnotationElement = InkElement | TextElement;
+
+/** Text storage participates in the existing bounded document/history budget. */
+export function annotationElementCost(element: AnnotationElement) {
+  return element.points.length + (element.tool === "text" ? element.text.length : 0);
 }
 
 export interface AnnotationViewport {
@@ -25,25 +61,25 @@ export interface AnnotationDocumentSnapshot {
   readonly displayId: number;
   readonly revision: number;
   readonly viewport: AnnotationViewport | null;
-  readonly strokes: readonly AnnotationStroke[];
+  readonly elements: readonly AnnotationElement[];
 }
 
-interface IndexedStroke {
-  stroke: AnnotationStroke;
+interface IndexedElement {
+  stroke: AnnotationElement;
   index: number;
 }
 
 interface AddHistoryEntry {
   kind: "add";
   displayId: number;
-  stroke: AnnotationStroke;
+  stroke: AnnotationElement;
   index: number;
 }
 
 interface RemoveHistoryEntry {
   kind: "remove";
   displayId: number;
-  strokes: readonly IndexedStroke[];
+  elements: readonly IndexedElement[];
 }
 
 type HistoryEntry = AddHistoryEntry | RemoveHistoryEntry;
@@ -53,7 +89,7 @@ type UnknownRecord = Record<string, unknown>;
 export const MAX_ANNOTATION_COORDINATE = 1_000_000;
 export const MAX_ANNOTATION_POINTS_PER_STROKE = 50_000;
 export const MAX_ANNOTATION_POINTS_PER_DISPLAY = 1_000_000;
-export const MAX_ANNOTATION_STROKES_PER_DISPLAY = 10_000;
+export const MAX_ANNOTATION_ELEMENTS_PER_DISPLAY = 10_000;
 export const MAX_ANNOTATION_HISTORY_ENTRIES = 2_000;
 export const MAX_ANNOTATION_HISTORY_POINTS = MAX_ANNOTATION_POINTS_PER_DISPLAY;
 
@@ -61,8 +97,8 @@ const HEX_COLOR = /^#[\da-f]{6}$/i;
 
 interface DocumentState {
   viewport: AnnotationViewport | null;
-  strokes: AnnotationStroke[];
-  strokeIds: Set<string>;
+  elements: AnnotationElement[];
+  elementIds: Set<string>;
   pointCount: number;
 }
 
@@ -83,36 +119,28 @@ function isFinitePoint(value: unknown): value is AnnotationPoint {
 }
 
 /** Copy untrusted input exactly once, then share only deeply immutable geometry. */
-function immutableStroke(stroke: AnnotationStroke): AnnotationStroke {
-  return Object.freeze({
-    id: stroke.id,
-    tool: stroke.tool,
-    points: Object.freeze(
-      stroke.points.map(({ x, y }) => Object.freeze({ x, y })),
-    ),
-    color: stroke.color,
-    width: stroke.width,
-    opacity: stroke.opacity,
+function immutableElement(element: AnnotationElement): AnnotationElement {
+  const common = {
+    id: element.id, color: element.color, opacity: element.opacity,
+    points: Object.freeze(element.points.map(({ x, y }) => Object.freeze({ x, y }))),
+  };
+  if (element.tool === "text") return Object.freeze({
+    ...common, tool: "text", text: element.text, fontSize: element.fontSize,
+    scaleX: element.scaleX, scaleY: element.scaleY, box: Object.freeze({ minX: element.box.minX, minY: element.box.minY, maxX: element.box.maxX, maxY: element.box.maxY }),
   });
+  return Object.freeze({ ...common, tool: element.tool, width: element.width });
 }
 
-function scaleStroke(
-  stroke: AnnotationStroke,
-  scaleX: number,
-  scaleY: number,
-): AnnotationStroke {
+function scaleElement(element: AnnotationElement, scaleX: number, scaleY: number): AnnotationElement {
+  const points = Object.freeze(element.points.map(point => Object.freeze({
+    x: point.x * scaleX, y: point.y * scaleY,
+  })));
+  if (element.tool === "text") return Object.freeze({
+    ...element, points, scaleX: element.scaleX * scaleX, scaleY: element.scaleY * scaleY,
+  });
   const widthScale = Math.sqrt(Math.abs(scaleX * scaleY));
   return Object.freeze({
-    ...stroke,
-    points: Object.freeze(
-      stroke.points.map((point) =>
-        Object.freeze({
-          x: point.x * scaleX,
-          y: point.y * scaleY,
-        }),
-      ),
-    ),
-    width: Math.min(128, Math.max(0.5, stroke.width * widthScale)),
+    ...element, points, width: Math.min(128, Math.max(0.5, element.width * widthScale)),
   });
 }
 
@@ -122,7 +150,7 @@ function cloneHistoryEntry(entry: HistoryEntry): HistoryEntry {
   }
   return {
     ...entry,
-    strokes: entry.strokes.map(({ stroke, index }) => ({
+    elements: entry.elements.map(({ stroke, index }) => ({
       stroke,
       index,
     })),
@@ -137,12 +165,12 @@ function scaleHistoryEntry(
 ): HistoryEntry {
   if (entry.displayId !== displayId) return entry;
   if (entry.kind === "add") {
-    return { ...entry, stroke: scaleStroke(entry.stroke, scaleX, scaleY) };
+    return { ...entry, stroke: scaleElement(entry.stroke, scaleX, scaleY) };
   }
   return {
     ...entry,
-    strokes: entry.strokes.map(({ stroke, index }) => ({
-      stroke: scaleStroke(stroke, scaleX, scaleY),
+    elements: entry.elements.map(({ stroke, index }) => ({
+      stroke: scaleElement(stroke, scaleX, scaleY),
       index,
     })),
   };
@@ -150,56 +178,44 @@ function scaleHistoryEntry(
 
 function historyEntryPointCount(entry: HistoryEntry) {
   return entry.kind === "add"
-    ? entry.stroke.points.length
-    : entry.strokes.reduce(
-        (total, { stroke }) => total + stroke.points.length,
-        0,
-      );
+    ? annotationElementCost(entry.stroke)
+    : entry.elements.reduce(
+      (total, { stroke }) => total + annotationElementCost(stroke),
+      0,
+    );
 }
 
 function validViewportDimension(value: number) {
   return Number.isFinite(value) && value > 0 && value <= 100_000;
 }
 
-export function isAnnotationStroke(value: unknown): value is AnnotationStroke {
+export function isAnnotationElement(value: unknown): value is AnnotationElement {
   if (!isRecord(value)) return false;
-  if (
-    typeof value.id !== "string" ||
-    value.id.length < 1 ||
-    value.id.length > 128
-  ) {
-    return false;
+  if (typeof value.id !== "string" || value.id.length < 1 || value.id.length > 128) return false;
+  if (!Array.isArray(value.points) || !value.points.length ||
+    value.points.length > MAX_ANNOTATION_POINTS_PER_STROKE || !value.points.every(isFinitePoint)) return false;
+  if (typeof value.color !== "string" || !HEX_COLOR.test(value.color)) return false;
+  if (value.tool === "text") {
+    const draft = readAnnotationTextDraft(value);
+    if (!draft || draft.text !== value.text || value.points.length !== 1 || value.opacity !== 1) return false;
+    if (typeof value.scaleX !== "number" || typeof value.scaleY !== "number" ||
+      !Number.isFinite(value.scaleX) || !Number.isFinite(value.scaleY) ||
+      value.scaleX <= 0 || value.scaleY <= 0 || value.scaleX > 100000 || value.scaleY > 100000) return false;
+    if (!isRecord(value.box)) return false;
+    const { minX, minY, maxX, maxY } = value.box;
+    if (![minX, minY, maxX, maxY].every(n => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= MAX_ANNOTATION_COORDINATE)) return false;
+    return (maxX as number) > (minX as number) && (maxY as number) > (minY as number);
   }
-  if (value.tool !== "pen" && value.tool !== "highlighter") return false;
-  if (
-    !Array.isArray(value.points) ||
-    value.points.length < 1 ||
-    value.points.length > MAX_ANNOTATION_POINTS_PER_STROKE
-  ) {
-    return false;
-  }
-  if (!value.points.every(isFinitePoint)) return false;
-  if (typeof value.color !== "string" || !HEX_COLOR.test(value.color)) {
-    return false;
-  }
-  if (
-    typeof value.width !== "number" ||
-    !Number.isFinite(value.width) ||
-    value.width < 0.5 ||
-    value.width > 128
-  ) {
-    return false;
-  }
-  if (typeof value.opacity !== "number" || !Number.isFinite(value.opacity)) {
-    return false;
-  }
-  return value.tool === "pen" ? value.opacity === 1 : value.opacity === 0.35;
+  if (value.tool !== "pen" && value.tool !== "highlighter" && !isShapeTool(value.tool)) return false;
+  if (isShapeTool(value.tool) && value.points.length !== 2) return false;
+  if (typeof value.width !== "number" || !Number.isFinite(value.width) || value.width < 0.5 || value.width > 128) return false;
+  return value.opacity === (value.tool === "highlighter" ? 0.35 : 1);
 }
 
-export function readAnnotationStrokeIds(value: unknown) {
+export function readAnnotationElementIds(value: unknown) {
   if (
     !Array.isArray(value) ||
-    value.length > MAX_ANNOTATION_STROKES_PER_DISPLAY
+    value.length > MAX_ANNOTATION_ELEMENTS_PER_DISPLAY
   ) {
     return null;
   }
@@ -243,8 +259,8 @@ export class AnnotationHistory {
         displayId,
         {
           viewport: document.viewport ? { ...document.viewport } : null,
-          strokes: document.strokes.slice(),
-          strokeIds: new Set(document.strokeIds),
+          elements: document.elements.slice(),
+          elementIds: new Set(document.elementIds),
           pointCount: document.pointCount,
         },
       ]),
@@ -265,7 +281,7 @@ export class AnnotationHistory {
       viewport: document.viewport
         ? Object.freeze({ ...document.viewport })
         : null,
-      strokes: Object.freeze(document.strokes.slice()),
+      elements: Object.freeze(document.elements.slice()),
     });
     this.snapshots.set(displayId, snapshot);
     return snapshot;
@@ -307,8 +323,8 @@ export class AnnotationHistory {
 
     const scaleX = width / previous.width;
     const scaleY = height / previous.height;
-    document.strokes = document.strokes.map((stroke) =>
-      scaleStroke(stroke, scaleX, scaleY),
+    document.elements = document.elements.map((stroke) =>
+      scaleElement(stroke, scaleX, scaleY),
     );
     document.viewport = { width, height };
     this.undoStack = this.undoStack.map((entry) =>
@@ -321,43 +337,43 @@ export class AnnotationHistory {
     return true;
   }
 
-  addStroke(displayId: number, stroke: AnnotationStroke) {
-    if (!isAnnotationStroke(stroke)) {
-      throw new AnnotationError("invalid-stroke");
+  addElement(displayId: number, stroke: AnnotationElement) {
+    if (!isAnnotationElement(stroke)) {
+      throw new AnnotationError("invalid-element");
     }
 
     const document = this.document(displayId);
-    if (document.strokeIds.has(stroke.id)) {
-      throw new AnnotationError("duplicate-stroke");
+    if (document.elementIds.has(stroke.id)) {
+      throw new AnnotationError("duplicate-element");
     }
-    if (document.strokes.length >= MAX_ANNOTATION_STROKES_PER_DISPLAY) {
-      throw new AnnotationError("stroke-limit");
+    if (document.elements.length >= MAX_ANNOTATION_ELEMENTS_PER_DISPLAY) {
+      throw new AnnotationError("element-limit");
     }
     if (
-      document.pointCount + stroke.points.length >
+      document.pointCount + annotationElementCost(stroke) >
       MAX_ANNOTATION_POINTS_PER_DISPLAY
     ) {
       throw new AnnotationError("point-limit");
     }
 
-    const stored = immutableStroke(stroke);
+    const stored = immutableElement(stroke);
     const entry: AddHistoryEntry = {
       kind: "add",
       displayId,
       stroke: stored,
-      index: document.strokes.length,
+      index: document.elements.length,
     };
     this.apply(entry);
     this.commit(entry);
     return displayId;
   }
 
-  removeStrokes(displayId: number, ids: Iterable<string>) {
+  removeElements(displayId: number, ids: Iterable<string>) {
     const idSet = new Set(ids);
     if (!idSet.size) return null;
 
-    const removed: IndexedStroke[] = [];
-    this.document(displayId).strokes.forEach((stroke, index) => {
+    const removed: IndexedElement[] = [];
+    this.document(displayId).elements.forEach((stroke, index) => {
       if (!idSet.has(stroke.id)) return;
       removed.push({ stroke, index });
     });
@@ -366,7 +382,7 @@ export class AnnotationHistory {
     const entry: RemoveHistoryEntry = {
       kind: "remove",
       displayId,
-      strokes: removed,
+      elements: removed,
     };
     this.apply(entry);
     this.commit(entry);
@@ -374,9 +390,9 @@ export class AnnotationHistory {
   }
 
   clearDisplay(displayId: number) {
-    return this.removeStrokes(
+    return this.removeElements(
       displayId,
-      this.document(displayId).strokes.map((stroke) => stroke.id),
+      this.document(displayId).elements.map((stroke) => stroke.id),
     );
   }
 
@@ -406,8 +422,8 @@ export class AnnotationHistory {
 
     const created: DocumentState = {
       viewport: null,
-      strokes: [],
-      strokeIds: new Set(),
+      elements: [],
+      elementIds: new Set(),
       pointCount: 0,
     };
     this.documents.set(displayId, created);
@@ -440,38 +456,38 @@ export class AnnotationHistory {
   private apply(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
     if (entry.kind === "add") {
-      if (document.strokeIds.has(entry.stroke.id)) {
-        throw new AnnotationError("duplicate-stroke");
+      if (document.elementIds.has(entry.stroke.id)) {
+        throw new AnnotationError("duplicate-element");
       }
-      if (document.strokes.length >= MAX_ANNOTATION_STROKES_PER_DISPLAY) {
-        throw new AnnotationError("stroke-limit");
+      if (document.elements.length >= MAX_ANNOTATION_ELEMENTS_PER_DISPLAY) {
+        throw new AnnotationError("element-limit");
       }
       if (
-        document.pointCount + entry.stroke.points.length >
+        document.pointCount + annotationElementCost(entry.stroke) >
         MAX_ANNOTATION_POINTS_PER_DISPLAY
       ) {
         throw new AnnotationError("point-limit");
       }
 
-      document.strokes.splice(
-        Math.min(entry.index, document.strokes.length),
+      document.elements.splice(
+        Math.min(entry.index, document.elements.length),
         0,
         entry.stroke,
       );
-      document.strokeIds.add(entry.stroke.id);
-      document.pointCount += entry.stroke.points.length;
+      document.elementIds.add(entry.stroke.id);
+      document.pointCount += annotationElementCost(entry.stroke);
       this.touch(entry.displayId);
       return;
     }
 
-    const removedIds = new Set(entry.strokes.map(({ stroke }) => stroke.id));
+    const removedIds = new Set(entry.elements.map(({ stroke }) => stroke.id));
     let removedPointCount = 0;
-    document.strokes = document.strokes.filter((stroke) => {
+    document.elements = document.elements.filter((stroke) => {
       if (!removedIds.has(stroke.id)) return true;
-      removedPointCount += stroke.points.length;
+      removedPointCount += annotationElementCost(stroke);
       return false;
     });
-    removedIds.forEach((id) => document.strokeIds.delete(id));
+    removedIds.forEach((id) => document.elementIds.delete(id));
     document.pointCount = Math.max(0, document.pointCount - removedPointCount);
     this.touch(entry.displayId);
   }
@@ -479,38 +495,38 @@ export class AnnotationHistory {
   private revert(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
     if (entry.kind === "add") {
-      const removed = document.strokes.find(
+      const removed = document.elements.find(
         (stroke) => stroke.id === entry.stroke.id,
       );
-      document.strokes = document.strokes.filter(
+      document.elements = document.elements.filter(
         (stroke) => stroke.id !== entry.stroke.id,
       );
-      document.strokeIds.delete(entry.stroke.id);
+      document.elementIds.delete(entry.stroke.id);
       if (removed) {
         document.pointCount = Math.max(
           0,
-          document.pointCount - removed.points.length,
+          document.pointCount - annotationElementCost(removed),
         );
       }
       this.touch(entry.displayId);
       return;
     }
 
-    const ordered = [...entry.strokes].sort((left, right) => {
+    const ordered = [...entry.elements].sort((left, right) => {
       return left.index - right.index;
     });
     const restorable = ordered.filter(
-      ({ stroke }) => !document.strokeIds.has(stroke.id),
+      ({ stroke }) => !document.elementIds.has(stroke.id),
     );
     const restoredPoints = restorable.reduce(
-      (total, { stroke }) => total + stroke.points.length,
+      (total, { stroke }) => total + annotationElementCost(stroke),
       0,
     );
     if (
-      document.strokes.length + restorable.length >
-      MAX_ANNOTATION_STROKES_PER_DISPLAY
+      document.elements.length + restorable.length >
+      MAX_ANNOTATION_ELEMENTS_PER_DISPLAY
     ) {
-      throw new AnnotationError("stroke-limit");
+      throw new AnnotationError("element-limit");
     }
     if (
       document.pointCount + restoredPoints >
@@ -520,13 +536,13 @@ export class AnnotationHistory {
     }
 
     restorable.forEach(({ stroke, index }) => {
-      document.strokes.splice(
-        Math.min(index, document.strokes.length),
+      document.elements.splice(
+        Math.min(index, document.elements.length),
         0,
         stroke,
       );
-      document.strokeIds.add(stroke.id);
-      document.pointCount += stroke.points.length;
+      document.elementIds.add(stroke.id);
+      document.pointCount += annotationElementCost(stroke);
     });
     this.touch(entry.displayId);
   }

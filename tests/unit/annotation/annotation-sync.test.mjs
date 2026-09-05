@@ -51,9 +51,9 @@ test("initial and viewport-reset updates contain explicit snapshots", () => {
 
 test("append sends only the new geometry and deletion sends only IDs", () => {
   const h = history();
-  h.addStroke(1, stroke("a"));
+  h.addElement(1, stroke("a"));
   const a = h.getSnapshot(1);
-  h.addStroke(1, stroke("b"));
+  h.addElement(1, stroke("b"));
   const b = h.getSnapshot(1);
   const added = createAnnotationUpdate(a, b);
   assert.equal(added.kind, "delta");
@@ -64,7 +64,7 @@ test("append sends only the new geometry and deletion sends only IDs", () => {
   assert.deepEqual(added.removedIds, []);
   const replica = apply(structuredClone(a), added);
   assert.deepEqual(replica, b);
-  h.removeStrokes(1, ["a"]);
+  h.removeElements(1, ["a"]);
   const next = h.getSnapshot(1);
   const removed = createAnnotationUpdate(b, next);
   assert.equal(removed.kind, "delta");
@@ -75,8 +75,8 @@ test("append sends only the new geometry and deletion sends only IDs", () => {
 
 test("multi-stroke Undo inserts into final positions while sharing surviving geometry", () => {
   const h = history();
-  for (let i = 0; i < 6; i++) h.addStroke(1, stroke(String(i)));
-  h.removeStrokes(1, ["0", "2", "3", "5"]);
+  for (let i = 0;i < 6;i++) h.addElement(1, stroke(String(i)));
+  h.removeElements(1, ["0", "2", "3", "5"]);
   const before = h.getSnapshot(1);
   const local = structuredClone(before);
   h.undo();
@@ -89,14 +89,14 @@ test("multi-stroke Undo inserts into final positions while sharing surviving geo
   );
   const restored = apply(local, update);
   assert.deepEqual(restored, next);
-  assert.equal(restored.strokes[1], local.strokes[0]);
-  assert.equal(restored.strokes[4], local.strokes[1]);
+  assert.equal(restored.elements[1], local.elements[0]);
+  assert.equal(restored.elements[4], local.elements[1]);
 });
 
 test("duplicate and stale updates cannot resurrect an undone stroke", () => {
   const h = history();
   const a = h.getSnapshot(1);
-  h.addStroke(1, stroke("b"));
+  h.addElement(1, stroke("b"));
   const b = h.getSnapshot(1);
   const add = createAnnotationUpdate(a, b);
   h.undo();
@@ -111,7 +111,7 @@ test("duplicate and stale updates cannot resurrect an undone stroke", () => {
 
 test("gaps, malformed indices, unknown removals and duplicate IDs reject atomically", () => {
   const h = history();
-  h.addStroke(1, stroke("a"));
+  h.addElement(1, stroke("a"));
   const current = h.getSnapshot(1);
   const delta = {
     kind: "delta",
@@ -142,7 +142,7 @@ test("gaps, malformed indices, unknown removals and duplicate IDs reject atomica
   ];
   for (const update of broken)
     assert.equal(reduceAnnotationUpdate(current, 1, update).kind, "resync");
-  assert.equal(current.strokes.length, 1);
+  assert.equal(current.elements.length, 1);
 });
 
 test("a revision-only rejection does not transfer existing geometry", () => {
@@ -172,13 +172,13 @@ test("a revision-only rejection does not transfer existing geometry", () => {
 
 test("reordered retained objects require an explicit document reset", () => {
   const h = history();
-  h.addStroke(1, stroke("a"));
-  h.addStroke(1, stroke("b"));
+  h.addElement(1, stroke("a"));
+  h.addElement(1, stroke("b"));
   const before = h.getSnapshot(1);
   const next = {
     ...before,
     revision: before.revision + 1,
-    strokes: [...before.strokes].reverse(),
+    elements: [...before.elements].reverse(),
   };
   assert.equal(createAnnotationUpdate(before, next).kind, "snapshot");
 });
@@ -192,15 +192,15 @@ test("seeded add/remove/Undo/Redo/Clear updates match authoritative history for 
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed;
   };
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0;i < 2000;i++) {
     const op = next() % 8;
-    if (op < 3) h.addStroke(1, stroke(`s-${i}`, next() % 90));
+    if (op < 3) h.addElement(1, stroke(`s-${i}`, next() % 90));
     else if (op === 3) h.undo();
     else if (op === 4) h.redo();
     else if (op === 5)
-      h.removeStrokes(
+      h.removeElements(
         1,
-        published.strokes.filter((_, j) => j % 3 === 0).map((s) => s.id),
+        published.elements.filter((_, j) => j % 3 === 0).map((s) => s.id),
       );
     else if (op === 6) h.clearDisplay(1);
     else h.setDisplayViewport(1, 100 + (next() % 3) * 25, 100);
@@ -213,13 +213,13 @@ test("seeded add/remove/Undo/Redo/Clear updates match authoritative history for 
 
 test("small edit payload does not scale with unrelated 128k-point geometry", () => {
   const h = history();
-  for (let i = 0; i < 1000; i++)
-    h.addStroke(1, {
+  for (let i = 0;i < 1000;i++)
+    h.addElement(1, {
       ...stroke(`s-${i}`),
       points: Array.from({ length: 128 }, (_, j) => ({ x: j, y: i })),
     });
   const before = h.getSnapshot(1);
-  h.addStroke(1, stroke("new"));
+  h.addElement(1, stroke("new"));
   const after = h.getSnapshot(1);
   const delta = createAnnotationUpdate(before, after);
   assert.equal(delta.kind, "delta");
@@ -238,7 +238,7 @@ test("small edit payload does not scale with unrelated 128k-point geometry", () 
 test("invoke response and pushed Undo arriving in reverse order converge without stale resurrection", async () => {
   const h = history();
   const a = h.getSnapshot(1);
-  h.addStroke(1, stroke("b"));
+  h.addElement(1, stroke("b"));
   const b = h.getSnapshot(1);
   h.undo();
   const c = h.getSnapshot(1);
@@ -261,21 +261,21 @@ test("invoke response and pushed Undo arriving in reverse order converge without
   await replica.receive(createAnnotationUpdate(a, b));
   assert.equal(calls, 1);
   assert.deepEqual(replica.document, c);
-  assert.equal(seen.at(-1).strokes.length, 0);
+  assert.equal(seen.at(-1).elements.length, 0);
 });
 
 test("concurrent gaps share recovery and refetch when the first snapshot predates a newer edit", async () => {
   const h = history();
   const a = h.getSnapshot(1);
-  h.addStroke(1, stroke("b"));
+  h.addElement(1, stroke("b"));
   const b = h.getSnapshot(1);
-  h.addStroke(1, stroke("c"));
+  h.addElement(1, stroke("c"));
   const c = h.getSnapshot(1);
   const first = deferred();
   let calls = 0;
   const replica = new AnnotationReplica(
     () => (++calls === 1 ? first.promise : Promise.resolve(c)),
-    () => {},
+    () => { },
   );
   replica.reset(1);
   const one = replica.receive({
@@ -299,12 +299,12 @@ test("concurrent gaps share recovery and refetch when the first snapshot predate
 test("recovery never replaces a newer pushed snapshot with an older reply", async () => {
   const h = history();
   const a = h.getSnapshot(1);
-  h.addStroke(1, stroke("b"));
+  h.addElement(1, stroke("b"));
   const b = h.getSnapshot(1);
   const pending = deferred();
   const replica = new AnnotationReplica(
     () => pending.promise,
-    () => {},
+    () => { },
   );
   replica.reset(1);
   const recovery = replica.receive({
@@ -347,7 +347,7 @@ test("failed recovery is surfaced and the next update can retry", async () => {
       ++calls === 1
         ? Promise.reject(new Error("transport"))
         : Promise.resolve(doc),
-    () => {},
+    () => { },
   );
   replica.reset(1);
   await assert.rejects(

@@ -27,14 +27,16 @@ contextBridge.exposeInMainWorld("miniCast", {
   getAnnotationState: () => ipcRenderer.invoke("get-annotation-state"),
   setAnnotationTool: (tool: unknown) =>
     ipcRenderer.send("set-annotation-tool", tool),
+  setAnnotationTextDraft: (draft: unknown) => ipcRenderer.invoke("set-annotation-text-draft", draft),
+  setAnnotationTextEditing: (editing: unknown) => ipcRenderer.send("annotation-text-editing", editing),
   sendAnnotationCommand: (command: unknown) =>
     ipcRenderer.send("annotation-command", command),
   beginAnnotationGesture: (gestureId: unknown) =>
     ipcRenderer.send("annotation-gesture-begin", gestureId),
-  commitAnnotationStroke: (gestureId: unknown, stroke: unknown) =>
-    ipcRenderer.invoke("annotation-add-stroke", gestureId, stroke),
-  removeAnnotationStrokes: (gestureId: unknown, ids: unknown) =>
-    ipcRenderer.invoke("annotation-remove-strokes", gestureId, ids),
+  commitAnnotationElement: (gestureId: unknown, stroke: unknown) =>
+    ipcRenderer.invoke("annotation-add-element", gestureId, stroke),
+  removeAnnotationElements: (gestureId: unknown, ids: unknown) =>
+    ipcRenderer.invoke("annotation-remove-elements", gestureId, ids),
   endAnnotationGesture: (gestureId: unknown) =>
     ipcRenderer.send("annotation-gesture-end", gestureId),
   onDisplaysUpdated: (listener: Listener) => on("displays-updated", listener),

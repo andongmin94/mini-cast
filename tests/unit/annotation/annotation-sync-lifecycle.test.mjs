@@ -8,11 +8,11 @@ function delayedFailure() {
   return { promise, fail: () => reject(new Error("late transport failure")) };
 }
 const nextTask = () => new Promise(resolve => setImmediate(resolve));
-const snapshot = revision => ({ displayId: 1, revision, viewport: { width: 100, height: 100 }, strokes: [] });
+const snapshot = revision => ({ displayId: 1, revision, viewport: { width: 100, height: 100 }, elements: [] });
 
 test("a rejected recovery from a previous renderer generation is discarded", async () => {
   const pending = delayedFailure();
-  const replica = new AnnotationReplica(() => pending.promise, () => {});
+  const replica = new AnnotationReplica(() => pending.promise, () => { });
   replica.reset(1);
   const old = replica.receive({ kind: "revision", displayId: 1, revision: 4 });
   await nextTask();
@@ -26,7 +26,7 @@ test("a rejected recovery from a previous renderer generation is discarded", asy
 
 test("a pushed current document supersedes an in-flight recovery failure", async () => {
   const pending = delayedFailure();
-  const replica = new AnnotationReplica(() => pending.promise, () => {});
+  const replica = new AnnotationReplica(() => pending.promise, () => { });
   replica.reset(1);
   const recovery = replica.receive({ kind: "revision", displayId: 1, revision: 4 });
   await nextTask();

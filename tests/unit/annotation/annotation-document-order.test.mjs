@@ -4,7 +4,7 @@ import test from "node:test";
 import { shouldAdoptAnnotationDocument } from "../../../dist/annotation/document-order.js";
 
 function document(displayId, revision) {
-  return { displayId, revision, viewport: null, strokes: [] };
+  return { displayId, revision, viewport: null, elements: [] };
 }
 
 test("authoritative document ordering accepts current and newer revisions", () => {

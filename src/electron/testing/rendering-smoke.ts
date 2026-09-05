@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 
 /** Execute the compiled production planner/painter inside Chromium, not a mocked Canvas. */
 export async function verifyDirtyCanvasRendering(contents: WebContents) {
-  const source = ["render-plan", "canvas-renderer"]
+  await contents.executeJavaScript(`document.fonts.load('400 28px "Pretendard"', '한글 ABC').then(() => true)`);
+  const source = ["text", "shape-geometry", "render-plan", "canvas-renderer"]
     .map((name) =>
       readFileSync(new URL(`../../annotation/${name}.js`, import.meta.url), "utf8")
         .replace(/^import .* from ["'][^"']+["'];?\r?\n/gm, "")
@@ -26,7 +27,7 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
         const b = reference.getContext('2d', { willReadFrequently: true });
         if (!a || !b) throw new Error('Missing test Canvas context');
         let previous = null;
-        let strokes = [];
+        let elements = [];
         let seed = 0x519ba;
         const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
         const makeStroke = (id) => {
@@ -38,17 +39,17 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
         };
         const compare = (label, force = false) => {
           const next = { displayId: 1, viewportWidth: 100, viewportHeight: 80,
-            canvasWidth: optimized.width, canvasHeight: optimized.height, pixelRatio: ratio, strokes };
+            canvasWidth: optimized.width, canvasHeight: optimized.height, pixelRatio: ratio, elements };
           const plan = paintCommittedAnnotations(a, force ? null : previous, next);
           kinds[plan.kind]++;
           b.setTransform(1, 0, 0, 1, 0, 0);
           b.clearRect(0, 0, reference.width, reference.height);
           b.setTransform(ratio, 0, 0, ratio, 0, 0);
-          for (const stroke of strokes) drawAnnotationStroke(b, stroke);
+          for (const stroke of elements) drawAnnotationElement(b, stroke);
           const actual = a.getImageData(0, 0, optimized.width, optimized.height).data;
           const expected = b.getImageData(0, 0, reference.width, reference.height).data;
           for (let i = 0; i < actual.length; i++) if (actual[i] !== expected[i])
-            throw new Error('Dirty Canvas differs from full reference: ' + JSON.stringify({ ratio, label, channel: i, actual: actual[i], expected: expected[i], kind: plan.kind, clear: plan.clear, before: previous?.strokes, after: strokes }));
+            throw new Error('Dirty Canvas differs from full reference: ' + JSON.stringify({ ratio, label, channel: i, actual: actual[i], expected: expected[i], kind: plan.kind, clear: plan.clear, before: previous?.elements, after: elements }));
           comparisons++;
           previous = next;
         };
@@ -56,25 +57,36 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
         const bottom = { id: 'bottom', tool: 'highlighter', opacity: 0.35, color: '#FFD60A', width: 14.5, points: [{ x: -10, y: 30.25 }, { x: 110, y: 30.25 }] };
         const local = { id: 'local', tool: 'pen', opacity: 1, color: '#FF0000', width: 3, points: [{ x: 48, y: 26 }, { x: 52, y: 38 }] };
         const top = { id: 'top', tool: 'highlighter', opacity: 0.35, color: '#007AFF', width: 11, points: [{ x: 0, y: 12 }, { x: 100, y: 57 }] };
-        strokes = [bottom, local, top]; compare('overlapping-alpha');
-        strokes = [bottom, top]; compare('local-alpha-erase');
-        strokes = [bottom, local, top]; compare('local-alpha-undo');
-        strokes = [top, local, bottom]; compare('alpha-reorder');
-        strokes = []; compare('alpha-clear');
+        elements = [bottom, local, top]; compare('overlapping-alpha');
+        elements = [bottom, top]; compare('local-alpha-erase');
+        elements = [bottom, local, top]; compare('local-alpha-undo');
+        elements = [top, local, bottom]; compare('alpha-reorder');
+        elements = []; compare('alpha-clear');
+        const shapeSet = ['line', 'arrow', 'rectangle', 'ellipse'].map((tool, index) => ({
+          id: tool, tool, points: [{x:5.25+index,y:8.75}, {x:91.5,y:66.25-index}], color:'#007AFF', width:3.5, opacity:1,
+        }));
+        const textElement = createTextElement(a, 'text', {text:'한글 ABC\\n둘째 줄',fontSize:18}, {x:4.25,y:6.5}, '#1478AF');
+        elements = [bottom, ...shapeSet, textElement, top]; compare('mixed-shapes-and-text');
+        for (const element of [...shapeSet, textElement]) {
+          const savedElements = elements;
+          elements = elements.filter(candidate => candidate !== element); compare('remove-' + element.tool);
+          elements = savedElements; compare('restore-' + element.tool);
+        }
+        elements = []; compare('mixed-clear');
         for (let i = 0; i < 80; i++) {
-          const saved = strokes;
-          if (i % 5 === 0 && strokes.length) { const removedIndex = random() % strokes.length; strokes = strokes.filter((_, j) => j !== removedIndex); }
-          else if (i % 5 === 1 && strokes.length > 1) strokes = [...strokes].reverse();
-          else if (i % 5 === 2 && strokes.length) strokes = [makeStroke(strokes[0].id), ...strokes.slice(1)];
-          else strokes = [...strokes, makeStroke('s-' + i)];
+          const saved = elements;
+          if (i % 5 === 0 && elements.length) { const removedIndex = random() % elements.length; elements = elements.filter((_, j) => j !== removedIndex); }
+          else if (i % 5 === 1 && elements.length > 1) elements = [...elements].reverse();
+          else if (i % 5 === 2 && elements.length) elements = [makeStroke(elements[0].id), ...elements.slice(1)];
+          else elements = [...elements, makeStroke('s-' + i)];
           compare('edit-' + i);
-          if (i % 7 === 0) { const edited = strokes; strokes = saved; compare('undo-' + i); strokes = edited; compare('redo-' + i); }
+          if (i % 7 === 0) { const edited = elements; elements = saved; compare('undo-' + i); elements = edited; compare('redo-' + i); }
           if (i % 13 === 0) compare('forced-reset-' + i, true);
         }
-        strokes = []; compare('clear'); compare('unchanged');
+        elements = []; compare('clear'); compare('unchanged');
       }
       if (!kinds.dirty || !kinds.append || !kinds.none || !highlighterStrokes)
-        throw new Error('Canvas scenarios did not cover all plans and alpha strokes');
+        throw new Error('Canvas scenarios did not cover all plans and alpha elements');
       return { success: true, exactPixelComparisons: comparisons, ratios, kinds, highlighterStrokes };
     } catch (error) {
       return { success: false, error: String(error?.stack ?? error) };

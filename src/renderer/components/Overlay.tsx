@@ -89,6 +89,7 @@ export default function Overlay() {
     unavailableShortcuts: [],
     canUndo: false,
     canRedo: false,
+    textDraft: null,
   });
   const [annotationDocument, setAnnotationDocument] =
     useState<AnnotationDocumentSnapshot | null>(null);
@@ -150,11 +151,11 @@ export default function Overlay() {
     const scalePosition = (position: MousePosition) => ({
       x: Math.round(
         position.x *
-          (window.innerWidth / Math.max(sourceSize.current.width, 1)),
+        (window.innerWidth / Math.max(sourceSize.current.width, 1)),
       ),
       y: Math.round(
         position.y *
-          (window.innerHeight / Math.max(sourceSize.current.height, 1)),
+        (window.innerHeight / Math.max(sourceSize.current.height, 1)),
       ),
     });
 
@@ -240,14 +241,20 @@ export default function Overlay() {
   return (
     <div
       className="pointer-events-none fixed inset-0"
-      style={{ zIndex: 9999 }}
+      style={{
+        zIndex: 9999,
+        // A zero-alpha layered window can miss native pointer input on Windows.
+        // One alpha step keeps blank areas hit-testable without painting the document.
+        backgroundColor: passive ? "transparent" : "rgba(0, 0, 0, 0.004)",
+      }}
       data-mini-cast-overlay=""
       data-display-id={displayId ?? ""}
       data-annotation-revision={annotationDocument?.revision ?? -1}
-      data-annotation-strokes={annotationDocument?.strokes.length ?? 0}
+      data-annotation-elements={annotationDocument?.elements.length ?? 0}
     >
       <AnnotationSurface
         tool={annotationState.tool}
+        textDraft={annotationState.textDraft}
         settings={settings}
         displayId={displayId}
         document={annotationDocument}

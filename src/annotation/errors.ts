@@ -1,7 +1,7 @@
 export type AnnotationFailureReason =
-  | "invalid-stroke"
-  | "duplicate-stroke"
-  | "stroke-limit"
+  | "invalid-element"
+  | "duplicate-element"
+  | "element-limit"
   | "point-limit"
   | "stale-gesture"
   | "no-change"
@@ -9,9 +9,9 @@ export type AnnotationFailureReason =
   | "internal";
 
 const DOMAIN_MESSAGES = {
-  "invalid-stroke": "Invalid annotation stroke",
-  "duplicate-stroke": "Duplicate annotation stroke id",
-  "stroke-limit": "Annotation stroke limit reached",
+  "invalid-element": "Invalid annotation element",
+  "duplicate-element": "Duplicate annotation element id",
+  "element-limit": "Annotation element limit reached",
   "point-limit": "Annotation point limit reached",
 } as const;
 
@@ -24,13 +24,13 @@ export class AnnotationError extends Error {
 
 export function annotationFailureMessage(reason: AnnotationFailureReason) {
   switch (reason) {
-    case "stroke-limit":
+    case "element-limit":
     case "point-limit":
-      return "이 화면의 판서 용량 한도에 도달해 새 획을 저장하지 못했습니다. 기존 판서를 지운 뒤 다시 그려 주세요.";
+      return "이 화면의 판서 용량 한도에 도달해 새 판서를 저장하지 못했습니다. 기존 판서를 지운 뒤 다시 그려 주세요.";
     case "unavailable":
       return "화면을 다시 연결하는 중이라 판서를 저장하지 못했습니다. 화면이 준비되면 다시 그려 주세요.";
-    case "invalid-stroke":
-    case "duplicate-stroke":
+    case "invalid-element":
+    case "duplicate-element":
     case "internal":
       return "판서를 저장하지 못했습니다. 기존 판서는 유지됩니다. 다시 시도해 주세요.";
     case "stale-gesture":
