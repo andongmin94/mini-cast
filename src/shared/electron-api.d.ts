@@ -72,6 +72,7 @@ interface MiniCastBridge {
   onAnnotationDocumentUpdated(
     listener: (update: AnnotationDocumentUpdate) => void,
   ): Unsubscribe;
+  onAnnotationTransientClear(listener: () => void): Unsubscribe;
   onAnnotationGestureCancel(listener: (gestureId: string) => void): Unsubscribe;
 }
 

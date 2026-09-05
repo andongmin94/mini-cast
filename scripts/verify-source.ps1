@@ -22,3 +22,5 @@ if (-not $payload.diagnostics.dirtyCanvasReference.success -or -not $payload.dia
 if (-not $payload.diagnostics.flipTools.horizontal -or -not $payload.diagnostics.flipTools.vertical -or -not $payload.diagnostics.flipTools.groupShift) {
   throw 'Native selection flip coverage was not executed.'
 }
+
+if (-not $payload.diagnostics.transientTools.redoPreserved -or -not $payload.diagnostics.transientTools.expiry) { throw 'Laser/fading-ink lifecycle was not verified.' }

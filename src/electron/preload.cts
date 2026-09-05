@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld("miniCast", {
     on("annotation-state-updated", listener),
   onAnnotationDocumentUpdated: (listener: Listener) =>
     on("annotation-document-updated", listener),
+  onAnnotationTransientClear: (listener: Listener) => on("annotation-transient-clear", listener),
   onAnnotationGestureCancel: (listener: Listener) =>
     on("annotation-gesture-cancel", listener),
 });

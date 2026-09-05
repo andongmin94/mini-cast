@@ -1,4 +1,5 @@
 import { framePoint } from "../../annotation/primitive-frame.js";
+import { verifyTransientTools } from "./transient-smoke.js";
 import { verifyShapeFill } from "./fill-smoke.js";
 import { verifySelectionFlip } from "./flip-smoke.js";
 import { verifyExistingTextEditing } from "./text-edit-smoke.js";
@@ -1274,6 +1275,14 @@ export function createSmokeChecks(context: SmokeContext) {
       }, primary.id);
       diagnostics.fillTools = await verifyShapeFill({
         history: annotationHistory, publishDocument: context.publishDocument, command: shortcutCommand, state: context.state,
+      }, primary.id);
+      diagnostics.transientTools = await verifyTransientTools({
+        history: annotationHistory, state: context.state, publishDocument: context.publishDocument, command: shortcutCommand,
+        activateTool: async tool => {
+          if (!mainWindow) throw new Error("Missing temporary-tool controller");
+          await clickControllerElement(mainWindow, `[data-annotation-tool="${tool}"]`, "temporary tool");
+          await waitFor(() => context.state().tool === tool, 5000, "temporary tool state");
+        },
       }, primary.id);
     } finally {
       if (!underlay.isDestroyed()) underlay.destroy();

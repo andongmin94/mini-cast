@@ -7,6 +7,8 @@ import {
 import type { AnnotationDocumentSnapshot } from "@/annotation/history";
 import AnnotationSelectionSurface from "@/renderer/components/AnnotationSelectionSurface";
 import AnnotationSurface from "@/renderer/components/AnnotationSurface";
+import AnnotationTransientSurface from "./AnnotationTransientSurface";
+import { isTransientAnnotationTool } from "@/shared/contract";
 import type {
   AnnotationState,
   AnnotationTool,
@@ -257,13 +259,18 @@ export default function Overlay() {
         <AnnotationSelectionSurface key={displayId} displayId={displayId} fillColor={settings.annotationShapeFillColor}
           document={annotationDocument} onDocumentUpdate={applyAnnotationUpdate} />
       ) : <AnnotationSurface
-        tool={annotationState.tool}
+        tool={isTransientAnnotationTool(annotationState.tool) ? "pass-through" : annotationState.tool}
         textDraft={annotationState.textDraft}
         settings={settings}
         displayId={displayId}
         document={annotationDocument}
         onDocumentUpdate={applyAnnotationUpdate}
       />}
+
+      {displayId !== null && isTransientAnnotationTool(annotationState.tool) && (
+        <AnnotationTransientSurface key={`${displayId}:${annotationState.tool}`} tool={annotationState.tool}
+          color={settings.annotationPenColor} width={settings.annotationPenWidth} />
+      )}
 
       {syncNotice && (
         <div

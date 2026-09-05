@@ -52,6 +52,7 @@ import {
   DEFAULT_OVERLAY_SETTINGS,
   isAnnotationCommand,
   isAnnotationTool,
+  isTransientAnnotationTool,
   type AnnotationCommand,
   type AnnotationState,
   type AnnotationTool,
@@ -182,8 +183,8 @@ function getAnnotationState(): AnnotationState {
     tool: annotationTool,
     textDraft,
     unavailableShortcuts: [...unavailableShortcuts].sort(),
-    canUndo: annotationHistory.canUndo || gestureLeases.size > 0,
-    canRedo: annotationHistory.canRedo,
+    canUndo: gestureLeases.size > 0 || (!isTransientAnnotationTool(annotationTool) && annotationHistory.canUndo),
+    canRedo: !isTransientAnnotationTool(annotationTool) && annotationHistory.canRedo,
   };
 }
 
@@ -364,6 +365,16 @@ function sendAnnotationCommand(
   origin: AnnotationCommandOrigin = "shortcut",
 ) {
   if (displayRebuildInProgress) return;
+
+  if (isTransientAnnotationTool(annotationTool)) {
+    // Temporary tools cannot accidentally consume the permanent Undo/Redo history.
+    if (command === "redo") return;
+    cancelActiveAnnotationGestures();
+    if (command === "clear") overlayWindows.forEach(window =>
+      sendToWindow(window, "annotation-transient-clear"));
+    sendAnnotationState();
+    return;
+  }
 
   if (command === "undo" || command === "redo") {
     if (cancelActiveAnnotationGestures()) return;
@@ -549,7 +560,7 @@ function registerIpc() {
       const displayId = isTopLevelSender(event)
         ? displayIdForSender(event.sender)
         : null;
-      if (displayId === null || displayRebuildInProgress)
+      if (displayId === null || displayRebuildInProgress || isTransientAnnotationTool(annotationTool))
         return annotationMutationResult(displayId, "unavailable");
       if (
         !isGestureId(gestureId) ||
@@ -586,7 +597,7 @@ function registerIpc() {
       const displayId = isTopLevelSender(event)
         ? displayIdForSender(event.sender)
         : null;
-      if (displayId === null || displayRebuildInProgress)
+      if (displayId === null || displayRebuildInProgress || isTransientAnnotationTool(annotationTool))
         return annotationMutationResult(displayId, "unavailable");
       if (
         !isGestureId(gestureId) ||

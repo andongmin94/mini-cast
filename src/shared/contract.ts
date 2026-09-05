@@ -14,8 +14,14 @@ export const ANNOTATION_TOOLS = [
   "rectangle",
   "ellipse",
   "text",
+  "laser",
+  "fading-ink",
 ] as const;
 export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
+export type TransientAnnotationTool = "laser" | "fading-ink";
+export function isTransientAnnotationTool(tool: unknown): tool is TransientAnnotationTool {
+  return tool === "laser" || tool === "fading-ink";
+}
 
 export const ANNOTATION_COMMANDS = ["undo", "redo", "clear"] as const;
 export type AnnotationCommand = (typeof ANNOTATION_COMMANDS)[number];
