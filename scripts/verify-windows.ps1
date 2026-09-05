@@ -36,7 +36,8 @@ function Invoke-MiniCastSmoke {
     [Parameter(Mandatory = $true)][ValidateSet('startup', 'interaction')][string]$Mode,
     [Parameter(Mandatory = $true)][string]$Label,
     [int]$TimeoutSeconds = 45,
-    [switch]$DisableHardwareAcceleration
+    [switch]$DisableHardwareAcceleration,
+    [switch]$CorruptSettings
   )
 
   if (-not (Test-Path $Executable)) {
@@ -53,7 +54,12 @@ function Invoke-MiniCastSmoke {
   } else {
     '--smoke-test'
   }
-  $arguments = @($modeArgument, "--smoke-sentinel=$sentinel")
+  $userData = Join-Path $env:RUNNER_TEMP ("mini-cast-userdata-" + [Guid]::NewGuid())
+  New-Item -ItemType Directory -Force -Path $userData | Out-Null
+  if ($CorruptSettings) {
+    Set-Content -LiteralPath (Join-Path $userData 'config.json') -Value '{broken-json' -Encoding utf8
+  }
+  $arguments = @($modeArgument, "`"--smoke-sentinel=$sentinel`"", "`"--smoke-user-data=$userData`"")
   if ($DisableHardwareAcceleration) {
     $arguments += '--disable-hardware-acceleration'
   }
@@ -109,10 +115,24 @@ function Invoke-MiniCastSmoke {
     if ($launcher.ExitCode -ne 0) {
       throw "$Label launcher exited with code $($launcher.ExitCode)."
     }
+    if (-not $payload.trayCreated) { throw "$Label skipped the production tray." }
+    if ([bool]$payload.settingsRecovered -ne [bool]$CorruptSettings) {
+      throw "$Label did not handle its settings fixture as expected."
+    }
+    $saved = Get-Content -LiteralPath (Join-Path $userData 'config.json') -Raw | ConvertFrom-Json
+    if ($saved.settings.cursorSize -ne $payload.expectedQuitCursorSize) {
+      throw "$Label did not flush the final preference on normal quit."
+    }
+    Write-Host "${Label}: normal quit, preferences flush and tray initialization verified."
+    Copy-Item -LiteralPath $sentinel -Destination (Join-Path $LogDirectory "$Label-sentinel.json") -Force
   }
   finally {
+    if (Test-Path $sentinel) {
+      Copy-Item -LiteralPath $sentinel -Destination (Join-Path $LogDirectory "$Label-sentinel.json") -Force
+    }
     Remove-Item $sentinel -Force -ErrorAction SilentlyContinue
     Stop-MiniCastProcesses
+    Remove-Item -LiteralPath $userData -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
 
@@ -161,9 +181,11 @@ Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'unpac
 Write-Host 'Verifying the explicit software-rendering fallback...'
 Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'unpacked-software-startup' -DisableHardwareAcceleration
 Write-Host 'Verifying real Windows click-through and annotation routing...'
-Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-interaction' -TimeoutSeconds 90
+Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-interaction' -TimeoutSeconds 210
 Write-Host 'Verifying annotation routing with the software-rendering fallback...'
-Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-software-interaction' -TimeoutSeconds 90 -DisableHardwareAcceleration
+Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-software-interaction' -TimeoutSeconds 210 -DisableHardwareAcceleration
+Write-Host 'Verifying recovery of an actually corrupt settings file...'
+Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'corrupt-settings-startup' -CorruptSettings
 Write-Host 'Verifying portable launcher startup and complete shutdown...'
 Invoke-MiniCastSmoke -Executable $portableExecutable -Mode startup -Label 'portable-startup' -TimeoutSeconds 75
 

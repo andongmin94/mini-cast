@@ -162,6 +162,7 @@ export async function createWindow(
       nodeIntegration: false,
       sandbox: true,
       webviewTag: false,
+      devTools: !app.isPackaged,
       navigateOnDragDrop: false,
       safeDialogs: true,
       spellcheck: false,
@@ -218,7 +219,9 @@ export async function createOverlayWindows(
   const previousEntries = previousWindows
     .map((window, index) => ({ window, display: overlayDisplays[index] }))
     .filter(
-      (entry): entry is { window: BrowserWindow; display: OverlayDisplayMeta } =>
+      (
+        entry,
+      ): entry is { window: BrowserWindow; display: OverlayDisplayMeta } =>
         Boolean(entry.display),
     );
 
@@ -264,6 +267,8 @@ export async function createOverlayWindows(
           nodeIntegration: false,
           sandbox: true,
           webviewTag: false,
+          devTools: !app.isPackaged,
+          backgroundThrottling: false,
           navigateOnDragDrop: false,
           safeDialogs: true,
           spellcheck: false,
@@ -295,6 +300,9 @@ export async function createOverlayWindows(
         intentionallyClosingOverlayContents.delete(webContentsId);
         callbacks.onOverlayGone?.(webContentsId);
       });
+      window.webContents.on("did-start-loading", () =>
+        callbacks.onOverlayGone?.(webContentsId),
+      );
       window.webContents.on("did-finish-load", () => {
         if (window.isDestroyed()) return;
         try {
@@ -310,7 +318,9 @@ export async function createOverlayWindows(
     overlayDisplays = nextDisplays;
     overlayWindows = nextWindows;
     await Promise.all(
-      nextWindows.map((window) => loadRenderer(window, rendererUrl, "/overlay")),
+      nextWindows.map((window) =>
+        loadRenderer(window, rendererUrl, "/overlay"),
+      ),
     );
     if (quitting) {
       destroyOverlayWindows(nextWindows);

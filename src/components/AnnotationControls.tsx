@@ -26,6 +26,8 @@ interface AnnotationControlsProps {
     value: AnnotationPreferences[K],
   ): void;
   unavailableShortcuts: readonly string[];
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const TOOL_OPTIONS = [
@@ -57,6 +59,8 @@ export default function AnnotationControls({
   onCommand,
   onSettingChange,
   unavailableShortcuts,
+  canUndo,
+  canRedo,
 }: AnnotationControlsProps) {
   return (
     <div className="space-y-3">
@@ -66,6 +70,7 @@ export default function AnnotationControls({
             key={option}
             type="button"
             data-annotation-tool={option}
+            aria-pressed={tool === option}
             title={`${label} (${shortcut})`}
             onClick={() => onToolChange(option)}
             className={`flex h-14 flex-col items-center justify-center rounded-md text-xs transition-colors ${
@@ -149,22 +154,27 @@ export default function AnnotationControls({
       <div className="grid grid-cols-3 gap-2">
         <button
           type="button"
+          data-annotation-command="undo"
+          disabled={!canUndo}
           onClick={() => onCommand("undo")}
-          className="bg-muted hover:bg-accent flex h-8 items-center justify-center rounded-md text-xs"
+          className="bg-muted hover:bg-accent flex h-8 items-center justify-center rounded-md text-xs disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Undo2 className="mr-1 size-4" />
           실행취소
         </button>
         <button
           type="button"
+          data-annotation-command="redo"
+          disabled={!canRedo}
           onClick={() => onCommand("redo")}
-          className="bg-muted hover:bg-accent flex h-8 items-center justify-center rounded-md text-xs"
+          className="bg-muted hover:bg-accent flex h-8 items-center justify-center rounded-md text-xs disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Redo2 className="mr-1 size-4" />
           다시실행
         </button>
         <button
           type="button"
+          data-annotation-command="clear"
           onClick={() => onCommand("clear")}
           className="bg-destructive flex h-8 items-center justify-center rounded-md text-xs text-white hover:opacity-90"
         >

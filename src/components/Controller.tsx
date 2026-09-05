@@ -24,6 +24,7 @@ import type {
   DisplayInfo,
   KeyDisplayPosition,
   OverlaySettings,
+  SettingsSaveStatus,
 } from "@/electron/contract";
 import { DEFAULT_OVERLAY_SETTINGS } from "@/electron/contract";
 
@@ -124,6 +125,12 @@ export default function Controller() {
   const [annotationState, setAnnotationState] = useState<AnnotationState>({
     tool: "pass-through",
     unavailableShortcuts: [],
+    canUndo: false,
+    canRedo: false,
+  });
+  const [saveStatus, setSaveStatus] = useState<SettingsSaveStatus>({
+    state: "saved",
+    recovered: false,
   });
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
   const [settingsLoaded, setSettingsLoaded] = useState(!hasBridge);
@@ -149,10 +156,21 @@ export default function Controller() {
         console.error("Failed to load annotation state:", error),
       );
 
-    const stopAnnotation = miniCast.onAnnotationStateUpdated(setAnnotationState);
+    void miniCast
+      .getSettingsSaveStatus()
+      .then((status) => {
+        if (active) setSaveStatus(status);
+      })
+      .catch((error) =>
+        console.error("Failed to load settings status:", error),
+      );
+    const stopSaveStatus = miniCast.onSettingsSaveStatus(setSaveStatus);
+    const stopAnnotation =
+      miniCast.onAnnotationStateUpdated(setAnnotationState);
     return () => {
       active = false;
       stopAnnotation();
+      stopSaveStatus();
     };
   }, [hasBridge]);
 
@@ -209,7 +227,42 @@ export default function Controller() {
   return (
     <>
       <TitleBar />
-      <div className="pointer-events-auto z-[999] h-[336px] overflow-hidden p-4">
+      <div className="pointer-events-auto z-[999] h-[336px] overflow-y-auto p-4">
+        {(saveStatus.state === "failed" || saveStatus.recovered) && (
+          <div
+            role="alert"
+            data-settings-status={saveStatus.state}
+            className="mb-3 rounded-md border border-amber-500 bg-amber-50 p-3 text-xs text-slate-900"
+          >
+            {saveStatus.state === "failed" ? (
+              <>
+                <p>
+                  설정을 저장하지 못했습니다. 현재 변경은 앱에서만 적용되며,
+                  종료하면 사라질 수 있습니다.
+                </p>
+                <button
+                  type="button"
+                  data-settings-retry=""
+                  className="mt-2 font-semibold underline"
+                  onClick={() => miniCast.retrySettingsSave()}
+                >
+                  저장 다시 시도
+                </button>
+              </>
+            ) : (
+              <>
+                <p>설정 파일을 읽을 수 없어 기본 설정으로 초기화했습니다.</p>
+                <button
+                  type="button"
+                  className="mt-2 font-semibold underline"
+                  onClick={() => miniCast.acknowledgeSettingsRecovery()}
+                >
+                  확인
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <Tabs defaultValue="cursor" className="w-full">
           <TabsList className="z-[999] grid w-full grid-cols-3">
             <TabsTrigger value="cursor">
@@ -220,10 +273,7 @@ export default function Controller() {
               <Keyboard className="mr-2 h-4 w-4" />
               키보드
             </TabsTrigger>
-            <TabsTrigger
-              value="annotation"
-              data-mini-cast-tab="annotation"
-            >
+            <TabsTrigger value="annotation" data-mini-cast-tab="annotation">
               <PenLine className="mr-2 h-4 w-4" />
               판서
             </TabsTrigger>
@@ -381,9 +431,7 @@ export default function Controller() {
                 </Label>
                 <Select
                   value={String(settings.keyDisplayId)}
-                  onValueChange={(value) =>
-                    set("keyDisplayId", Number(value))
-                  }
+                  onValueChange={(value) => set("keyDisplayId", Number(value))}
                 >
                   <SelectTrigger id="key-display-monitor">
                     <SelectValue placeholder="모니터 선택" />
@@ -430,17 +478,17 @@ export default function Controller() {
               tool={annotationState.tool}
               settings={{
                 annotationPenColor: settings.annotationPenColor,
-                annotationHighlighterColor:
-                  settings.annotationHighlighterColor,
+                annotationHighlighterColor: settings.annotationHighlighterColor,
                 annotationPenWidth: settings.annotationPenWidth,
-                annotationHighlighterWidth:
-                  settings.annotationHighlighterWidth,
+                annotationHighlighterWidth: settings.annotationHighlighterWidth,
                 annotationEraserWidth: settings.annotationEraserWidth,
               }}
               onToolChange={chooseAnnotationTool}
               onCommand={sendAnnotationCommand}
               onSettingChange={setAnnotationPreference}
               unavailableShortcuts={annotationState.unavailableShortcuts}
+              canUndo={annotationState.canUndo}
+              canRedo={annotationState.canRedo}
             />
           </TabsContent>
         </Tabs>

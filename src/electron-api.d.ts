@@ -13,6 +13,7 @@ import type {
   MousePosition,
   OverlayInit,
   OverlaySettings,
+  SettingsSaveStatus,
 } from "./electron/contract";
 
 type Unsubscribe = () => void;
@@ -24,6 +25,13 @@ interface MiniCastBridge {
   saveSettings(settings: OverlaySettings): void;
   notifyOverlayReady(): void;
   getSettings(): Promise<OverlaySettings>;
+  getSettingsSaveStatus(): Promise<SettingsSaveStatus>;
+  retrySettingsSave(): void;
+  acknowledgeSettingsRecovery(): void;
+  getAnnotationDocument(): Promise<AnnotationDocumentSnapshot>;
+  onSettingsSaveStatus(
+    listener: (status: SettingsSaveStatus) => void,
+  ): Unsubscribe;
   getAnnotationState(): Promise<AnnotationState>;
   setAnnotationTool(tool: AnnotationTool): void;
   sendAnnotationCommand(command: AnnotationCommand): void;
@@ -49,9 +57,7 @@ interface MiniCastBridge {
   onAnnotationDocumentUpdated(
     listener: (document: AnnotationDocumentSnapshot) => void,
   ): Unsubscribe;
-  onAnnotationGestureCancel(
-    listener: (gestureId: string) => void,
-  ): Unsubscribe;
+  onAnnotationGestureCancel(listener: (gestureId: string) => void): Unsubscribe;
 }
 
 declare global {
