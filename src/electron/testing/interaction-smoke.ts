@@ -485,6 +485,101 @@ export function createSmokeChecks(context: SmokeContext) {
     diagnostics.shapeAndTextTools = { line: true, arrow: true, rectangle: true, ellipse: true, text: true, textEditorUndo: true, textReload: true };
   }
 
+  async function verifySelectionTools(
+    displayId: number,
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+  ) {
+    const controller = mainWindow;
+    const display = screen.getAllDisplays().find(item => item.id === displayId);
+    const target = overlayWindows[overlayDisplays.findIndex(item => item.id === displayId)];
+    if (!controller || !display || !target) throw new Error("Missing selection test windows");
+    await clickControllerElement(controller, '[data-annotation-tool="select"]', "selection tool button");
+    await waitFor(() => context.state().tool === "select", 5000, "selection tool IPC");
+    await waitForOverlayInput(displayId, true);
+    annotationHistory.clearDisplay(displayId);
+    const points = [start, end].map(point => ({ x: point.x - display.bounds.x, y: point.y - display.bounds.y }));
+    for (const id of ["selection-bottom", "selection-top"]) annotationHistory.addElement(displayId,
+      { id, tool: "line", color: "#007AFF", opacity: 1, width: 4, points });
+    context.publishDocument(displayId);
+    const original = annotationHistory.getSnapshot(displayId);
+    const center = { x: Math.round((start.x + end.x) / 2), y: Math.round((start.y + end.y) / 2) };
+    const delta = { x: 32, y: 40 };
+    const movedCenter = { x: center.x + delta.x, y: center.y + delta.y };
+    const query = (expression: string) => target.webContents.executeJavaScript(expression);
+    const ready = async () => {
+      await waitFor(async () => Boolean(await query(`document.querySelector('[data-annotation-selection-busy="false"]')`)),
+        5000, "selection transaction settled");
+      await waitFor(async () => Number(await query(`document.querySelector('[data-mini-cast-overlay]')?.dataset.annotationRevision`)) ===
+        annotationHistory.getSnapshot(displayId).revision, 5000, "selection document reaches renderer");
+    };
+    await ready();
+    await injectWindowsClick(center.x, center.y);
+    await waitFor(async () => Boolean(await query(`document.querySelector('[data-annotation-selection-count="1"]')`)),
+      5000, "object selected by native click");
+    if (annotationHistory.getSnapshot(displayId).revision !== original.revision) throw new Error("Selection click changed history");
+    await injectWindowsDrag(center.x, center.y, movedCenter.x, movedCenter.y);
+    const moved = original.elements.map((element, index) => index === 1 ? {
+      ...element, points: element.points.map(point => ({ x: point.x + delta.x, y: point.y + delta.y })),
+    } : element);
+    await waitFor(() => JSON.stringify(annotationHistory.getSnapshot(displayId).elements) === JSON.stringify(moved),
+      5000, "topmost object moves without changing stacking order");
+    await ready();
+    await waitFor(async () => await canvasAlphaAt(displayId,
+      movedCenter.x - display.bounds.x, movedCenter.y - display.bounds.y) > 0, 5000, "translated object pixels");
+    await shortcutCommand("undo");
+    await waitFor(() => JSON.stringify(annotationHistory.getSnapshot(displayId).elements) === JSON.stringify(original.elements),
+      5000, "one Undo restores the whole move");
+    await ready();
+    await shortcutCommand("redo");
+    await waitFor(() => JSON.stringify(annotationHistory.getSnapshot(displayId).elements) === JSON.stringify(moved),
+      5000, "move Redo preserves exact coordinates");
+    await ready();
+
+    const revisionBeforeCancel = annotationHistory.getSnapshot(displayId).revision;
+    try {
+      await injectWindowsMouseButton(movedCenter.x, movedCenter.y, true);
+      await injectWindowsMouseMove(movedCenter.x + 25, movedCenter.y + 15);
+      await waitFor(async () => Boolean(await query("document.querySelector('[data-active-gesture]')")), 5000, "held selection drag");
+      await shortcutCommand("undo");
+      await waitFor(async () => !(await query("document.querySelector('[data-active-gesture]')")), 5000, "Undo cancels selection preview");
+      if (annotationHistory.getSnapshot(displayId).revision !== revisionBeforeCancel) throw new Error("Held selection Undo changed committed history");
+    } finally {
+      await injectWindowsMouseButton(movedCenter.x + 25, movedCenter.y + 15, false);
+    }
+    const button = await query(`(() => { const node = document.querySelector('[data-selection-delete]');
+      if (!node || node.disabled) return null; const r = node.getBoundingClientRect();
+      return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()`);
+    if (!button) throw new Error("Selection delete action was not enabled");
+    const targetBounds = target.getContentBounds();
+    await injectWindowsClick(Math.round(targetBounds.x + button.x), Math.round(targetBounds.y + button.y));
+    await waitFor(() => annotationHistory.getSnapshot(displayId).elements.length === 1, 5000, "native selected-object delete");
+    if (annotationHistory.getSnapshot(displayId).elements[0].id !== "selection-bottom") throw new Error("Selection deleted the wrong layer");
+    await ready();
+    await shortcutCommand("undo");
+    await waitFor(() => JSON.stringify(annotationHistory.getSnapshot(displayId).elements) === JSON.stringify(moved),
+      5000, "selection deletion Undo restores IDs and order");
+    await ready();
+    const stale = await query(`(async () => {
+      const snapshot = await miniCast.getAnnotationDocument();
+      const id = crypto.randomUUID(); miniCast.beginAnnotationGesture(id);
+      try { return await miniCast.editAnnotationSelection(id, {
+        kind:'delete', ids:['selection-top'], revision:snapshot.revision - 1,
+      }); } finally { miniCast.endAnnotationGesture(id); }
+    })()`);
+    if (stale.accepted || stale.reason !== "stale-document" ||
+      JSON.stringify(annotationHistory.getSnapshot(displayId).elements) !== JSON.stringify(moved))
+      throw new Error("Stale selection was not rejected atomically");
+    const loaded = new Promise<void>(resolve => target.webContents.once("did-finish-load", () => resolve()));
+    target.webContents.reload(); await loaded;
+    await ready();
+    await waitForCommittedCanvasInk(displayId, true, "selection renderer reload restores committed ink");
+    if (!await query(`Boolean(document.querySelector('[data-annotation-selection-count="0"]'))`))
+      throw new Error("Transient selection survived renderer reload");
+    diagnostics.selectionTools = { topmost: true, move: true, undoRedo: true, delete: true,
+      heldUndo: true, staleRevision: true, reload: true };
+  }
+
   interface SmokeState {
     bridge: boolean;
     hash: string;
@@ -1142,6 +1237,7 @@ export function createSmokeChecks(context: SmokeContext) {
         end,
       );
       await verifyShapeAndTextTools(primary.id, start, end);
+      await verifySelectionTools(primary.id, start, end);
     } finally {
       if (!underlay.isDestroyed()) underlay.destroy();
       await selectTool("pass-through");

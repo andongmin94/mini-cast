@@ -5,6 +5,7 @@ import {
   type AnnotationDocumentUpdate,
 } from "@/annotation/document-sync";
 import type { AnnotationDocumentSnapshot } from "@/annotation/history";
+import AnnotationSelectionSurface from "@/renderer/components/AnnotationSelectionSurface";
 import AnnotationSurface from "@/renderer/components/AnnotationSurface";
 import type {
   AnnotationState,
@@ -252,14 +253,17 @@ export default function Overlay() {
       data-annotation-revision={annotationDocument?.revision ?? -1}
       data-annotation-elements={annotationDocument?.elements.length ?? 0}
     >
-      <AnnotationSurface
+      {annotationState.tool === "select" ? (
+        <AnnotationSelectionSurface key={displayId} displayId={displayId}
+          document={annotationDocument} onDocumentUpdate={applyAnnotationUpdate} />
+      ) : <AnnotationSurface
         tool={annotationState.tool}
         textDraft={annotationState.textDraft}
         settings={settings}
         displayId={displayId}
         document={annotationDocument}
         onDocumentUpdate={applyAnnotationUpdate}
-      />
+      />}
 
       {syncNotice && (
         <div

@@ -15,6 +15,9 @@ foreach ($file in $files) {
       throw "Missing shape/text verification '$name': $($file.Name)"
     }
   }
+  foreach ($name in @('topmost','move','undoRedo','delete','heldUndo','staleRevision','reload')) {
+    if (-not $result.diagnostics.selectionTools.$name) { throw "Missing selection verification: $name" }
+  }
   Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
   Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
 }

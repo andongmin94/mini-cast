@@ -1,3 +1,4 @@
+import { applyAnnotationSelectionEdit } from "../annotation/selection.js";
 import { readAnnotationTextDraft, type AnnotationTextDraft } from "../annotation/text.js";
 import {
   createAnnotationUpdate,
@@ -555,6 +556,24 @@ function registerIpc() {
       }
     },
   );
+
+  ipcMain.handle("annotation-edit-selection", (event, gestureId: unknown, value: unknown): AnnotationMutationResult => {
+    const displayId = isTopLevelSender(event) ? displayIdForSender(event.sender) : null;
+    if (displayId === null || displayRebuildInProgress) return annotationMutationResult(displayId, "unavailable");
+    if (annotationTool !== "select" || !isGestureId(gestureId) || !gestureLeases.matches(event.sender.id, gestureId))
+      return annotationMutationResult(displayId, "stale-gesture");
+    try {
+      const changed = applyAnnotationSelectionEdit(annotationHistory, displayId, value);
+      if (changed === null) return annotationMutationResult(displayId, "no-change");
+      return { accepted: true, update: sendAnnotationDocument(displayId, undefined, event.sender.id) };
+    } catch (error) {
+      if (!(error instanceof AnnotationError)) console.error("Selection edit failed:", error);
+      return annotationMutationResult(displayId, error instanceof AnnotationError ? error.reason : "internal");
+    } finally {
+      gestureLeases.end(event.sender.id, gestureId);
+      sendAnnotationState();
+    }
+  });
 
   ipcMain.handle("get-annotation-document", (event) => {
     const displayId = isTopLevelSender(event)

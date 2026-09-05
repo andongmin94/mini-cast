@@ -82,7 +82,17 @@ interface RemoveHistoryEntry {
   elements: readonly IndexedElement[];
 }
 
-type HistoryEntry = AddHistoryEntry | RemoveHistoryEntry;
+interface MoveHistoryEntry {
+  kind: "move";
+  displayId: number;
+  moves: readonly {
+    index: number;
+    before: AnnotationElement;
+    after: AnnotationElement;
+  }[];
+}
+
+type HistoryEntry = AddHistoryEntry | RemoveHistoryEntry | MoveHistoryEntry;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -144,7 +154,23 @@ function scaleElement(element: AnnotationElement, scaleX: number, scaleY: number
   });
 }
 
+/** Translation preserves IDs and styles; invalid coordinates are rejected before publication. */
+export function translateAnnotationElement(element: AnnotationElement, dx: number, dy: number): AnnotationElement {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new AnnotationError("invalid-element");
+  const points = Object.freeze(element.points.map(point => {
+    const x = point.x + dx;
+    const y = point.y + dy;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > MAX_ANNOTATION_COORDINATE || Math.abs(y) > MAX_ANNOTATION_COORDINATE)
+      throw new AnnotationError("invalid-element");
+    return Object.freeze({ x, y });
+  }));
+  return element.tool === "text"
+    ? Object.freeze({ ...element, points, box: Object.isFrozen(element.box) ? element.box : Object.freeze({ ...element.box }) })
+    : Object.freeze({ ...element, points });
+}
+
 function cloneHistoryEntry(entry: HistoryEntry): HistoryEntry {
+  if (entry.kind === "move") return { ...entry, moves: entry.moves.map(move => ({ ...move })) };
   if (entry.kind === "add") {
     return { ...entry };
   }
@@ -164,6 +190,11 @@ function scaleHistoryEntry(
   scaleY: number,
 ): HistoryEntry {
   if (entry.displayId !== displayId) return entry;
+  if (entry.kind === "move") return { ...entry, moves: entry.moves.map(move => ({
+    index: move.index,
+    before: scaleElement(move.before, scaleX, scaleY),
+    after: scaleElement(move.after, scaleX, scaleY),
+  })) };
   if (entry.kind === "add") {
     return { ...entry, stroke: scaleElement(entry.stroke, scaleX, scaleY) };
   }
@@ -177,6 +208,9 @@ function scaleHistoryEntry(
 }
 
 function historyEntryPointCount(entry: HistoryEntry) {
+  // Account for displaced geometry. Destinations are shared with the current
+  // document or a following history entry, rather than copied for each owner.
+  if (entry.kind === "move") return entry.moves.reduce((sum, move) => sum + annotationElementCost(move.before), 0);
   return entry.kind === "add"
     ? annotationElementCost(entry.stroke)
     : entry.elements.reduce(
@@ -389,6 +423,24 @@ export class AnnotationHistory {
     return displayId;
   }
 
+  translateElements(displayId: number, ids: Iterable<string>, dx: number, dy: number) {
+    const values = [...ids];
+    const validIds = readAnnotationElementIds(values);
+    if (!validIds || validIds.length !== values.length || !Number.isFinite(dx) || !Number.isFinite(dy))
+      throw new AnnotationError("invalid-element");
+    if (!validIds.length) return null;
+    const document = this.document(displayId);
+    if (validIds.some(id => !document.elementIds.has(id))) throw new AnnotationError("stale-document");
+    if (dx === 0 && dy === 0) return null;
+    const selected = new Set(validIds);
+    const moves = document.elements.flatMap((before, index) => selected.has(before.id)
+      ? [{ index, before, after: translateAnnotationElement(before, dx, dy) }] : []);
+    const entry: MoveHistoryEntry = { kind: "move", displayId, moves };
+    this.apply(entry);
+    this.commit(entry);
+    return displayId;
+  }
+
   clearDisplay(displayId: number) {
     return this.removeElements(
       displayId,
@@ -455,6 +507,10 @@ export class AnnotationHistory {
 
   private apply(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
+    if (entry.kind === "move") {
+      this.applyMove(entry, false);
+      return;
+    }
     if (entry.kind === "add") {
       if (document.elementIds.has(entry.stroke.id)) {
         throw new AnnotationError("duplicate-element");
@@ -492,8 +548,22 @@ export class AnnotationHistory {
     this.touch(entry.displayId);
   }
 
+  private applyMove(entry: MoveHistoryEntry, undo: boolean) {
+    const document = this.document(entry.displayId);
+    if (entry.moves.some(move => document.elements[move.index]?.id !== move.before.id))
+      throw new AnnotationError("stale-document");
+    const elements = document.elements.slice();
+    for (const move of entry.moves) elements[move.index] = undo ? move.before : move.after;
+    document.elements = elements;
+    this.touch(entry.displayId);
+  }
+
   private revert(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
+    if (entry.kind === "move") {
+      this.applyMove(entry, true);
+      return;
+    }
     if (entry.kind === "add") {
       const removed = document.elements.find(
         (stroke) => stroke.id === entry.stroke.id,

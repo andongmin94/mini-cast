@@ -1,3 +1,4 @@
+import type { AnnotationSelectionEdit } from "../annotation/selection";
 import type { AnnotationTextDraft } from "../annotation/text";
 import type {
   AnnotationDocumentUpdate,
@@ -50,6 +51,7 @@ interface MiniCastBridge {
     gestureId: string,
     ids: readonly string[],
   ): Promise<AnnotationMutationResult>;
+  editAnnotationSelection(gestureId: string, edit: AnnotationSelectionEdit): Promise<AnnotationMutationResult>;
   endAnnotationGesture(gestureId: string): void;
   onDisplaysUpdated(listener: (displays: DisplayInfo[]) => void): Unsubscribe;
   onSettingsUpdated(listener: (settings: OverlaySettings) => void): Unsubscribe;

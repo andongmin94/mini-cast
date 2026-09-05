@@ -72,6 +72,13 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
           elements = elements.filter(candidate => candidate !== element); compare('remove-' + element.tool);
           elements = savedElements; compare('restore-' + element.tool);
         }
+        for (const moved of [...shapeSet, textElement, bottom, top]) {
+          const saved = elements;
+          elements = elements.map(element => element.id === moved.id ? { ...element,
+            points: element.points.map(point => ({ x: point.x + 17.25, y: point.y - 11.5 })) } : element);
+          compare('move-' + moved.tool);
+          elements = saved; compare('undo-move-' + moved.tool);
+        }
         elements = []; compare('mixed-clear');
         for (let i = 0; i < 80; i++) {
           const saved = elements;

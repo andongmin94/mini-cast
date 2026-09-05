@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld("miniCast", {
     ipcRenderer.invoke("annotation-add-element", gestureId, stroke),
   removeAnnotationElements: (gestureId: unknown, ids: unknown) =>
     ipcRenderer.invoke("annotation-remove-elements", gestureId, ids),
+  editAnnotationSelection: (gestureId: unknown, edit: unknown) =>
+    ipcRenderer.invoke("annotation-edit-selection", gestureId, edit),
   endAnnotationGesture: (gestureId: unknown) =>
     ipcRenderer.send("annotation-gesture-end", gestureId),
   onDisplaysUpdated: (listener: Listener) => on("displays-updated", listener),

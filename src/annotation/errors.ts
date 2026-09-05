@@ -4,11 +4,13 @@ export type AnnotationFailureReason =
   | "element-limit"
   | "point-limit"
   | "stale-gesture"
+  | "stale-document"
   | "no-change"
   | "unavailable"
   | "internal";
 
 const DOMAIN_MESSAGES = {
+  "stale-document": "Annotation document changed during editing",
   "invalid-element": "Invalid annotation element",
   "duplicate-element": "Duplicate annotation element id",
   "element-limit": "Annotation element limit reached",
@@ -24,6 +26,8 @@ export class AnnotationError extends Error {
 
 export function annotationFailureMessage(reason: AnnotationFailureReason) {
   switch (reason) {
+    case "stale-document":
+      return "판서가 변경되어 이전 선택으로 편집하지 않았습니다. 객체를 다시 선택해 주세요.";
     case "element-limit":
     case "point-limit":
       return "이 화면의 판서 용량 한도에 도달해 새 판서를 저장하지 못했습니다. 기존 판서를 지운 뒤 다시 그려 주세요.";

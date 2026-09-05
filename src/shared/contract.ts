@@ -5,6 +5,7 @@ export type KeyDisplayPosition =
 
 export const ANNOTATION_TOOLS = [
   "pass-through",
+  "select",
   "pen",
   "highlighter",
   "eraser",

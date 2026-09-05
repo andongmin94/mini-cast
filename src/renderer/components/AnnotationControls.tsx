@@ -46,6 +46,7 @@ const TOOL_OPTIONS = [
     shortcut: "Alt+Shift+1",
     Icon: MousePointer2,
   },
+  { tool: "select", label: "선택", shortcut: "클릭 · Shift 추가 선택 · 드래그 이동", Icon: MousePointer2 },
   { tool: "pen", label: "펜", shortcut: "Alt+Shift+3", Icon: PenLine },
   {
     tool: "highlighter",
@@ -80,7 +81,7 @@ export default function AnnotationControls({
 }: AnnotationControlsProps) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-5 gap-2">
         {TOOL_OPTIONS.map(({ tool: option, label, shortcut, Icon }) => (
           <button
             key={option}
