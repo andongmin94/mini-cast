@@ -17,6 +17,13 @@ contextBridge.exposeInMainWorld("miniCast", {
     ipcRenderer.send("save-settings", settings),
   notifyOverlayReady: () => ipcRenderer.send("overlay-ready"),
   getSettings: () => ipcRenderer.invoke("get-settings"),
+  getSettingsSaveStatus: () => ipcRenderer.invoke("get-settings-save-status"),
+  retrySettingsSave: () => ipcRenderer.send("retry-settings-save"),
+  acknowledgeSettingsRecovery: () =>
+    ipcRenderer.send("acknowledge-settings-recovery"),
+  getAnnotationDocument: () => ipcRenderer.invoke("get-annotation-document"),
+  onSettingsSaveStatus: (listener: Listener) =>
+    on("settings-save-status", listener),
   getAnnotationState: () => ipcRenderer.invoke("get-annotation-state"),
   setAnnotationTool: (tool: unknown) =>
     ipcRenderer.send("set-annotation-tool", tool),

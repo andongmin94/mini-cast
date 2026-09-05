@@ -27,6 +27,10 @@ export function createTray() {
   );
 }
 
+export function isTrayReady() {
+  return tray !== null && !tray.isDestroyed();
+}
+
 export function destroyTray() {
   tray?.destroy();
   tray = null;

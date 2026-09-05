@@ -3,14 +3,13 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { annotationFailureMessage } from "@/annotation/errors";
 import { shouldAdoptAnnotationDocument } from "@/annotation/document-order";
-import {
-  eraserSweepHitsStroke,
-  pointHitsStroke,
-} from "@/annotation/geometry";
+import { eraserSweepHitsStroke, pointHitsStroke } from "@/annotation/geometry";
 import { MAX_ANNOTATION_POINTS_PER_STROKE } from "@/annotation/history";
 import type {
   AnnotationDocumentSnapshot,
@@ -168,6 +167,7 @@ export default function AnnotationSurface({
   document,
   onAuthoritativeDocument,
 }: AnnotationSurfaceProps) {
+  const [notice, setNotice] = useState<string | null>(null);
   const committedCanvasRef = useRef<HTMLCanvasElement>(null);
   const gestureCanvasRef = useRef<HTMLCanvasElement>(null);
   const documentRef = useRef<AnnotationDocumentSnapshot | null>(document);
@@ -279,16 +279,14 @@ export default function AnnotationSurface({
       const gestureId = activeGestureIdRef.current;
       const pointerId = activePointerRef.current;
       const gestureCanvas = gestureCanvasRef.current;
+      if (gestureCanvas) delete gestureCanvas.dataset.activeGesture;
       activePointerRef.current = null;
       activeGestureIdRef.current = null;
       activeStrokeRef.current = null;
       eraserBaseRef.current = null;
       activeErasedIdsRef.current = new Set();
       lastEraserPointRef.current = null;
-      if (
-        pointerId !== null &&
-        gestureCanvas?.hasPointerCapture(pointerId)
-      ) {
+      if (pointerId !== null && gestureCanvas?.hasPointerCapture(pointerId)) {
         try {
           gestureCanvas.releasePointerCapture(pointerId);
         } catch {
@@ -382,6 +380,12 @@ export default function AnnotationSurface({
     if (active.points.length !== previousLength) {
       drawActiveSegments(gestureCanvasRef.current, active, previousLength);
     }
+    if (active.points.length >= MAX_ANNOTATION_POINTS_PER_STROKE) {
+      commitGesture();
+      setNotice(
+        "한 획의 길이 한도에 도달하여 여기까지 저장을 요청했습니다. 펜을 떼고 새 획을 시작해 주세요.",
+      );
+    }
   }
 
   function previewErase(points: readonly AnnotationPoint[]) {
@@ -433,12 +437,25 @@ export default function AnnotationSurface({
           if (result.document) {
             adoptAuthoritativeDocument(result.document, true);
           }
+          if (!result.accepted)
+            setNotice(annotationFailureMessage(result.reason));
           pendingStrokesRef.current.delete(committed.id);
           renderCommitted();
         })
         .catch(() => {
           pendingStrokesRef.current.delete(committed.id);
+          setNotice("판서 통신이 끊겼습니다. 저장 상태를 다시 확인합니다.");
           renderCommitted();
+          void miniCast
+            .getAnnotationDocument()
+            .then((next) => {
+              if (adoptAuthoritativeDocument(next, true)) renderCommitted();
+            })
+            .catch(() =>
+              setNotice(
+                "판서 상태를 확인할 수 없습니다. 앱 연결을 확인해 주세요.",
+              ),
+            );
         })
         .finally(() => miniCast.endAnnotationGesture(gestureId));
     } else if (erasedIds.length) {
@@ -449,12 +466,25 @@ export default function AnnotationSurface({
           if (result.document) {
             adoptAuthoritativeDocument(result.document, true);
           }
+          if (!result.accepted)
+            setNotice(annotationFailureMessage(result.reason));
           erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
           renderCommitted();
         })
         .catch(() => {
           erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
+          setNotice("지우기 통신이 끊겼습니다. 저장 상태를 다시 확인합니다.");
           renderCommitted();
+          void miniCast
+            .getAnnotationDocument()
+            .then((next) => {
+              if (adoptAuthoritativeDocument(next, true)) renderCommitted();
+            })
+            .catch(() =>
+              setNotice(
+                "판서 상태를 확인할 수 없습니다. 앱 연결을 확인해 주세요.",
+              ),
+            );
         })
         .finally(() => miniCast.endAnnotationGesture(gestureId));
     } else {
@@ -470,6 +500,8 @@ export default function AnnotationSurface({
     if (!event.isPrimary || event.button !== 0) return;
 
     event.preventDefault();
+    setNotice(null);
+    event.currentTarget.dataset.activeGesture = "true";
     const gestureId = crypto.randomUUID();
     event.currentTarget.setPointerCapture(event.pointerId);
     activePointerRef.current = event.pointerId;
@@ -554,6 +586,16 @@ export default function AnnotationSurface({
         onLostPointerCapture={handlePointerCancel}
         aria-hidden="true"
       />
+      {notice && (
+        <div
+          role="alert"
+          data-annotation-notice=""
+          className="pointer-events-none fixed bottom-4 left-1/2 max-w-lg -translate-x-1/2 rounded-md bg-slate-900 px-4 py-3 text-sm text-white"
+          style={{ zIndex: 5 }}
+        >
+          {notice}
+        </div>
+      )}
     </>
   );
 }

@@ -1,8 +1,5 @@
 export type KeyDisplayPosition =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+  "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export const ANNOTATION_TOOLS = [
   "pass-through",
@@ -18,6 +15,13 @@ export type AnnotationCommand = (typeof ANNOTATION_COMMANDS)[number];
 export interface AnnotationState {
   tool: AnnotationTool;
   unavailableShortcuts: readonly string[];
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
+export interface SettingsSaveStatus {
+  state: "saved" | "pending" | "failed";
+  recovered: boolean;
 }
 
 export interface Bounds {

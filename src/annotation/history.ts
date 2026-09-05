@@ -1,3 +1,5 @@
+import { AnnotationError, type AnnotationFailureReason } from "./errors.js";
+
 export interface AnnotationPoint {
   x: number;
   y: number;
@@ -26,10 +28,13 @@ export interface AnnotationDocumentSnapshot {
   strokes: readonly AnnotationStroke[];
 }
 
-export interface AnnotationMutationResult {
-  accepted: boolean;
-  document: AnnotationDocumentSnapshot | null;
-}
+export type AnnotationMutationResult =
+  | { accepted: true; document: AnnotationDocumentSnapshot }
+  | {
+      accepted: false;
+      reason: AnnotationFailureReason;
+      document: AnnotationDocumentSnapshot | null;
+    };
 
 interface IndexedStroke {
   stroke: AnnotationStroke;
@@ -58,8 +63,7 @@ export const MAX_ANNOTATION_POINTS_PER_STROKE = 50_000;
 export const MAX_ANNOTATION_POINTS_PER_DISPLAY = 1_000_000;
 export const MAX_ANNOTATION_STROKES_PER_DISPLAY = 10_000;
 export const MAX_ANNOTATION_HISTORY_ENTRIES = 2_000;
-export const MAX_ANNOTATION_HISTORY_POINTS =
-  MAX_ANNOTATION_POINTS_PER_DISPLAY;
+export const MAX_ANNOTATION_HISTORY_POINTS = MAX_ANNOTATION_POINTS_PER_DISPLAY;
 
 const HEX_COLOR = /^#[\da-f]{6}$/i;
 
@@ -90,7 +94,9 @@ function clonePoint(point: AnnotationPoint): AnnotationPoint {
   return { x: point.x, y: point.y };
 }
 
-export function cloneAnnotationStroke(stroke: AnnotationStroke): AnnotationStroke {
+export function cloneAnnotationStroke(
+  stroke: AnnotationStroke,
+): AnnotationStroke {
   return {
     id: stroke.id,
     tool: stroke.tool,
@@ -191,10 +197,7 @@ export function isAnnotationStroke(value: unknown): value is AnnotationStroke {
   ) {
     return false;
   }
-  if (
-    typeof value.opacity !== "number" ||
-    !Number.isFinite(value.opacity)
-  ) {
+  if (typeof value.opacity !== "number" || !Number.isFinite(value.opacity)) {
     return false;
   }
   return value.tool === "pen" ? value.opacity === 1 : value.opacity === 0.35;
@@ -316,21 +319,21 @@ export class AnnotationHistory {
 
   addStroke(displayId: number, stroke: AnnotationStroke) {
     if (!isAnnotationStroke(stroke)) {
-      throw new Error("Invalid annotation stroke");
+      throw new AnnotationError("invalid-stroke");
     }
 
     const document = this.document(displayId);
     if (document.strokeIds.has(stroke.id)) {
-      throw new Error(`Duplicate annotation stroke id: ${stroke.id}`);
+      throw new AnnotationError("duplicate-stroke");
     }
     if (document.strokes.length >= MAX_ANNOTATION_STROKES_PER_DISPLAY) {
-      throw new Error("Annotation stroke limit reached");
+      throw new AnnotationError("stroke-limit");
     }
     if (
       document.pointCount + stroke.points.length >
       MAX_ANNOTATION_POINTS_PER_DISPLAY
     ) {
-      throw new Error("Annotation point limit reached");
+      throw new AnnotationError("point-limit");
     }
 
     const stored = cloneAnnotationStroke(stroke);
@@ -374,19 +377,21 @@ export class AnnotationHistory {
   }
 
   undo() {
-    const entry = this.undoStack.pop();
+    const entry = this.undoStack[this.undoStack.length - 1];
     if (!entry) return null;
 
     this.revert(entry);
+    this.undoStack.pop();
     this.redoStack.push(entry);
     return entry.displayId;
   }
 
   redo() {
-    const entry = this.redoStack.pop();
+    const entry = this.redoStack[this.redoStack.length - 1];
     if (!entry) return null;
 
     this.apply(entry);
+    this.redoStack.pop();
     this.undoStack.push(entry);
     return entry.displayId;
   }
@@ -431,16 +436,16 @@ export class AnnotationHistory {
     const document = this.document(entry.displayId);
     if (entry.kind === "add") {
       if (document.strokeIds.has(entry.stroke.id)) {
-        throw new Error(`Duplicate annotation stroke id: ${entry.stroke.id}`);
+        throw new AnnotationError("duplicate-stroke");
       }
       if (document.strokes.length >= MAX_ANNOTATION_STROKES_PER_DISPLAY) {
-        throw new Error("Annotation stroke limit reached");
+        throw new AnnotationError("stroke-limit");
       }
       if (
         document.pointCount + entry.stroke.points.length >
         MAX_ANNOTATION_POINTS_PER_DISPLAY
       ) {
-        throw new Error("Annotation point limit reached");
+        throw new AnnotationError("point-limit");
       }
 
       document.strokes.splice(
@@ -500,13 +505,13 @@ export class AnnotationHistory {
       document.strokes.length + restorable.length >
       MAX_ANNOTATION_STROKES_PER_DISPLAY
     ) {
-      throw new Error("Annotation stroke limit reached");
+      throw new AnnotationError("stroke-limit");
     }
     if (
       document.pointCount + restoredPoints >
       MAX_ANNOTATION_POINTS_PER_DISPLAY
     ) {
-      throw new Error("Annotation point limit reached");
+      throw new AnnotationError("point-limit");
     }
 
     restorable.forEach(({ stroke, index }) => {

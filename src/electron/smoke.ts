@@ -6,6 +6,7 @@ export type SmokeMode = "startup" | "interaction";
 export interface SmokeOptions {
   mode: SmokeMode | null;
   sentinelPath: string | null;
+  userDataPath: string | null;
   disableHardwareAcceleration: boolean;
 }
 
@@ -20,6 +21,10 @@ export function readSmokeOptions(argv: readonly string[]): SmokeOptions {
   );
   return {
     mode,
+    userDataPath:
+      argv
+        .find((argument) => argument.startsWith("--smoke-user-data="))
+        ?.slice("--smoke-user-data=".length) ?? null,
     sentinelPath: sentinel ? sentinel.slice("--smoke-sentinel=".length) : null,
     disableHardwareAcceleration: argv.includes(
       "--disable-hardware-acceleration",
@@ -118,4 +123,85 @@ ${movements}
 [MiniCastMouse]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
 `;
   return runPowerShell(script);
+}
+
+export function shortcutVirtualKeys(accelerator: string): number[] {
+  const special: Record<string, number> = {
+    Alt: 0x12,
+    Shift: 0x10,
+    Control: 0x11,
+    Ctrl: 0x11,
+    CommandOrControl: 0x11,
+    Escape: 0x1b,
+  };
+  return accelerator.split("+").map((part) => {
+    if (special[part] !== undefined) return special[part];
+    if (/^[a-z0-9]$/i.test(part)) return part.toUpperCase().charCodeAt(0);
+    throw new Error(`Unsupported Windows test accelerator: ${accelerator}`);
+  });
+}
+
+const KEY_NATIVE_DECLARATION = String.raw`
+Add-Type @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class MiniCastKeyboard {
+  [StructLayout(LayoutKind.Sequential)] public struct MOUSEINPUT {
+    public int dx, dy; public uint mouseData, dwFlags, time; public UIntPtr extraInfo;
+  }
+  [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT {
+    public ushort vk, scan; public uint flags, time; public UIntPtr extraInfo;
+  }
+  [StructLayout(LayoutKind.Explicit)] public struct UNION {
+    [FieldOffset(0)] public MOUSEINPUT mouse;
+    [FieldOffset(0)] public KEYBDINPUT keyboard;
+  }
+  [StructLayout(LayoutKind.Sequential)] public struct INPUT {
+    public uint type; public UNION data;
+  }
+  [DllImport("user32.dll", SetLastError=true)]
+  public static extern uint SendInput(uint count, INPUT[] inputs, int size);
+  public static void Key(ushort vk, bool up) {
+    var input = new INPUT { type = 1 };
+    input.data.keyboard.vk = vk;
+    input.data.keyboard.flags = up ? 2u : 0u;
+    if (SendInput(1, new[] { input }, Marshal.SizeOf(typeof(INPUT))) != 1)
+      throw new Win32Exception(Marshal.GetLastWin32Error());
+  }
+}
+'@
+`;
+
+export function injectWindowsShortcut(accelerator: string) {
+  const keys = shortcutVirtualKeys(accelerator);
+  const press = keys
+    .map((key) => `[MiniCastKeyboard]::Key(${key}, $false)`)
+    .join("\n");
+  const release = [...keys]
+    .reverse()
+    .map((key) => `[MiniCastKeyboard]::Key(${key}, $true)`)
+    .join("\n");
+  return runPowerShell(
+    `${KEY_NATIVE_DECLARATION}\ntry {\n${press}\nStart-Sleep -Milliseconds 80\n} finally {\n${release}\n}`,
+  );
+}
+
+export function injectWindowsMouseButton(
+  x: number,
+  y: number,
+  pressed: boolean,
+) {
+  return runPowerShell(`${MOUSE_NATIVE_DECLARATION}
+[MiniCastMouse]::SetCursorPos(${Math.round(x)}, ${Math.round(y)}) | Out-Null
+Start-Sleep -Milliseconds 60
+[MiniCastMouse]::mouse_event(${pressed ? "0x0002" : "0x0004"}, 0, 0, 0, [UIntPtr]::Zero)
+`);
+}
+
+export function injectWindowsMouseMove(x: number, y: number) {
+  return runPowerShell(`${MOUSE_NATIVE_DECLARATION}
+[MiniCastMouse]::SetCursorPos(${Math.round(x)}, ${Math.round(y)}) | Out-Null
+Start-Sleep -Milliseconds 60
+`);
 }

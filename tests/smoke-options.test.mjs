@@ -6,6 +6,7 @@ import { readSmokeOptions } from "../dist/electron/smoke.js";
 test("smoke tests exercise the default rendering path unless explicitly disabled", () => {
   assert.deepEqual(readSmokeOptions(["MiniCast.exe", "--smoke-test"]), {
     mode: "startup",
+    userDataPath: null,
     sentinelPath: null,
     disableHardwareAcceleration: false,
   });
@@ -21,6 +22,7 @@ test("software-rendering smoke mode is explicit and preserves the sentinel", () 
     ]),
     {
       mode: "interaction",
+      userDataPath: null,
       sentinelPath: "C:\\temp\\result.json",
       disableHardwareAcceleration: true,
     },

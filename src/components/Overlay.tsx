@@ -84,10 +84,14 @@ export default function Overlay() {
   const [annotationState, setAnnotationState] = useState<AnnotationState>({
     tool: "pass-through",
     unavailableShortcuts: [],
+    canUndo: false,
+    canRedo: false,
   });
   const [annotationDocument, setAnnotationDocument] =
     useState<AnnotationDocumentSnapshot | null>(null);
-  const [mousePosition, setMousePosition] = useState<MousePosition | null>(null);
+  const [mousePosition, setMousePosition] = useState<MousePosition | null>(
+    null,
+  );
   const [mouseButtons, setMouseButtons] = useState<MouseButtons>({
     left: false,
     middle: false,
@@ -135,7 +139,8 @@ export default function Overlay() {
 
     const scalePosition = (position: MousePosition) => ({
       x: Math.round(
-        position.x * (window.innerWidth / Math.max(sourceSize.current.width, 1)),
+        position.x *
+          (window.innerWidth / Math.max(sourceSize.current.width, 1)),
       ),
       y: Math.round(
         position.y *
@@ -167,7 +172,11 @@ export default function Overlay() {
       setMouseButtons((current) => ({ ...current, [button]: pressed }));
     };
 
-    const onOverlayInit = ({ displayId: physicalId, width, height }: OverlayInit) => {
+    const onOverlayInit = ({
+      displayId: physicalId,
+      width,
+      height,
+    }: OverlayInit) => {
       displayIdRef.current = physicalId;
       documentRevisionRef.current = -1;
       clearKeyPressTimers();
@@ -178,7 +187,17 @@ export default function Overlay() {
     };
 
     const unsubscribe = [
-      miniCast.onSettingsUpdated(setSettings),
+      miniCast.onSettingsUpdated((next) => {
+        if (
+          !next.showKeyDisplay ||
+          settingsRef.current.keyDisplayId !== next.keyDisplayId
+        ) {
+          clearKeyPressTimers();
+          setKeyPresses([]);
+        }
+        settingsRef.current = next;
+        setSettings(next);
+      }),
       miniCast.onAnnotationStateUpdated(setAnnotationState),
       miniCast.onAnnotationDocumentUpdated(adoptAnnotationDocument),
       miniCast.onMouseMove((position) =>
