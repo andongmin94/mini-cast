@@ -20,7 +20,7 @@ def write(path,value):
     file.write_text(value,encoding='utf-8',newline='\n')
 files={}
 def replace(path,old,new,count=1):
-    value=files.get(path,source(path))
+    value=files[path] if path in files else source(path)
     if value.count(old)!=count: raise RuntimeError(f'{path}: expected {count} targets, found {value.count(old)}: {old[:100]!r}')
     files[path]=value.replace(old,new)
 
@@ -34,6 +34,42 @@ new_files = [
 for path in new_files:
     if Path(path).exists(): raise RuntimeError('Export file already exists: '+path)
     files[path]=subprocess.check_output(['git','show',MODULES+':'+path]).decode('utf-8')
+
+# Electron 44 removed synchronous readImage/writeImage; use the exact pinned API.
+path='src/electron/annotation-export.ts'
+replace(path,'app, clipboard, dialog,','app, clipboard, ClipboardItem, dialog,')
+replace(path,'    let publishing = false;','''    let publishing = false;
+    let publication: Promise<void> | null = null;
+    let quitRequested = false;
+    const beforeQuit = (event: Electron.Event) => {
+      if (!publication) { invalidate(); return; }
+      event.preventDefault();
+      if (quitRequested) return;
+      quitRequested = true;
+      void publication.then(() => app.quit(), () => app.quit());
+    };''')
+replace(path,'app.on("before-quit", invalidate);','app.on("before-quit", beforeQuit);')
+replace(path,'app.removeListener("before-quit", invalidate);','app.removeListener("before-quit", beforeQuit);')
+replace(path,'        clipboard.writeImage(image);','''        publication = clipboard.write([
+          new ClipboardItem({ "image/png": new Blob([new Uint8Array(png)], { type: "image/png" }) }),
+        ]);
+        await publication;''')
+replace(path,'      await writePngFile(result.filePath, png);','      publication = writePngFile(result.filePath, png);\n      await publication;')
+path='src/electron/testing/export-smoke.ts'
+replace(path,'async function waitForSaveDialog() {','''async function readClipboardImage() {
+  const item = (await clipboard.read()).find(candidate => candidate.types.includes("image/png"));
+  if (!item) throw new Error("Clipboard has no PNG image");
+  const payload = await item.getType("image/png");
+  if (!(payload instanceof Blob)) throw new Error("Clipboard PNG is not a Blob");
+  return nativeImage.createFromBuffer(Buffer.from(await payload.arrayBuffer()));
+}
+
+async function waitForSaveDialog() {''')
+replace(path,'clipboard.writeText(','await clipboard.writeText(',3)
+replace(path,'const image=clipboard.readImage(),','const image=await readClipboardImage(),')
+replace(path,'if(!clipboard.readImage().toBitmap().equals(originalBitmap))','if(!(await readClipboardImage()).toBitmap().equals(originalBitmap))')
+replace(path,'if(clipboard.readText()!==','if(await clipboard.readText()!==')
+
 replace('src/electron/main.ts','import { randomUUID }','import { registerAnnotationExports } from "./annotation-export.js";\nimport { randomUUID }')
 replace('src/electron/main.ts','function registerIpc() {','''function registerIpc() {
   registerAnnotationExports({
@@ -97,7 +133,7 @@ files[path]=source(path).replace('캡처 및 판서 파일 저장은 아직 지�
 
 요청 시점의 확정 문서를 별도 Canvas에서 원래 순서로 그립니다. 배경 화면·컨트롤러·선택 테두리·진행 중 미리보기·레이저·사라지는 잉크는 포함하지 않습니다. 저장 중 문서가 변경돼도 이미 요청한 이미지에는 섞이지 않습니다. 내보내기는 문서·Undo/Redo를 수정하지 않습니다.
 
-PNG 저장은 조작 모드로 전환하고 네이티브 저장 창을 엽니다. 취소해도 문서와 기존 파일은 유지됩니다. 파일 이름은 .png 확장자를 사용합니다. 기록은 기존 원자적 파일 저장 라이브러리를 사용하며, 승인된 쓰기가 시작된 후에는 완료하도록 둡니다. 이미지 복사는 시스템 이미지 클립보드를 대체하며 붙여넣는 프로그램의 투명 배경 지원 여부에 따라 표현이 달라질 수 있습니다.
+PNG 저장은 조작 모드로 전환하고 네이티브 저장 창을 엽니다. 취소해도 문서와 기존 파일은 유지됩니다. 파일 이름은 .png 확장자를 사용합니다. 기록은 기존 원자적 파일 저장 라이브러리를 사용하며, 승인된 쓰기가 시작된 후에는 정상 종료를 잠시 지연해 쓰기의 성공 또는 실패를 기다립니다. 이미지 복사는 Electron 44의 비동기 ClipboardItem API로 시스템 이미지 클립보드를 대체하며 완료 후에만 성공을 표시합니다. 붙여넣는 프로그램의 투명 배경 지원 여부에 따라 표현이 달라질 수 있습니다.
 
 빈 문서·연결 해제·텍스트 편집 중 요청·중복 요청·렌더링 실패는 별도 안내합니다. renderer에는 파일 경로나 범용 클립보드 API를 노출하지 않습니다. PNG 응답은 요청한 창·일회용 토큰·해상도·용량을 검사한 뒤 네이티브 디코더로 확인합니다. 텍스트 폰트 로드를 기다리며, 창 재로딩과 15초 렌더링 제한을 처리합니다. 저장 대화상자에서 사용자가 선택하는 시간에는 자동 취소 제한을 두지 않습니다.
 
