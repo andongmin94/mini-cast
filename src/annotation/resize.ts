@@ -61,3 +61,23 @@ export function selectionResizeTransform(
     scaleY: Math.max(minY, requestedHeight / height),
   };
 }
+
+export const RESIZE_HANDLE_SIZE = 12;
+
+/** Keep four independent hit targets even for a dot or a screen-edge selection.
+ * This is UI geometry only; the transformation pivot still uses the ink bounds. */
+export function resizeHandleDisplayBounds(bounds: InkBounds, viewport: { width: number; height: number }): InkBounds {
+  if (![bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, viewport.width, viewport.height].every(Number.isFinite) ||
+      bounds.maxX < bounds.minX || bounds.maxY < bounds.minY || viewport.width <= 0 || viewport.height <= 0)
+    throw new AnnotationError("invalid-element");
+  const fit = (min: number, max: number, extent: number) => {
+    const low = Math.min(RESIZE_HANDLE_SIZE / 2, extent / 2);
+    const high = Math.max(low, extent - RESIZE_HANDLE_SIZE / 2);
+    const span = Math.min(max - min + 16, high - low);
+    const start = Math.min(Math.max(min - 8, low), high - span);
+    return { min: start, max: start + span };
+  };
+  const x = fit(bounds.minX, bounds.maxX, viewport.width);
+  const y = fit(bounds.minY, bounds.maxY, viewport.height);
+  return { minX: x.min, minY: y.min, maxX: x.max, maxY: y.max };
+}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AnnotationHistory, resizeAnnotationElement, MAX_ANNOTATION_COORDINATE } from "../../../dist/annotation/history.js";
 import { annotationSelectionBounds, applyAnnotationSelectionEdit, readAnnotationSelectionEdit, resizeSelectionElements } from "../../../dist/annotation/selection.js";
-import { RESIZE_HANDLES, isResizeHandle, resizeHandlePoint, selectionResizeTransform } from "../../../dist/annotation/resize.js";
+import { RESIZE_HANDLES, RESIZE_HANDLE_SIZE, resizeHandleDisplayBounds, isResizeHandle, resizeHandlePoint, selectionResizeTransform } from "../../../dist/annotation/resize.js";
 import { AnnotationReplica, createAnnotationUpdate, reduceAnnotationUpdate } from "../../../dist/annotation/document-sync.js";
 
 const box = { minX: 10, minY: 20, maxX: 110, maxY: 70 };
@@ -216,4 +216,34 @@ test("500 mixed corner resizes retain original snapshots and exact Undo/Redo val
     history.undo();
   }
   assert.deepEqual(history.getSnapshot(1).elements, original.elements);
+});
+
+test("tiny and edge selections retain four non-overlapping, fully visible resize targets", () => {
+  const viewport = { width: 800, height: 600 };
+  for (const bounds of [
+    { minX: 0, minY: 0, maxX: 0.5, maxY: 0.5 },
+    { minX: 799.5, minY: 599.5, maxX: 800, maxY: 600 },
+    { minX: 50, minY: 40, maxX: 500, maxY: 40.5 },
+    { minX: -100, minY: -100, maxX: 900, maxY: 700 },
+    { minX: 400, minY: 200, maxX: 400.5, maxY: 200.5 },
+  ]) {
+    const frame = resizeHandleDisplayBounds(bounds, viewport);
+    const positions = RESIZE_HANDLES.map(handle => resizeHandlePoint(frame, handle));
+    for (const point of positions) {
+      assert.ok(point.x >= RESIZE_HANDLE_SIZE / 2 && point.x <= viewport.width - RESIZE_HANDLE_SIZE / 2);
+      assert.ok(point.y >= RESIZE_HANDLE_SIZE / 2 && point.y <= viewport.height - RESIZE_HANDLE_SIZE / 2);
+    }
+    assert.ok(frame.maxX - frame.minX >= RESIZE_HANDLE_SIZE);
+    assert.ok(frame.maxY - frame.minY >= RESIZE_HANDLE_SIZE);
+    const identity = selectionResizeTransform(bounds, 'se', 0, 0, false);
+    assert.equal(identity.scaleX, 1); assert.equal(identity.scaleY, 1);
+  }
+});
+
+test("resize target layout is independent of DPR and leaves the geometry pivot unchanged", () => {
+  const frame = resizeHandleDisplayBounds(box, { width: 800, height: 600 });
+  assert.deepEqual(frame, { minX: 6, minY: 12, maxX: 122, maxY: 78 });
+  const transform = selectionResizeTransform(box, 'se', 20, 10, false);
+  assert.deepEqual(transform.anchor, { x: 10, y: 20 });
+  assert.throws(() => resizeHandleDisplayBounds(box, { width: 0, height: 600 }));
 });

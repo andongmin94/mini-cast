@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { screen } from "electron";
 import type { AnnotationHistory, AnnotationElement } from "../../annotation/history.js";
 import { annotationSelectionBounds, resizeSelectionElements } from "../../annotation/selection.js";
-import { resizeHandlePoint, type ResizeHandle } from "../../annotation/resize.js";
+import { resizeHandlePoint, resizeHandleDisplayBounds, type ResizeHandle } from "../../annotation/resize.js";
 import type { AnnotationCommand, AnnotationState } from "../../shared/contract.js";
 import { overlayDisplays, overlayWindows } from "../window.js";
 import { injectWindowsClick, injectWindowsDrag, injectWindowsMouseButton, injectWindowsMouseMove, injectWindowsShortcut, waitFor } from "./smoke.js";
@@ -43,7 +43,7 @@ export async function verifySelectionResize(context: ResizeSmokeContext, display
   const handlePoint = async (handle: ResizeHandle, ids: readonly string[]) => {
     const bounds = annotationSelectionBounds(snapshot().elements, new Set(ids));
     if (!bounds) throw new Error("Missing resize bounds");
-    const expected = resizeHandlePoint(bounds, handle);
+    const expected = resizeHandlePoint(resizeHandleDisplayBounds(bounds, display.bounds), handle);
     await waitFor(async () => {
       const point = await query(`(() => {
         const node = document.querySelector('[data-selection-resize-handle="${handle}"]');
@@ -59,6 +59,26 @@ export async function verifySelectionResize(context: ResizeSmokeContext, display
     await waitFor(() => JSON.stringify(snapshot().elements) === JSON.stringify(expected), 5000, label);
     await ready();
   };
+
+  // Tiny screen-edge ink used to leave corner targets overlapping or offscreen.
+  history.clearDisplay(displayId);
+  history.addElement(displayId, { id: 'resize-tiny', tool: 'pen', color: '#123456', width: 1, opacity: 1, points: [{ x: 3, y: 3 }] });
+  context.publishDocument(displayId);
+  await ready();
+  const tinyClick = screenPoint({ x: 3, y: 3 });
+  await injectWindowsClick(tinyClick.x, tinyClick.y);
+  await selectedCount(1);
+  for (const handle of ['nw', 'ne', 'sw', 'se'] as const) {
+    const source = snapshot();
+    const point = await handlePoint(handle, ['resize-tiny']);
+    const dx = handle.endsWith('w') ? -3 : 3;
+    const dy = handle.startsWith('n') ? -3 : 3;
+    const expected = resizeSelectionElements(source.elements, new Set(['resize-tiny']), handle, dx, dy, false);
+    await injectWindowsDrag(point.x, point.y, point.x + dx, point.y + dy);
+    await expectElements(expected, 'independent tiny ' + handle + ' resize handle');
+    await context.command('undo');
+    await expectElements(source.elements, 'tiny handle Undo');
+  }
 
   history.clearDisplay(displayId);
   history.addElement(displayId, { id: "resize-rectangle", tool: "rectangle", color: "#007AFF", width: 4, opacity: 1,
@@ -183,6 +203,6 @@ export async function verifySelectionResize(context: ResizeSmokeContext, display
     await injectWindowsMouseButton(escapeHandle.x + 15, escapeHandle.y + 15, false);
   }
   assert.deepEqual(snapshot(), afterExternal);
-  return { handles: true, noOp: true, resize: true, undoRedo: true, groupShift: true,
+  return { handles: true, tinyHandles: true, noOp: true, resize: true, undoRedo: true, groupShift: true,
     pixels: true, heldUndo: true, staleRevision: true, activeReload: true, heldEscape: true };
 }

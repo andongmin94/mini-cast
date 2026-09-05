@@ -5,7 +5,7 @@ import { annotationFailureMessage } from "@/annotation/errors";
 import type { AnnotationDocumentSnapshot, AnnotationElement, AnnotationPoint } from "@/annotation/history";
 import type { CommittedRenderState } from "@/annotation/render-plan";
 import type { InkBounds } from "@/annotation/shape-geometry";
-import { RESIZE_HANDLES, resizeHandlePoint, type ResizeHandle } from "@/annotation/resize";
+import { RESIZE_HANDLES, RESIZE_HANDLE_SIZE, resizeHandlePoint, resizeHandleDisplayBounds, type ResizeHandle } from "@/annotation/resize";
 import {
   annotationSelectionBounds, hitTestAnnotationSelection, selectionAfterClick,
   translateSelectionElements, resizeSelectionElements, type AnnotationSelectionEdit,
@@ -98,7 +98,8 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
     selectionContext.setTransform(1, 0, 0, 1, 0, 0);
     selectionContext.clearRect(0, 0, handles.width, handles.height);
     selectionContext.setTransform(ratio, 0, 0, ratio, 0, 0);
-    const bounds = annotationSelectionBounds(elements, new Set(selected.current));
+    const inkBounds = annotationSelectionBounds(elements, new Set(selected.current));
+    const bounds = inkBounds ? resizeHandleDisplayBounds(inkBounds, { width: canvas.clientWidth, height: canvas.clientHeight }) : null;
     if (bounds) {
       selectionContext.strokeStyle = "#007AFF";
       selectionContext.lineWidth = 1;
@@ -354,7 +355,8 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
         return <button key={handle} type="button" data-selection-resize-handle={handle} disabled={busy}
           aria-label={`${HANDLE_LABELS[handle]} 크기 조절`} title="드래그로 크기 조절 · Shift로 비율 고정"
           className="pointer-events-auto fixed rounded-sm border border-blue-600 bg-white"
-          style={{ left: point.x - 5, top: point.y - 5, width: 10, height: 10, padding: 0,
+          style={{ left: point.x - RESIZE_HANDLE_SIZE / 2, top: point.y - RESIZE_HANDLE_SIZE / 2,
+            width: RESIZE_HANDLE_SIZE, height: RESIZE_HANDLE_SIZE, padding: 0,
             zIndex: 4, touchAction: "none", cursor: resizeCursor(handle) }}
           onPointerDown={event => handleResizeDown(event, handle)} />;
       })}
