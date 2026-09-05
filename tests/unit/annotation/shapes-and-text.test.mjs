@@ -94,7 +94,7 @@ test("text draft rejects empty, oversized and invalid inputs", () => {
 
 test("text element validates metrics and does not accept image/HTML payloads", () => {
   assert.equal(isAnnotationElement(text()), true);
-  for (const item of [{ ...text(), points: textControlPoints(point(20,20), -1, 1) }, { ...text(), box: { minX: 0, minY: 0, maxX: NaN, maxY: 10 } }, { ...text(), box: { minX: 0, minY: 0, maxX: 0, maxY: 10 } }, { ...text(), points: [point(1, 1), point(2, 2)] }, { ...text(), opacity: 0.35 }]) assert.equal(isAnnotationElement(item), false);
+  for (const item of [{ ...text(), points: textControlPoints(point(20,20), 0, 1) }, { ...text(), box: { minX: 0, minY: 0, maxX: NaN, maxY: 10 } }, { ...text(), box: { minX: 0, minY: 0, maxX: 0, maxY: 10 } }, { ...text(), points: [point(1, 1), point(2, 2)] }, { ...text(), opacity: 0.35 }]) assert.equal(isAnnotationElement(item), false);
 });
 
 test("text has deeply immutable bounds, bounded storage cost and global Undo", () => {
@@ -152,4 +152,14 @@ test("text control-character policy preserves normalized whitespace and rejects 
     assert.equal(result !== null, [9, 10, 13].includes(code), `C0 code ${code}`);
   }
   assert.equal(readAnnotationTextDraft({ text: "A" + String.fromCharCode(127) + "B", fontSize: 28 }), null);
+});
+
+
+test("text validation accepts reflected frames and still rejects either collapsed axis", () => {
+  for (const [sx, sy] of [[-1, 1], [1, -1], [-1, -1]]) {
+    assert.equal(isAnnotationElement({ ...text(), points: textControlPoints(point(20, 20), sx, sy) }), true);
+  }
+  for (const [sx, sy] of [[0, 1], [1, 0], [0, 0]]) {
+    assert.equal(isAnnotationElement({ ...text(), points: textControlPoints(point(20, 20), sx, sy) }), false);
+  }
 });

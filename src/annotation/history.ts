@@ -16,6 +16,11 @@ interface ElementStyle {
   readonly opacity: number;
 }
 
+export type FlipAxis = "horizontal" | "vertical";
+export function isFlipAxis(value: unknown): value is FlipAxis {
+  return value === "horizontal" || value === "vertical";
+}
+
 export type ShapeTool = "line" | "arrow" | "rectangle" | "ellipse";
 export const SHAPE_TOOLS: readonly ShapeTool[] = ["line", "arrow", "rectangle", "ellipse"];
 export function isShapeTool(value: unknown): value is ShapeTool {
@@ -202,6 +207,21 @@ export function replaceAnnotationText(element: TextElement, value: unknown): Tex
   // A font remeasurement alone must not create an edit or clear Redo.
   if (element.text === candidate.text && element.fontSize === candidate.fontSize) return element;
   return immutableElement(candidate) as TextElement;
+}
+
+/** Reflect world coordinates while retaining identity, style and primitive frames.
+ * Text is mirrored, not relaid out; a collapsed or overflowing frame is rejected. */
+export function flipAnnotationElement(element: AnnotationElement, center: AnnotationPoint, axis: FlipAxis): AnnotationElement {
+  if (!isFinitePoint(center) || !isFlipAxis(axis) || !isAnnotationElement(element))
+    throw new AnnotationError("invalid-element");
+  const points = element.points.map(point => ({
+    x: axis === "horizontal" ? 2 * center.x - point.x : point.x,
+    y: axis === "vertical" ? 2 * center.y - point.y : point.y,
+  }));
+  if (points.every((point, index) => point.x === element.points[index].x && point.y === element.points[index].y)) return element;
+  const flipped = { ...element, points };
+  if (!isAnnotationElement(flipped)) throw new AnnotationError("invalid-element");
+  return immutableElement(flipped);
 }
 
 /** Translation preserves IDs and styles; invalid coordinates are rejected before publication. */
@@ -492,6 +512,12 @@ export class AnnotationHistory {
       element => rotateAnnotationElement(element, center, angle));
   }
 
+  flipElements(displayId: number, ids: Iterable<string>, center: AnnotationPoint, axis: FlipAxis) {
+    if (!isFinitePoint(center) || !isFlipAxis(axis)) throw new AnnotationError("invalid-element");
+    return this.transformElements(displayId, ids, false,
+      element => flipAnnotationElement(element, center, axis));
+  }
+
   editText(displayId: number, id: string, value: unknown) {
     if (typeof id !== "string" || !id.length || id.length > 128) throw new AnnotationError("invalid-element");
     const source = this.document(displayId).elements.find(element => element.id === id);
@@ -512,8 +538,12 @@ export class AnnotationHistory {
     if (validIds.some(id => !document.elementIds.has(id))) throw new AnnotationError("stale-document");
     if (identity) return null;
     const selected = new Set(validIds);
-    const changes = document.elements.flatMap((before, index) => selected.has(before.id)
-      ? [{ index, before, after: transform(before) }] : []);
+    const changes = document.elements.flatMap((before, index) => {
+      if (!selected.has(before.id)) return [];
+      const after = transform(before);
+      return after === before ? [] : [{ index, before, after }];
+    });
+    if (!changes.length) return null;
     const entry: TransformHistoryEntry = { kind: "transform", displayId, changes };
     this.apply(entry);
     this.commit(entry);

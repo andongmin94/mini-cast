@@ -6,6 +6,9 @@ import {
   translateAnnotationElement,
   resizeAnnotationElement,
   rotateAnnotationElement,
+  flipAnnotationElement,
+  isFlipAxis,
+  type FlipAxis,
   type AnnotationHistory,
   type AnnotationElement,
   type AnnotationPoint,
@@ -24,6 +27,7 @@ export type AnnotationSelectionEdit =
   | (SelectionEditBase & { readonly kind: "resize"; readonly handle: ResizeHandle;
       readonly dx: number; readonly dy: number; readonly lockAspect: boolean })
   | (SelectionEditBase & { readonly kind: "rotate"; readonly radians: number })
+  | (SelectionEditBase & { readonly kind: "flip"; readonly axis: FlipAxis })
   | (SelectionEditBase & { readonly kind: "delete" });
 
 /** Validate the complete edit before touching the document or its history. */
@@ -34,6 +38,8 @@ export function readAnnotationSelectionEdit(value: unknown): AnnotationSelection
   const ids = readAnnotationElementIds(data.ids);
   if (!ids?.length || ids.length !== (data.ids as unknown[]).length) return null;
   if (data.kind === "delete") return { kind: "delete", revision: data.revision, ids };
+  if (data.kind === "flip") return isFlipAxis(data.axis)
+    ? { kind: "flip", revision: data.revision, ids, axis: data.axis } : null;
   if (data.kind === "rotate") {
     if (typeof data.radians !== "number") return null;
     try { return { kind: "rotate", revision: data.revision, ids, radians: normalizeRotation(data.radians) }; }
@@ -61,6 +67,7 @@ export function applyAnnotationSelectionEdit(history: AnnotationHistory, display
   // Never trust a renderer-supplied pivot or bounding box.
   const bounds = annotationSelectionBounds(document.elements, new Set(edit.ids));
   if (!bounds) throw new AnnotationError("stale-document");
+  if (edit.kind === "flip") return history.flipElements(displayId, edit.ids, selectionRotationCenter(bounds), edit.axis);
   if (edit.kind === "rotate") return history.rotateElements(displayId, edit.ids, selectionRotationCenter(bounds), edit.radians);
   const transform = selectionResizeTransform(bounds, edit.handle, edit.dx, edit.dy, edit.lockAspect);
   return history.resizeElements(displayId, edit.ids, transform.anchor, transform.scaleX, transform.scaleY);
@@ -135,4 +142,20 @@ export function rotateSelectionElements(elements: readonly AnnotationElement[], 
   if (!bounds) return elements;
   const center = selectionRotationCenter(bounds);
   return elements.map(element => selected.has(element.id) ? rotateAnnotationElement(element, center, angle) : element);
+}
+
+/** A group reflects about its shared visible center, never each element's center. */
+export function flipSelectionElements(elements: readonly AnnotationElement[], selected: ReadonlySet<string>, axis: FlipAxis): readonly AnnotationElement[] {
+  if (!isFlipAxis(axis)) throw new AnnotationError("invalid-element");
+  const bounds = annotationSelectionBounds(elements, selected);
+  if (!bounds) return elements;
+  const center = selectionRotationCenter(bounds);
+  let changed = false;
+  const result = elements.map(element => {
+    if (!selected.has(element.id)) return element;
+    const next = flipAnnotationElement(element, center, axis);
+    if (next !== element) changed = true;
+    return next;
+  });
+  return changed ? result : elements;
 }

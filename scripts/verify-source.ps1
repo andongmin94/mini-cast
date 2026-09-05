@@ -17,3 +17,7 @@ if (-not $payload.diagnostics.textEditingTools.save) { throw 'Existing-text edit
 if (-not $payload.diagnostics.dirtyCanvasReference.success -or -not $payload.diagnostics.deltaTransport.gapRecovered) {
   throw 'Source Canvas/delta coverage was not executed.'
 }
+
+if (-not $payload.diagnostics.flipTools.horizontal -or -not $payload.diagnostics.flipTools.vertical -or -not $payload.diagnostics.flipTools.groupShift) {
+  throw 'Native selection flip coverage was not executed.'
+}

@@ -1,4 +1,5 @@
 import { framePoint } from "../../annotation/primitive-frame.js";
+import { verifySelectionFlip } from "./flip-smoke.js";
 import { verifyExistingTextEditing } from "./text-edit-smoke.js";
 import { verifySelectionRotation } from "./rotation-smoke.js";
 import { verifySelectionResize } from "./resize-smoke.js";
@@ -1252,6 +1253,14 @@ export function createSmokeChecks(context: SmokeContext) {
           if (!mainWindow) throw new Error("Missing controller for rotation");
           await clickControllerElement(mainWindow, '[data-annotation-tool="select"]', "selection for rotation");
           await waitFor(() => context.state().tool === "select", 5000, "selection for rotation active");
+        },
+      }, primary.id);
+      diagnostics.flipTools = await verifySelectionFlip({
+        history: annotationHistory, publishDocument: context.publishDocument, command: shortcutCommand,
+        activateSelection: async () => {
+          if (!mainWindow) throw new Error("Missing controller for flip");
+          await clickControllerElement(mainWindow, '[data-annotation-tool="select"]', "selection for flip");
+          await waitFor(() => context.state().tool === "select", 5000, "flip selection active");
         },
       }, primary.id);
       diagnostics.textEditingTools = await verifyExistingTextEditing({

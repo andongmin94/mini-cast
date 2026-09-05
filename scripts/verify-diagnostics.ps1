@@ -27,6 +27,9 @@ foreach ($file in $files) {
   foreach ($name in @('open','save','affinePreserved','undoRedo','editorUndo','noOp','cancel','staleRevision','controllerReload','senderRejected')) {
     if (-not $result.diagnostics.textEditingTools.$name) { throw "Missing existing-text editing verification: $name" }
   }
+  foreach ($name in @('horizontal','vertical','groupShift','undoRedo','pixels','mirroredText','delete','reload','staleRevision','emptyDisabled')) {
+    if (-not $result.diagnostics.flipTools.$name) { throw "Missing flip verification: $name" }
+  }
   Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
   Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
 }

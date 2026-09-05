@@ -120,6 +120,31 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
           elements = afterEdit; compare('redo-text-edit-' + angle);
           elements = saved; compare('restore-text-edit-' + angle);
         }
+        for (const item of [...shapeSet, textElement, bottom, top]) {
+          for (const axis of ['horizontal', 'vertical']) {
+            const saved = elements;
+            const transformed = resizeAnnotationElement(rotateAnnotationElement(item, {x:45,y:35}, 0.37), {x:30,y:20}, 1.2, 0.8);
+            elements = elements.map(element => element.id === item.id ? transformed : element);
+            compare('before-flip-' + item.tool + '-' + axis);
+            const beforeFlip = elements;
+            const flipped = flipAnnotationElement(transformed, {x:45,y:35}, axis);
+            elements = elements.map(element => element.id === item.id ? flipped : element);
+            compare('flip-' + item.tool + '-' + axis);
+            const afterFlip = elements;
+            elements = beforeFlip; compare('undo-flip-' + item.tool + '-' + axis);
+            elements = afterFlip; compare('redo-flip-' + item.tool + '-' + axis);
+            elements = elements.filter(element => element.id !== item.id); compare('erase-flipped-' + item.tool + '-' + axis);
+            elements = afterFlip; compare('restore-flipped-' + item.tool + '-' + axis);
+            if (flipped.tool === 'text') {
+              const measured = createTextElement(a, 'measure-flip', {text:'반전 수정',fontSize:22}, {x:0,y:0}, flipped.color);
+              const replacement = replaceAnnotationText(flipped, {text:measured.text,fontSize:measured.fontSize,box:measured.box});
+              elements = elements.map(element => element.id === item.id ? replacement : element);
+              compare('edit-flipped-text-' + axis);
+              elements = afterFlip; compare('undo-edit-flipped-text-' + axis);
+            }
+            elements = saved; compare('restore-flip-' + item.tool + '-' + axis);
+          }
+        }
         elements = []; compare('mixed-clear');
         for (let i = 0; i < 80; i++) {
           const saved = elements;

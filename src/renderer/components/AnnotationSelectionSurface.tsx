@@ -3,13 +3,13 @@ import { memo, useCallback, useLayoutEffect, useRef, useState, type PointerEvent
 import { paintCommittedAnnotations } from "@/annotation/canvas-renderer";
 import type { AnnotationDocumentUpdate } from "@/annotation/document-sync";
 import { annotationFailureMessage } from "@/annotation/errors";
-import type { AnnotationDocumentSnapshot, AnnotationElement, AnnotationPoint } from "@/annotation/history";
+import type { AnnotationDocumentSnapshot, AnnotationElement, AnnotationPoint, FlipAxis } from "@/annotation/history";
 import type { CommittedRenderState } from "@/annotation/render-plan";
 import type { InkBounds } from "@/annotation/shape-geometry";
 import { RESIZE_HANDLES, RESIZE_HANDLE_SIZE, resizeHandlePoint, resizeHandleDisplayBounds, type ResizeHandle } from "@/annotation/resize";
 import {
   annotationSelectionBounds, hitTestAnnotationSelection, selectionAfterClick,
-  translateSelectionElements, resizeSelectionElements, rotateSelectionElements, type AnnotationSelectionEdit,
+  translateSelectionElements, resizeSelectionElements, rotateSelectionElements, flipSelectionElements, type AnnotationSelectionEdit,
 } from "@/annotation/selection";
 
 interface Props {
@@ -369,6 +369,23 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
     }
   }
 
+  function flipSelected(axis: FlipAxis) {
+    const source = current.current;
+    if (!source || source.displayId !== displayId || pending.current || drag.current ||
+        openingEditor.current || !selected.current.length || typeof miniCast === "undefined") return;
+    const ids = [...selected.current];
+    setNotice(null);
+    try {
+      const preview = flipSelectionElements(source.elements, new Set(ids), axis);
+      if (preview === source.elements) return;
+      const id = crypto.randomUUID();
+      miniCast.beginAnnotationGesture(id);
+      void submit(id, { kind: "flip", revision: source.revision, ids, axis }, preview);
+    } catch {
+      setNotice("반전 가능한 좌표 범위를 벗어나 적용하지 않았습니다. 기존 판서는 유지됩니다.");
+    }
+  }
+
   function deleteSelected() {
     const source = current.current;
     if (!source || pending.current || drag.current || !selected.current.length) return;
@@ -406,9 +423,15 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
         className="pointer-events-auto fixed flex items-center justify-center rounded-full border border-blue-600 bg-white text-blue-600"
         style={{ zIndex: 9, left: rotateHandle.x - ROTATION_HANDLE_SIZE / 2, top: rotateHandle.y - ROTATION_HANDLE_SIZE / 2,
           width: ROTATION_HANDLE_SIZE, height: ROTATION_HANDLE_SIZE, touchAction: "none", cursor: "grab" }}>↻</button>}
-      <div className="pointer-events-auto fixed bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white"
+      <div className="pointer-events-auto fixed bottom-4 left-1/2 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white"
         style={{ zIndex: 10 }} role="toolbar" aria-label="판서 선택 도구">
-        <span role="status">{busy ? "편집 반영 중" : count ? `${count}개 선택 · 모서리로 크기 조절` : "객체 클릭 · Shift로 추가 선택"}</span>
+        <span role="status" className="basis-full text-center">{busy ? "편집 반영 중" : count ? `${count}개 선택 · 모서리로 크기 조절` : "객체 클릭 · Shift로 추가 선택"}</span>
+        <button type="button" data-selection-flip="horizontal" disabled={busy || !count}
+          title="선택 영역 중심을 기준으로 좌우 반전"
+          className="rounded px-2 py-1 hover:bg-slate-700 disabled:opacity-40" onClick={() => flipSelected("horizontal")}>좌우 반전</button>
+        <button type="button" data-selection-flip="vertical" disabled={busy || !count}
+          title="선택 영역 중심을 기준으로 상하 반전"
+          className="rounded px-2 py-1 hover:bg-slate-700 disabled:opacity-40" onClick={() => flipSelected("vertical")}>상하 반전</button>
         <button type="button" data-selection-text-edit="" disabled={busy || !canEditText}
           className="rounded px-2 py-1 hover:bg-slate-700 disabled:opacity-40" onClick={() => void editSelectedText()}>텍스트 수정</button>
         <button type="button" data-selection-delete="" disabled={busy || !count}

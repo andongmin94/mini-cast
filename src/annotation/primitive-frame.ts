@@ -48,7 +48,8 @@ export function validTextFrame(points: readonly AnnotationPoint[], box: TextInkB
   const xScale = Math.hypot(a, b), yScale = Math.hypot(c, d);
   const determinant = a * d - b * c;
   return xScale > 0 && yScale > 0 && xScale <= 100_000 && yScale <= 100_000 &&
-    Number.isFinite(determinant) && determinant > 0 &&
+    // Either orientation is valid. Reflection reverses it without collapsing the frame.
+    Number.isFinite(determinant) && determinant !== 0 &&
     frameCorners(points, box).every(p => Number.isFinite(p.x) && Number.isFinite(p.y) &&
       Math.abs(p.x) <= coordinateLimit && Math.abs(p.y) <= coordinateLimit);
 }
