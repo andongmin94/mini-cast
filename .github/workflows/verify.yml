@@ -1,7 +1,7 @@
 name: Verify
 
-# Windows readiness gate: production startup/shortcuts, failure recovery,
-# renderer reload, native input, bounded stress, normal quit and packaging.
+# Windows gate: production input/lifecycle, revisioned delta IPC,
+# exact dirty/full Canvas equivalence, recovery and package integrity.
 on:
   push:
     branches: [main]
@@ -49,6 +49,28 @@ jobs:
       - name: 전체 의존성 보안 감사
         run: npm audit --audit-level=low
 
+      - name: 소스 renderer 및 Electron 빌드
+        run: npx vite build && npm run build:electron
+
+      - name: 패키징 전 실제 입력·Canvas 참조 비교
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $sentinel = Join-Path $env:RUNNER_TEMP ("mini-cast-source-" + [Guid]::NewGuid() + '.json')
+          $userData = Join-Path $env:RUNNER_TEMP ("mini-cast-source-userdata-" + [Guid]::NewGuid())
+          New-Item -ItemType Directory -Force -Path $userData, 'verification-logs' | Out-Null
+          if (-not (Test-Path -LiteralPath 'dist/electron/main.js')) { throw 'Compiled Electron entrypoint is missing.' }
+          & .\node_modules\.bin\electron.cmd . --interaction-smoke-test "--smoke-sentinel=$sentinel" "--smoke-user-data=$userData"
+          $exitCode = $LASTEXITCODE
+          if (-not (Test-Path -LiteralPath $sentinel)) { throw 'Source interaction did not return its diagnostic result.' }
+          $payload = Get-Content -LiteralPath $sentinel -Raw | ConvertFrom-Json
+          Copy-Item -LiteralPath $sentinel -Destination 'verification-logs/source-canvas.json'
+          Write-Host ($payload | ConvertTo-Json -Depth 12 -Compress)
+          if ($exitCode -ne 0 -or -not $payload.success) { throw "Source interaction failed: $($payload.error)" }
+          if (-not $payload.diagnostics.dirtyCanvasReference.success -or -not $payload.diagnostics.deltaTransport.gapRecovered) {
+            throw 'Source Canvas/delta coverage was not executed.'
+          }
+
       - name: MSI 및 포터블 패키징
         run: npm run build
 
@@ -56,16 +78,17 @@ jobs:
         shell: pwsh
         run: ./scripts/verify-windows.ps1
 
-      - name: 판서 코어 성능 및 취소 진단
+      - name: 판서 변경분 전송·부분 렌더링 진단
         shell: pwsh
         run: |
           $files = @(Get-ChildItem verification-logs -File -Filter '*interaction-sentinel.json')
           if ($files.Count -ne 2) { throw "Expected both interaction diagnostics, found $($files.Count)." }
           foreach ($file in $files) {
             $result = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
-            if (-not $result.success -or -not $result.diagnostics.heldEraserUndo) {
-              throw "Missing successful held-eraser cancellation check: $($file.Name)"
+            if (-not $result.success -or -not $result.diagnostics.heldEraserUndo -or -not $result.diagnostics.dirtyCanvasReference.success -or -not $result.diagnostics.deltaTransport.gapRecovered) {
+              throw "Missing successful delta/Canvas/cancellation checks: $($file.Name)"
             }
+            if ($result.diagnostics.dirtyCanvasReference.exactPixelComparisons -lt 500) { throw 'Canvas reference coverage was reduced.' }
             Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
             Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
           }

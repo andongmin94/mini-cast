@@ -8,6 +8,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import type { AnnotationDocumentUpdate } from "@/annotation/document-sync";
+import { paintCommittedAnnotations } from "@/annotation/canvas-renderer";
 import { annotationFailureMessage } from "@/annotation/errors";
 import { shouldAdoptAnnotationDocument } from "@/annotation/document-order";
 import {
@@ -22,10 +24,7 @@ import type {
   AnnotationStroke,
   StrokeTool,
 } from "@/annotation/history";
-import {
-  planCommittedRender,
-  type CommittedRenderState,
-} from "@/annotation/render-plan";
+import { type CommittedRenderState } from "@/annotation/render-plan";
 import type { AnnotationTool, OverlaySettings } from "@/electron/contract";
 
 interface AnnotationSurfaceProps {
@@ -33,7 +32,9 @@ interface AnnotationSurfaceProps {
   settings: OverlaySettings;
   displayId: number | null;
   document: AnnotationDocumentSnapshot | null;
-  onAuthoritativeDocument(document: AnnotationDocumentSnapshot): void;
+  onDocumentUpdate(
+    update: AnnotationDocumentUpdate,
+  ): Promise<AnnotationDocumentSnapshot | null>;
 }
 
 interface ActiveStroke extends Omit<AnnotationStroke, "points"> {
@@ -86,33 +87,6 @@ function configureStroke(
   context.lineWidth = stroke.width;
   context.lineCap = "round";
   context.lineJoin = "round";
-}
-
-function drawStroke(
-  context: CanvasRenderingContext2D,
-  stroke: AnnotationStroke,
-) {
-  if (!stroke.points.length) return;
-
-  context.save();
-  configureStroke(context, stroke);
-  if (stroke.points.length === 1) {
-    const point = stroke.points[0];
-    context.beginPath();
-    context.arc(point.x, point.y, stroke.width / 2, 0, Math.PI * 2);
-    context.fill();
-    context.restore();
-    return;
-  }
-
-  context.beginPath();
-  context.moveTo(stroke.points[0].x, stroke.points[0].y);
-  for (let index = 1; index < stroke.points.length; index += 1) {
-    const point = stroke.points[index];
-    context.lineTo(point.x, point.y);
-  }
-  context.stroke();
-  context.restore();
 }
 
 function drawActiveSegments(
@@ -170,7 +144,7 @@ function AnnotationSurface({
   settings,
   displayId,
   document,
-  onAuthoritativeDocument,
+  onDocumentUpdate,
 }: AnnotationSurfaceProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const committedCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -231,18 +205,14 @@ function AnnotationSurface({
         viewportHeight: viewport?.height ?? null,
         canvasWidth: canvas.width,
         canvasHeight: canvas.height,
-        strokeIds: strokes.map((stroke) => stroke.id),
+        pixelRatio: Math.max(window.devicePixelRatio || 1, 1),
+        strokes,
       };
-      const plan = forceReset
-        ? { reset: true, appendFrom: 0 }
-        : planCommittedRender(committedRenderStateRef.current, nextState);
-
-      if (plan.reset) {
-        context.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-      }
-      for (let index = plan.appendFrom; index < strokes.length; index += 1) {
-        drawStroke(context, strokes[index]);
-      }
+      paintCommittedAnnotations(
+        context,
+        forceReset ? null : committedRenderStateRef.current,
+        nextState,
+      );
       committedRenderStateRef.current = nextState;
     },
     [visibleStrokes],
@@ -264,7 +234,7 @@ function AnnotationSurface({
   );
 
   const adoptAuthoritativeDocument = useCallback(
-    (next: AnnotationDocumentSnapshot, publish: boolean) => {
+    (next: AnnotationDocumentSnapshot) => {
       const currentRevision = documentRef.current?.revision ?? -1;
       if (
         !shouldAdoptAnnotationDocument(
@@ -278,10 +248,9 @@ function AnnotationSurface({
 
       documentRef.current = next;
       reconcilePendingWithDocument(next);
-      if (publish) onAuthoritativeDocument(next);
       return true;
     },
-    [onAuthoritativeDocument, reconcilePendingWithDocument],
+    [reconcilePendingWithDocument],
   );
 
   const cancelEraserPaint = useCallback(() => {
@@ -374,7 +343,7 @@ function AnnotationSurface({
       return;
     }
 
-    if (adoptAuthoritativeDocument(document, false)) renderCommitted();
+    if (adoptAuthoritativeDocument(document)) renderCommitted();
   }, [adoptAuthoritativeDocument, document, renderCommitted]);
 
   useEffect(() => {
@@ -461,10 +430,11 @@ function AnnotationSurface({
       pendingStrokesRef.current.set(committed.id, committed);
       void miniCast
         .commitAnnotationStroke(gestureId, committed)
-        .then((result) => {
-          if (result.document) {
-            adoptAuthoritativeDocument(result.document, true);
-          }
+        .then(async (result) => {
+          const next = result.update
+            ? await onDocumentUpdate(result.update)
+            : null;
+          if (next) adoptAuthoritativeDocument(next);
           if (!result.accepted)
             setNotice(annotationFailureMessage(result.reason));
           pendingStrokesRef.current.delete(committed.id);
@@ -476,8 +446,13 @@ function AnnotationSurface({
           renderCommitted();
           void miniCast
             .getAnnotationDocument()
-            .then((next) => {
-              if (adoptAuthoritativeDocument(next, true)) renderCommitted();
+            .then(async (next) => {
+              const current = await onDocumentUpdate({
+                kind: "snapshot",
+                document: next,
+              });
+              if (current && adoptAuthoritativeDocument(current))
+                renderCommitted();
             })
             .catch(() =>
               setNotice(
@@ -490,10 +465,11 @@ function AnnotationSurface({
       erasedIds.forEach((id) => pendingRemovalIdsRef.current.add(id));
       void miniCast
         .removeAnnotationStrokes(gestureId, erasedIds)
-        .then((result) => {
-          if (result.document) {
-            adoptAuthoritativeDocument(result.document, true);
-          }
+        .then(async (result) => {
+          const next = result.update
+            ? await onDocumentUpdate(result.update)
+            : null;
+          if (next) adoptAuthoritativeDocument(next);
           if (!result.accepted)
             setNotice(annotationFailureMessage(result.reason));
           erasedIds.forEach((id) => pendingRemovalIdsRef.current.delete(id));
@@ -505,8 +481,13 @@ function AnnotationSurface({
           renderCommitted();
           void miniCast
             .getAnnotationDocument()
-            .then((next) => {
-              if (adoptAuthoritativeDocument(next, true)) renderCommitted();
+            .then(async (next) => {
+              const current = await onDocumentUpdate({
+                kind: "snapshot",
+                document: next,
+              });
+              if (current && adoptAuthoritativeDocument(current))
+                renderCommitted();
             })
             .catch(() =>
               setNotice(
