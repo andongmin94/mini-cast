@@ -1,11 +1,7 @@
 name: Verify
 
-# Release candidates must pass this Windows manual-QA readiness gate.
-# Controller selectors are verified with native Windows clicks.
-# Annotation mutation settlement, bounded long-session state, and packaged CSP are regression-tested.
-# Default and explicit software-rendering interaction paths are both exercised.
-# Packaged smoke failures retain their sentinel and process diagnostics.
-# MSI verification uses canonical absolute paths.
+# Windows readiness gate: production startup/shortcuts, failure recovery,
+# renderer reload, native input, bounded stress, normal quit and packaging.
 on:
   push:
     branches: [main]
@@ -82,7 +78,6 @@ jobs:
           $sums = Get-Item output/SHA256SUMS.txt
           $bundle = Join-Path $PWD ("output/MiniCast-$version-windows.zip")
           Compress-Archive -LiteralPath $msi.FullName, $exe.FullName, $sums.FullName -DestinationPath $bundle -Force
-
           $extract = Join-Path $env:RUNNER_TEMP ("mini-cast-bundle-" + [Guid]::NewGuid())
           Expand-Archive -LiteralPath $bundle -DestinationPath $extract -Force
           try {
@@ -100,9 +95,18 @@ jobs:
           } finally {
             Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
           }
-
           $bundleHash = (Get-FileHash -LiteralPath $bundle -Algorithm SHA256).Hash.ToLowerInvariant()
           Set-Content -LiteralPath output/BUNDLE-SHA256.txt -Value "$bundleHash *$(Split-Path $bundle -Leaf)" -Encoding utf8
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          @{
+            commit = $env:GITHUB_SHA
+            run_id = $env:GITHUB_RUN_ID
+            version = $package.version
+            electron = $package.devDependencies.electron
+            node = (node --version)
+            platform = 'windows-2022-x64'
+            bundle_sha256 = $bundleHash
+          } | ConvertTo-Json | Set-Content -LiteralPath output/BUILD-METADATA.json -Encoding utf8
 
       - name: Windows 산출물 업로드
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -114,14 +118,15 @@ jobs:
             output/SHA256SUMS.txt
             output/MiniCast-*-windows.zip
             output/BUNDLE-SHA256.txt
+            output/BUILD-METADATA.json
           if-no-files-found: error
           retention-days: 14
 
-      - name: 실패 로그 업로드
-        if: failure()
+      - name: 검증 진단 로그 업로드
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mini-cast-verification-logs
           path: verification-logs/**/*
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14
