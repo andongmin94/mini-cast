@@ -1,5 +1,6 @@
-import { segmentToSegmentDistanceSquared, pointInsideBounds, rectangleOutline } from "./geometry.js";
-import { elementInkPaths, elementInkBounds, ELLIPSE_FLATTENING_ERROR } from "./shape-geometry.js";
+import { pointInFrame } from "./primitive-frame.js";
+import { segmentToSegmentDistanceSquared } from "./geometry.js";
+import { elementInkPaths, textOutline, ELLIPSE_FLATTENING_ERROR } from "./shape-geometry.js";
 import type { AnnotationPoint, AnnotationElement } from "./history.js";
 
 interface Bounds {
@@ -48,7 +49,7 @@ function include(bounds: Bounds, point: AnnotationPoint) {
 export function prepareEraserElement(stroke: AnnotationElement): PreparedEraserElement {
   if (!stroke.points.length) return { stroke, bounds: null, paths: [], tolerance: 0, filled: false };
   const filled = stroke.tool === "text";
-  const outlines = filled ? [rectangleOutline(elementInkBounds(stroke))] : elementInkPaths(stroke);
+  const outlines = stroke.tool === "text" ? [textOutline(stroke)] : elementInkPaths(stroke);
   const bounds = pointBounds(outlines[0][0]);
   const paths = outlines.map(points => {
     const blocks: SegmentBlock[] = [];
@@ -94,7 +95,7 @@ export function eraserSweepHitsPreparedElement(
   if (stats) stats.strokeBoundsTests += 1;
   if (!overlaps(bounds, query)) return false;
   const toleranceSquared = tolerance * tolerance;
-  if (filled && (pointInsideBounds(start, bounds) || pointInsideBounds(end, bounds))) return true;
+  if (filled && prepared.stroke.tool === "text" && (pointInFrame(start, prepared.stroke.points, prepared.stroke.box) || pointInFrame(end, prepared.stroke.points, prepared.stroke.box))) return true;
   for (const { points, blocks } of paths) {
     if (points.length === 1) {
       if (stats) stats.segmentTests++;

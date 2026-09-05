@@ -1,3 +1,5 @@
+import { frameCorners, validTextFrame } from "./primitive-frame.js";
+import { normalizeRotation, rotatePoint } from "./rotation.js";
 import { AnnotationError } from "./errors.js";
 import { readAnnotationTextDraft, type TextInkBox } from "./text.js";
 
@@ -28,7 +30,7 @@ export interface StrokeElement extends ElementStyle {
 
 export interface ShapeElement extends ElementStyle {
   readonly tool: ShapeTool;
-  /** Start and end anchors, not a sampled freehand approximation. */
+  /** Line/arrow: two endpoints. Rectangle/ellipse: origin, x end, y end. */
   readonly points: readonly AnnotationPoint[];
   readonly width: number;
 }
@@ -38,8 +40,6 @@ export interface TextElement extends ElementStyle {
   readonly points: readonly AnnotationPoint[];
   readonly text: string;
   readonly fontSize: number;
-  readonly scaleX: number;
-  readonly scaleY: number;
   /** Local glyph/layout bounds before viewport scaling. */
   readonly box: TextInkBox;
 }
@@ -136,7 +136,7 @@ function immutableElement(element: AnnotationElement): AnnotationElement {
   };
   if (element.tool === "text") return Object.freeze({
     ...common, tool: "text", text: element.text, fontSize: element.fontSize,
-    scaleX: element.scaleX, scaleY: element.scaleY, box: Object.freeze({ minX: element.box.minX, minY: element.box.minY, maxX: element.box.maxX, maxY: element.box.maxY }),
+    box: Object.freeze({ minX: element.box.minX, minY: element.box.minY, maxX: element.box.maxX, maxY: element.box.maxY }),
   });
   return Object.freeze({ ...common, tool: element.tool, width: element.width });
 }
@@ -146,7 +146,7 @@ function scaleElement(element: AnnotationElement, scaleX: number, scaleY: number
     x: point.x * scaleX, y: point.y * scaleY,
   })));
   if (element.tool === "text") return Object.freeze({
-    ...element, points, scaleX: element.scaleX * scaleX, scaleY: element.scaleY * scaleY,
+    ...element, points,
   });
   const widthScale = Math.sqrt(Math.abs(scaleX * scaleY));
   return Object.freeze({
@@ -171,17 +171,20 @@ export function resizeAnnotationElement(
     y: anchor.y + (point.y - anchor.y) * scaleY,
   }));
   const resized: AnnotationElement = element.tool === "text"
-    ? { ...element, points, scaleX: element.scaleX * scaleX, scaleY: element.scaleY * scaleY }
+    ? { ...element, points }
     : { ...element, points, width: element.width * Math.sqrt(scaleX * scaleY) };
   if (!isAnnotationElement(resized)) throw new AnnotationError("invalid-element");
-  if (resized.tool === "text") {
-    const point = resized.points[0];
-    const edges = [point.x + resized.box.minX * resized.scaleX, point.x + resized.box.maxX * resized.scaleX,
-      point.y + resized.box.minY * resized.scaleY, point.y + resized.box.maxY * resized.scaleY];
-    if (edges.some(value => !Number.isFinite(value) || Math.abs(value) > MAX_ANNOTATION_COORDINATE))
-      throw new AnnotationError("invalid-element");
-  }
   return immutableElement(resized);
+}
+
+/** Rotate every control point while retaining text frames, identity and style. */
+export function rotateAnnotationElement(element: AnnotationElement, center: AnnotationPoint, radians: number): AnnotationElement {
+  if (!isFinitePoint(center) || !isAnnotationElement(element)) throw new AnnotationError("invalid-element");
+  const angle = normalizeRotation(radians);
+  if (angle === 0) return element;
+  const rotated = { ...element, points: element.points.map(point => rotatePoint(point, center, angle)) };
+  if (!isAnnotationElement(rotated)) throw new AnnotationError("invalid-element");
+  return immutableElement(rotated);
 }
 
 /** Translation preserves IDs and styles; invalid coordinates are rejected before publication. */
@@ -261,17 +264,17 @@ export function isAnnotationElement(value: unknown): value is AnnotationElement 
   if (typeof value.color !== "string" || !HEX_COLOR.test(value.color)) return false;
   if (value.tool === "text") {
     const draft = readAnnotationTextDraft(value);
-    if (!draft || draft.text !== value.text || value.points.length !== 1 || value.opacity !== 1) return false;
-    if (typeof value.scaleX !== "number" || typeof value.scaleY !== "number" ||
-      !Number.isFinite(value.scaleX) || !Number.isFinite(value.scaleY) ||
-      value.scaleX <= 0 || value.scaleY <= 0 || value.scaleX > 100000 || value.scaleY > 100000) return false;
+    if (!draft || draft.text !== value.text || value.points.length !== 3 || value.opacity !== 1 || "scaleX" in value || "scaleY" in value) return false;
     if (!isRecord(value.box)) return false;
     const { minX, minY, maxX, maxY } = value.box;
     if (![minX, minY, maxX, maxY].every(n => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= MAX_ANNOTATION_COORDINATE)) return false;
-    return (maxX as number) > (minX as number) && (maxY as number) > (minY as number);
+    return (maxX as number) > (minX as number) && (maxY as number) > (minY as number) &&
+      validTextFrame(value.points as AnnotationPoint[], value.box as unknown as TextInkBox, MAX_ANNOTATION_COORDINATE);
   }
   if (value.tool !== "pen" && value.tool !== "highlighter" && !isShapeTool(value.tool)) return false;
-  if (isShapeTool(value.tool) && value.points.length !== 2) return false;
+  if (isShapeTool(value.tool) && value.points.length !== (value.tool === "rectangle" || value.tool === "ellipse" ? 3 : 2)) return false;
+  if ((value.tool === "rectangle" || value.tool === "ellipse") &&
+      !frameCorners(value.points as AnnotationPoint[]).every(isFinitePoint)) return false;
   if (typeof value.width !== "number" || !Number.isFinite(value.width) || value.width < 0.5 || value.width > 128) return false;
   return value.opacity === (value.tool === "highlighter" ? 0.35 : 1);
 }
@@ -463,6 +466,13 @@ export class AnnotationHistory {
     if (!validResizeTransform(anchor, scaleX, scaleY)) throw new AnnotationError("invalid-element");
     return this.transformElements(displayId, ids, scaleX === 1 && scaleY === 1,
       element => resizeAnnotationElement(element, anchor, scaleX, scaleY));
+  }
+
+  rotateElements(displayId: number, ids: Iterable<string>, center: AnnotationPoint, radians: number) {
+    if (!isFinitePoint(center)) throw new AnnotationError("invalid-element");
+    const angle = normalizeRotation(radians);
+    return this.transformElements(displayId, ids, angle === 0,
+      element => rotateAnnotationElement(element, center, angle));
   }
 
   /** Build and validate every destination before replacing any source geometry. */

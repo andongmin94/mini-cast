@@ -1,9 +1,11 @@
+import { normalizeRotation, selectionRotationCenter } from "./rotation.js";
 import { AnnotationError } from "./errors.js";
 import {
   MAX_ANNOTATION_COORDINATE,
   readAnnotationElementIds,
   translateAnnotationElement,
   resizeAnnotationElement,
+  rotateAnnotationElement,
   type AnnotationHistory,
   type AnnotationElement,
   type AnnotationPoint,
@@ -21,6 +23,7 @@ export type AnnotationSelectionEdit =
   | (SelectionEditBase & { readonly kind: "move"; readonly dx: number; readonly dy: number })
   | (SelectionEditBase & { readonly kind: "resize"; readonly handle: ResizeHandle;
       readonly dx: number; readonly dy: number; readonly lockAspect: boolean })
+  | (SelectionEditBase & { readonly kind: "rotate"; readonly radians: number })
   | (SelectionEditBase & { readonly kind: "delete" });
 
 /** Validate the complete edit before touching the document or its history. */
@@ -31,6 +34,11 @@ export function readAnnotationSelectionEdit(value: unknown): AnnotationSelection
   const ids = readAnnotationElementIds(data.ids);
   if (!ids?.length || ids.length !== (data.ids as unknown[]).length) return null;
   if (data.kind === "delete") return { kind: "delete", revision: data.revision, ids };
+  if (data.kind === "rotate") {
+    if (typeof data.radians !== "number") return null;
+    try { return { kind: "rotate", revision: data.revision, ids, radians: normalizeRotation(data.radians) }; }
+    catch { return null; }
+  }
   if ((data.kind !== "move" && data.kind !== "resize") || typeof data.dx !== "number" || typeof data.dy !== "number" ||
       !Number.isFinite(data.dx) || !Number.isFinite(data.dy) ||
       Math.abs(data.dx) > 2 * MAX_ANNOTATION_COORDINATE || Math.abs(data.dy) > 2 * MAX_ANNOTATION_COORDINATE) return null;
@@ -53,6 +61,7 @@ export function applyAnnotationSelectionEdit(history: AnnotationHistory, display
   // Never trust a renderer-supplied pivot or bounding box.
   const bounds = annotationSelectionBounds(document.elements, new Set(edit.ids));
   if (!bounds) throw new AnnotationError("stale-document");
+  if (edit.kind === "rotate") return history.rotateElements(displayId, edit.ids, selectionRotationCenter(bounds), edit.radians);
   const transform = selectionResizeTransform(bounds, edit.handle, edit.dx, edit.dy, edit.lockAspect);
   return history.resizeElements(displayId, edit.ids, transform.anchor, transform.scaleX, transform.scaleY);
 }
@@ -116,4 +125,14 @@ export function resizeSelectionElements(
   if (scaleX === 1 && scaleY === 1) return elements;
   return elements.map(element => selected.has(element.id)
     ? resizeAnnotationElement(element, anchor, scaleX, scaleY) : element);
+}
+
+/** Rotate from the pointer-down document, with the same authoritative pivot. */
+export function rotateSelectionElements(elements: readonly AnnotationElement[], selected: ReadonlySet<string>, radians: number): readonly AnnotationElement[] {
+  const angle = normalizeRotation(radians);
+  if (angle === 0) return elements;
+  const bounds = annotationSelectionBounds(elements, selected);
+  if (!bounds) return elements;
+  const center = selectionRotationCenter(bounds);
+  return elements.map(element => selected.has(element.id) ? rotateAnnotationElement(element, center, angle) : element);
 }

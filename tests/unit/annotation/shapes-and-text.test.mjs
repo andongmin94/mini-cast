@@ -1,3 +1,4 @@
+import { shapeControlPoints, textControlPoints } from "../../../dist/annotation/primitive-frame.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AnnotationHistory, isAnnotationElement, annotationElementCost } from "../../../dist/annotation/history.js";
@@ -9,8 +10,8 @@ import { createAnnotationUpdate, reduceAnnotationUpdate } from "../../../dist/an
 import { planCommittedRender } from "../../../dist/annotation/render-plan.js";
 
 const point = (x, y) => ({ x, y });
-const shape = (tool, id = tool) => ({ id, tool, points: [point(10, 10), point(110, 70)], color: "#FF0000", width: 4, opacity: 1 });
-const text = () => ({ id: "text", tool: "text", points: [point(20, 20)], color: "#007AFF", opacity: 1, text: "한글 ABC\n둘째 줄", fontSize: 28, scaleX: 1, scaleY: 1, box: { minX: -1, minY: 0, maxX: 120, maxY: 78.4 } });
+const shape = (tool, id = tool) => ({ id, tool, points: shapeControlPoints(tool, point(10, 10), point(110, 70)), color: "#FF0000", width: 4, opacity: 1 });
+const text = () => ({ id: "text", tool: "text", points: textControlPoints(point(20, 20)), color: "#007AFF", opacity: 1, text: "한글 ABC\n둘째 줄", fontSize: 28, box: { minX: -1, minY: 0, maxX: 120, maxY: 78.4 } });
 const view = elements => ({ displayId: 1, viewportWidth: 200, viewportHeight: 120, canvasWidth: 200, canvasHeight: 120, pixelRatio: 1, elements });
 
 for (const tool of ["line", "arrow", "rectangle", "ellipse"]) {
@@ -20,7 +21,7 @@ for (const tool of ["line", "arrow", "rectangle", "ellipse"]) {
     assert.equal(isAnnotationElement(input), true);
     input.points[1].x = 999;
     const stored = h.getSnapshot(1).elements[0];
-    assert.equal(stored.points.length, 2); assert.equal(stored.points[1].x, 110);
+    assert.equal(stored.points.length, tool === "rectangle" || tool === "ellipse" ? 3 : 2); assert.equal(stored.points[1].x, 110);
     assert.equal(Object.isFrozen(stored.points[0]), true);
     h.removeElements(1, [stored.id]); assert.equal(h.getSnapshot(1).elements.length, 0);
     h.undo(); assert.deepEqual(h.getSnapshot(1).elements, [stored]);
@@ -69,14 +70,14 @@ test("hollow rectangle and ellipse do not erase when only their interior is touc
 test("ellipse extrema and narrow outlines remain hit-testable", () => {
   const element = shape("ellipse"); const prepared = prepareEraserElement(element);
   for (const p of [point(10, 40), point(110, 40), point(60, 10), point(60, 70)]) assert.equal(eraserSweepHitsPreparedElement(p, p, prepared, 0), true);
-  const narrow = { ...element, points: [point(10, 10), point(11, 150)] };
+  const narrow = { ...element, points: shapeControlPoints("ellipse", point(10, 10), point(11, 150)) };
   assert.equal(eraserSweepHitsPreparedElement(point(10.5, 9), point(10.5, 20), prepareEraserElement(narrow), 1), true);
 });
 
 test("shape broad phase matches exhaustive geometry for seeded sweeps", () => {
   let seed = 12345; const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
   for (const tool of ["line", "arrow", "rectangle", "ellipse"]) for (let i = 0;i < 250;i++) {
-    const element = { ...shape(tool), points: [point(random() * 200 - 100, random() * 200 - 100), point(random() * 200 - 100, random() * 200 - 100)], width: 0.5 + random() * 30 };
+    const element = { ...shape(tool), points: shapeControlPoints(tool, point(random() * 200 - 100, random() * 200 - 100), point(random() * 200 - 100, random() * 200 - 100)), width: 0.5 + random() * 30 };
     const a = point(random() * 240 - 120, random() * 240 - 120), b = point(random() * 240 - 120, random() * 240 - 120), radius = random() * 20;
     assert.equal(eraserSweepHitsPreparedElement(a, b, prepareEraserElement(element), radius), eraserSweepHitsStroke(a, b, element, radius));
   }
@@ -93,7 +94,7 @@ test("text draft rejects empty, oversized and invalid inputs", () => {
 
 test("text element validates metrics and does not accept image/HTML payloads", () => {
   assert.equal(isAnnotationElement(text()), true);
-  for (const item of [{ ...text(), scaleX: -1 }, { ...text(), box: { minX: 0, minY: 0, maxX: NaN, maxY: 10 } }, { ...text(), box: { minX: 0, minY: 0, maxX: 0, maxY: 10 } }, { ...text(), points: [point(1, 1), point(2, 2)] }, { ...text(), opacity: 0.35 }]) assert.equal(isAnnotationElement(item), false);
+  for (const item of [{ ...text(), points: textControlPoints(point(20,20), -1, 1) }, { ...text(), box: { minX: 0, minY: 0, maxX: NaN, maxY: 10 } }, { ...text(), box: { minX: 0, minY: 0, maxX: 0, maxY: 10 } }, { ...text(), points: [point(1, 1), point(2, 2)] }, { ...text(), opacity: 0.35 }]) assert.equal(isAnnotationElement(item), false);
 });
 
 test("text has deeply immutable bounds, bounded storage cost and global Undo", () => {
@@ -101,7 +102,7 @@ test("text has deeply immutable bounds, bounded storage cost and global Undo", (
   h.addElement(1, input); const stored = h.getSnapshot(1).elements[0];
   input.box.maxX = 999; input.points[0].x = 999;
   assert.equal(stored.box.maxX, 120); assert.equal(stored.points[0].x, 20); assert.equal(Object.isFrozen(stored.box), true);
-  assert.equal(annotationElementCost(stored), stored.text.length + 1);
+  assert.equal(annotationElementCost(stored), stored.text.length + 3);
   h.addElement(2, shape("arrow")); assert.equal(h.undo(), 2); assert.equal(h.undo(), 1); assert.equal(h.redo(), 1);
   assert.deepEqual(h.getSnapshot(1).elements, [stored]);
 });
@@ -109,8 +110,8 @@ test("text has deeply immutable bounds, bounded storage cost and global Undo", (
 test("text viewport scaling keeps layout and history aligned on both axes", () => {
   const h = new AnnotationHistory(); h.setDisplayViewport(1, 200, 100); h.addElement(1, text());
   const before = h.getSnapshot(1).elements[0]; h.setDisplayViewport(1, 400, 50); const after = h.getSnapshot(1).elements[0];
-  assert.equal(after.scaleX, 2); assert.equal(after.scaleY, 0.5); assert.deepEqual(after.points, [point(40, 10)]);
-  assert.deepEqual(before.points, [point(20, 20)]); assert.equal(after.text, before.text);
+  assert.deepEqual(after.points, textControlPoints(point(40, 10), 2, 0.5));
+  assert.deepEqual(before.points, textControlPoints(point(20, 20))); assert.equal(after.text, before.text);
   h.undo(); h.redo(); assert.deepEqual(h.getSnapshot(1).elements, [after]);
 });
 

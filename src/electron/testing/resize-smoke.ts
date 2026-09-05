@@ -1,3 +1,4 @@
+import { shapeControlPoints, textControlPoints, framePoint } from "../../annotation/primitive-frame.js";
 import assert from "node:assert/strict";
 import { screen } from "electron";
 import type { AnnotationHistory, AnnotationElement } from "../../annotation/history.js";
@@ -82,9 +83,9 @@ export async function verifySelectionResize(context: ResizeSmokeContext, display
 
   history.clearDisplay(displayId);
   history.addElement(displayId, { id: "resize-rectangle", tool: "rectangle", color: "#007AFF", width: 4, opacity: 1,
-    points: [{ x: 100, y: 100 }, { x: 240, y: 180 }] });
+    points: shapeControlPoints("rectangle", { x: 100, y: 100 }, { x: 240, y: 180 }) });
   history.addElement(displayId, { id: "resize-text", tool: "text", color: "#123456", opacity: 1,
-    points: [{ x: 310, y: 135 }], text: "크기 조절", fontSize: 24, scaleX: 1, scaleY: 1,
+    points: textControlPoints({ x: 310, y: 135 }), text: "크기 조절", fontSize: 24,
     box: { minX: 0, minY: 0, maxX: 120, maxY: 32 } });
   context.publishDocument(displayId);
   await ready();
@@ -103,7 +104,7 @@ export async function verifySelectionResize(context: ResizeSmokeContext, display
   assert.equal(snapshot().revision, original.revision + 1, "Resize was not one transaction");
   // A pixel on the newly resized right edge must exist in the committed Canvas.
   const rectangle = snapshot().elements[0];
-  const edge = { x: rectangle.points[1].x, y: (rectangle.points[0].y + rectangle.points[1].y) / 2 };
+  const edge = framePoint(rectangle.points, 1, 0.5);
   await waitFor(async () => await query(`(() => {
     const canvas = document.querySelector('canvas'); const ctx = canvas.getContext('2d');
     return ctx.getImageData(Math.round(${edge.x}*canvas.width/canvas.clientWidth),
@@ -124,7 +125,8 @@ export async function verifySelectionResize(context: ResizeSmokeContext, display
   await expectElements(groupExpected, "native Shift-drag resizes a mixed group");
   const resizedText = snapshot().elements.find(element => element.tool === "text");
   if (!resizedText || resizedText.tool !== "text") throw new Error("Resized text is missing");
-  assert.equal(resizedText.scaleX, resizedText.scaleY, "Shift did not preserve text aspect");
+  const [o, x, y] = resizedText.points;
+  assert.ok(Math.abs(Math.hypot(x.x-o.x,x.y-o.y)-Math.hypot(y.x-o.x,y.y-o.y)) < 1e-8, "Shift did not preserve text aspect");
   await context.command("undo"); await expectElements(groupBefore.elements, "one Undo restores both group members");
   await context.command("redo"); await expectElements(groupExpected, "group resize Redo");
 

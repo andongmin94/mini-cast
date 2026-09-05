@@ -1,3 +1,4 @@
+import { textControlPoints } from "./primitive-frame.js";
 import type { AnnotationPoint, TextElement } from "./history.js";
 
 export const TEXT_FONT_FAMILY = '"Pretendard", sans-serif';
@@ -88,16 +89,6 @@ export function createTextElement(
   if (box.maxX <= box.minX || box.maxY <= box.minY) {
     throw new Error("Annotation text has no measurable extent");
   }
-  return {
-    id,
-    tool: "text",
-    points: [{ ...position }],
-    color,
-    opacity: 1,
-    text: valid.text,
-    fontSize: valid.fontSize,
-    scaleX: 1,
-    scaleY: 1,
-    box,
-  };
+  return { id, tool: "text", points: textControlPoints(position), color,
+    opacity: 1, text: valid.text, fontSize: valid.fontSize, box };
 }

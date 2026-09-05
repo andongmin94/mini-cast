@@ -1,3 +1,4 @@
+import { shapeControlPoints, framePoint } from "@/annotation/primitive-frame";
 import { constrainedShapeEnd, hasShapeExtent } from "@/annotation/shape-geometry";
 import { isShapeTool, type StrokeElement, type ShapeElement, type TextElement } from "@/annotation/history";
 import { annotationTextFont, createTextElement, type AnnotationTextDraft } from "@/annotation/text";
@@ -390,7 +391,7 @@ function AnnotationSurface({
   function updateObjectPreview(point: AnnotationPoint, shift: boolean) {
     const object = activeObjectRef.current;
     if (!object || object.tool === "text") return;
-    activeObjectRef.current = { ...object, points: [object.points[0], constrainedShapeEnd(object.tool, object.points[0], point, shift)] };
+    activeObjectRef.current = { ...object, points: shapeControlPoints(object.tool, object.points[0], constrainedShapeEnd(object.tool, object.points[0], point, shift)) };
     if (objectFrameRef.current !== null) return;
     const gestureId = activeGestureIdRef.current;
     objectFrameRef.current = requestAnimationFrame(() => {
@@ -466,7 +467,7 @@ function AnnotationSurface({
       return;
     }
 
-    if (stroke && isShapeTool(stroke.tool) && !hasShapeExtent(stroke.tool, stroke.points[0], stroke.points[1])) {
+    if (stroke && isShapeTool(stroke.tool) && !hasShapeExtent(stroke.tool, stroke.points[0], stroke.tool === "rectangle" || stroke.tool === "ellipse" ? framePoint(stroke.points, 1, 1) : stroke.points[1])) {
       finishGestureState(true);
       renderCommitted();
       return;
@@ -597,7 +598,7 @@ function AnnotationSurface({
       return;
     }
     if (isShapeTool(tool)) {
-      activeObjectRef.current = { id: crypto.randomUUID(), tool, points: [point, point], color: settings.annotationPenColor, width: settings.annotationPenWidth, opacity: 1 };
+      activeObjectRef.current = { id: crypto.randomUUID(), tool, points: shapeControlPoints(tool, point, point), color: settings.annotationPenColor, width: settings.annotationPenWidth, opacity: 1 };
       clearGesture();
       return;
     }

@@ -1,3 +1,4 @@
+import { shapeControlPoints, textControlPoints } from "../../../dist/annotation/primitive-frame.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AnnotationHistory, resizeAnnotationElement, MAX_ANNOTATION_COORDINATE } from "../../../dist/annotation/history.js";
@@ -7,16 +8,16 @@ import { AnnotationReplica, createAnnotationUpdate, reduceAnnotationUpdate } fro
 
 const box = { minX: 10, minY: 20, maxX: 110, maxY: 70 };
 const rectangle = (id = "a") => ({ id, tool: "rectangle", color: "#007AFF", opacity: 1, width: 4,
-  points: [{ x: 20, y: 30 }, { x: 120, y: 90 }] });
+  points: shapeControlPoints("rectangle", { x: 20, y: 30 }, { x: 120, y: 90 }) });
 const text = { id: "text", tool: "text", color: "#123456", opacity: 1,
-  points: [{ x: 140, y: 110 }], text: "한글\ntext", fontSize: 28, scaleX: 1.25, scaleY: 0.8,
+  points: textControlPoints({ x: 140, y: 110 }, 1.25, 0.8), text: "한글\ntext", fontSize: 28,
   box: { minX: -2, minY: -22, maxX: 70, maxY: 34 } };
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
 function setup() {
   const history = new AnnotationHistory();
   history.setDisplayViewport(1, 800, 600);
   history.addElement(1, rectangle());
-  history.addElement(1, { ...rectangle("untouched"), points: [{ x: 450, y: 300 }, { x: 500, y: 350 }] });
+  history.addElement(1, { ...rectangle("untouched"), points: shapeControlPoints("rectangle", { x: 450, y: 300 }, { x: 500, y: 350 }) });
   history.addElement(1, text);
   return history;
 }
@@ -84,7 +85,7 @@ test("resize IPC validates handle, ratio policy, ids, offsets and revision", () 
 
 for (const tool of ["pen", "highlighter", "line", "arrow", "rectangle", "ellipse", "text"]) {
   test(`${tool} resizes with identical preview and authoritative geometry`, () => {
-    const source = tool === "text" ? text : { ...rectangle(tool), tool, opacity: tool === "highlighter" ? 0.35 : 1 };
+    const source = tool === "text" ? text : { ...rectangle(tool), tool, points: shapeControlPoints(tool, {x:20,y:30}, {x:120,y:90}), opacity: tool === "highlighter" ? 0.35 : 1 };
     const history = new AnnotationHistory(); history.addElement(1, source);
     const before = history.getSnapshot(1);
     const preview = resizeSelectionElements(before.elements, new Set([source.id]), "ne", 24, -13, false);
@@ -131,8 +132,8 @@ test("one group resize preserves order and untouched references and creates one 
 
 test("text resizes its measured layout and both axes without rewriting content or font size", () => {
   const next = resizeAnnotationElement(text, { x: 10, y: 20 }, 2, 0.5);
-  assert.deepEqual(next.points, [{ x: 270, y: 65 }]);
-  close(next.scaleX, 2.5); close(next.scaleY, 0.4);
+  assert.deepEqual(next.points[0], { x: 270, y: 65 });
+  close(next.points[1].x-next.points[0].x, 2.5); close(next.points[2].y-next.points[0].y, 0.4);
   assert.equal(next.text, text.text); assert.equal(next.fontSize, text.fontSize);
   assert.deepEqual(next.box, text.box); assert.ok(Object.isFrozen(next.box));
   const ink = resizeAnnotationElement(rectangle(), { x: 10, y: 20 }, 2, 0.5);
@@ -165,7 +166,7 @@ test("coordinate, width or text-scale overflow rejects a complete group before e
     unchangedOnFailure(history, () => history.resizeElements(1, ["a"], { x: 0, y: 0 }, scale, 1));
   }
   unchangedOnFailure(history, () => history.resizeElements(1, ["a"], { x: NaN, y: 0 }, 1, 1));
-  assert.throws(() => resizeAnnotationElement({ ...text, scaleX: 100000 }, { x: 0, y: 0 }, 2, 1));
+  assert.throws(() => resizeAnnotationElement({ ...text, points: textControlPoints(text.points[0], 100000, 1) }, { x: 0, y: 0 }, 2, 1));
 });
 
 test("stale revisions and missing group members cannot partially resize a document", () => {

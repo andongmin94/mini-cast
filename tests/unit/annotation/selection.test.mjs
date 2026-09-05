@@ -1,3 +1,4 @@
+import { shapeControlPoints, textControlPoints } from "../../../dist/annotation/primitive-frame.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AnnotationHistory, MAX_ANNOTATION_COORDINATE, translateAnnotationElement } from "../../../dist/annotation/history.js";
@@ -10,7 +11,7 @@ import {
 const line = (id, x = 10) => ({ id, tool: "line", color: "#FF0000", opacity: 1, width: 4,
   points: [{ x, y: 20 }, { x: x + 40, y: 20 }] });
 const text = { id: "text", tool: "text", color: "#123456", opacity: 1,
-  points: [{ x: 30, y: 80 }], text: "한글\ntext", fontSize: 28, scaleX: 1, scaleY: 1,
+  points: textControlPoints({ x: 30, y: 80 }), text: "한글\ntext", fontSize: 28,
   box: { minX: -2, minY: -22, maxX: 70, maxY: 34 } };
 function setup() {
   const history = new AnnotationHistory();
@@ -42,7 +43,7 @@ test("selection hit testing chooses the last visible object and includes stroke 
 
 test("selection does not hit empty shape interiors and does hit text layout areas", () => {
   for (const tool of ["rectangle", "ellipse"]) {
-    const shape = { ...line(tool), tool, points: [{ x: 0, y: 0 }, { x: 200, y: 100 }] };
+    const shape = { ...line(tool), tool, points: shapeControlPoints(tool, { x: 0, y: 0 }, { x: 200, y: 100 }) };
     assert.equal(hitTestAnnotationSelection([shape], { x: 100, y: 50 }), null);
     assert.equal(hitTestAnnotationSelection([shape], { x: 200, y: 50 }), tool);
   }
@@ -72,7 +73,7 @@ test("a group move retains object identity, styles, stacking order, and untouche
   assert.deepEqual(after.elements.map(e => e.id), ["a", "b", "text"]);
   assert.strictEqual(after.elements[1], before.elements[1]);
   assert.deepEqual(after.elements[0].points, [{ x: 23, y: 13 }, { x: 63, y: 13 }]);
-  assert.deepEqual(after.elements[2], { ...before.elements[2], points: [{ x: 43, y: 73 }] });
+  assert.deepEqual(after.elements[2], { ...before.elements[2], points: textControlPoints({ x: 43, y: 73 }) });
   assert.ok(Object.isFrozen(after.elements[0]));
   assert.ok(Object.isFrozen(after.elements[0].points[0]));
   history.undo();
@@ -83,7 +84,7 @@ test("a group move retains object identity, styles, stacking order, and untouche
 
 test("preview translation and committed translation are identical for every tool", () => {
   for (const tool of ["pen", "highlighter", "line", "arrow", "rectangle", "ellipse", "text"]) {
-    const element = tool === "text" ? text : { ...line(tool), tool, opacity: tool === "highlighter" ? 0.35 : 1 };
+    const element = tool === "text" ? text : { ...line(tool), tool, points: shapeControlPoints(tool, {x:10,y:20}, {x:50,y:80}), opacity: tool === "highlighter" ? 0.35 : 1 };
     const history = new AnnotationHistory(); history.addElement(1, element);
     const source = history.getSnapshot(1).elements;
     const preview = translateSelectionElements(source, new Set([element.id]), -3.5, 9.25);

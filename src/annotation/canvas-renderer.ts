@@ -23,8 +23,8 @@ export function drawAnnotationElement(context: CanvasRenderingContext2D, element
     context.strokeStyle = element.color;
     context.fillStyle = element.color;
     if (element.tool === "text") {
-      context.translate(element.points[0].x, element.points[0].y);
-      context.scale(element.scaleX, element.scaleY);
+      const [origin, xEnd, yEnd] = element.points;
+      context.transform(xEnd.x-origin.x, xEnd.y-origin.y, yEnd.x-origin.x, yEnd.y-origin.y, origin.x, origin.y);
       context.font = annotationTextFont(element.fontSize);
       context.textAlign = "left";
       context.textBaseline = "alphabetic";
@@ -39,10 +39,18 @@ export function drawAnnotationElement(context: CanvasRenderingContext2D, element
     context.lineJoin = "round";
     context.beginPath();
     if (element.tool === "ellipse") {
-      const [a, b] = element.points;
-      const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
-      if (rx && ry) context.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, rx, ry, 0, 0, Math.PI * 2);
-      else { context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); }
+      const [a, b, c] = element.points;
+      const ux=b.x-a.x, uy=b.y-a.y, vx=c.x-a.x, vy=c.y-a.y;
+      if (ux*vy-uy*vx !== 0) {
+        // The current path records transformed geometry. Restore before stroke
+        // to preserve the product's scalar pen-width policy under affine resize.
+        context.save();
+        context.transform(ux, uy, vx, vy, a.x, a.y);
+        context.ellipse(0.5, 0.5, 0.5, 0.5, 0, 0, Math.PI*2);
+        context.restore();
+      } else {
+        context.moveTo(a.x,a.y); context.lineTo(b.x+c.x-a.x,b.y+c.y-a.y);
+      }
     } else {
       for (const points of elementInkPaths(element)) {
         if (points.length === 1) {

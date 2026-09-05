@@ -1,3 +1,4 @@
+import { rotationHandlePoint, ROTATION_HANDLE_SIZE, selectionRotationAngle, selectionRotationCenter } from "@/annotation/rotation";
 import { memo, useCallback, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { paintCommittedAnnotations } from "@/annotation/canvas-renderer";
 import type { AnnotationDocumentUpdate } from "@/annotation/document-sync";
@@ -8,7 +9,7 @@ import type { InkBounds } from "@/annotation/shape-geometry";
 import { RESIZE_HANDLES, RESIZE_HANDLE_SIZE, resizeHandlePoint, resizeHandleDisplayBounds, type ResizeHandle } from "@/annotation/resize";
 import {
   annotationSelectionBounds, hitTestAnnotationSelection, selectionAfterClick,
-  translateSelectionElements, resizeSelectionElements, type AnnotationSelectionEdit,
+  translateSelectionElements, resizeSelectionElements, rotateSelectionElements, type AnnotationSelectionEdit,
 } from "@/annotation/selection";
 
 interface Props {
@@ -23,7 +24,8 @@ interface Drag {
   start: AnnotationPoint;
   source: AnnotationDocumentSnapshot;
   ids: readonly string[];
-  handle: ResizeHandle | null;
+  handle: ResizeHandle | "rotate" | null;
+  radians: number;
   lockAspect: boolean;
   dx: number;
   dy: number;
@@ -251,15 +253,15 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
   }
 
   function beginDrag(event: ReactPointerEvent<HTMLElement>, source: AnnotationDocumentSnapshot,
-    ids: readonly string[], handle: ResizeHandle | null) {
+    ids: readonly string[], handle: ResizeHandle | "rotate" | null) {
     const canvas = inputCanvas.current;
     if (!canvas) return;
     canvas.setPointerCapture(event.pointerId);
     const id = crypto.randomUUID();
     drag.current = { id, pointerId: event.pointerId, start: pointerPosition(event), source, ids, handle,
-      lockAspect: event.shiftKey, dx: 0, dy: 0, preview: source.elements };
-    canvas.dataset.activeGesture = handle ? "resize" : "move";
-    canvas.style.cursor = handle ? resizeCursor(handle) : "grabbing";
+      lockAspect: event.shiftKey, radians: 0, dx: 0, dy: 0, preview: source.elements };
+    canvas.dataset.activeGesture = handle === "rotate" ? "rotate" : handle ? "resize" : "move";
+    canvas.style.cursor = handle && handle !== "rotate" ? resizeCursor(handle) : "grabbing";
     miniCast.beginAnnotationGesture(id);
   }
 
@@ -276,7 +278,7 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
     if (!event.shiftKey && hit !== null) beginDrag(event, source, ids, null);
   }
 
-  function handleResizeDown(event: ReactPointerEvent<HTMLButtonElement>, handle: ResizeHandle) {
+  function handleResizeDown(event: ReactPointerEvent<HTMLButtonElement>, handle: ResizeHandle | "rotate") {
     const source = current.current;
     if (!source || source.displayId !== displayId || !selected.current.length ||
         pending.current || drag.current || !event.isPrimary || event.button !== 0 || typeof miniCast === "undefined") return;
@@ -295,9 +297,18 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
     if (dx === active.dx && dy === active.dy && (!active.handle || event.shiftKey === active.lockAspect)) return;
     try {
       const ids = new Set(active.ids);
-      active.preview = active.handle
-        ? resizeSelectionElements(active.source.elements, ids, active.handle, dx, dy, event.shiftKey)
-        : translateSelectionElements(active.source.elements, ids, dx, dy);
+      if (active.handle === "rotate") {
+        const bounds = annotationSelectionBounds(active.source.elements, ids);
+        if (!bounds) return;
+        const angle = selectionRotationAngle(selectionRotationCenter(bounds), active.start, point, event.shiftKey);
+        if (angle === null) return;
+        active.radians = angle;
+        active.preview = rotateSelectionElements(active.source.elements, ids, angle);
+      } else {
+        active.preview = active.handle
+          ? resizeSelectionElements(active.source.elements, ids, active.handle, dx, dy, event.shiftKey)
+          : translateSelectionElements(active.source.elements, ids, dx, dy);
+      }
       active.dx = dx;
       active.dy = dy;
       active.lockAspect = event.shiftKey;
@@ -320,7 +331,9 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
       return;
     }
     const common = { revision: active.source.revision, ids: active.ids, dx: active.dx, dy: active.dy };
-    const edit: AnnotationSelectionEdit = active.handle
+    const edit: AnnotationSelectionEdit = active.handle === "rotate"
+      ? { kind: "rotate", revision: active.source.revision, ids: active.ids, radians: active.radians }
+      : active.handle
       ? { ...common, kind: "resize", handle: active.handle, lockAspect: active.lockAspect }
       : { ...common, kind: "move" };
     void submit(active.id, edit, active.preview);
@@ -342,6 +355,7 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
       source.elements.filter(element => !removed.has(element.id)));
   }
 
+  const rotateHandle = handleBounds ? rotationHandlePoint(handleBounds, { width: window.innerWidth, height: window.innerHeight }) : null;
   return (
     <>
       <canvas ref={committedCanvas} className="pointer-events-none fixed inset-0 size-full" style={{ zIndex: 1 }} aria-hidden="true" />
@@ -360,6 +374,12 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
             zIndex: 4, touchAction: "none", cursor: resizeCursor(handle) }}
           onPointerDown={event => handleResizeDown(event, handle)} />;
       })}
+      {rotateHandle && <button type="button" data-selection-rotate="" disabled={busy}
+        aria-label="선택 객체 회전" title="드래그 회전 · Shift 15° 고정"
+        onPointerDown={event => handleResizeDown(event, "rotate")}
+        className="pointer-events-auto fixed flex items-center justify-center rounded-full border border-blue-600 bg-white text-blue-600"
+        style={{ zIndex: 9, left: rotateHandle.x - ROTATION_HANDLE_SIZE / 2, top: rotateHandle.y - ROTATION_HANDLE_SIZE / 2,
+          width: ROTATION_HANDLE_SIZE, height: ROTATION_HANDLE_SIZE, touchAction: "none", cursor: "grab" }}>↻</button>}
       <div className="pointer-events-auto fixed bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white"
         style={{ zIndex: 10 }} role="toolbar" aria-label="판서 선택 도구">
         <span role="status">{busy ? "편집 반영 중" : count ? `${count}개 선택 · 모서리로 크기 조절` : "객체 클릭 · Shift로 추가 선택"}</span>

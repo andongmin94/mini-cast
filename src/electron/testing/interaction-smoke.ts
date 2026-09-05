@@ -1,3 +1,5 @@
+import { framePoint } from "../../annotation/primitive-frame.js";
+import { verifySelectionRotation } from "./rotation-smoke.js";
 import { verifySelectionResize } from "./resize-smoke.js";
 import { verifyDirtyCanvasRendering } from "./rendering-smoke.js";
 import { app, BrowserWindow, globalShortcut, screen, type WebContents } from "electron";
@@ -429,7 +431,7 @@ export function createSmokeChecks(context: SmokeContext) {
         throw error;
       }
       const element = annotationHistory.getSnapshot(displayId).elements[0];
-      if (element.tool !== tool || element.points.length !== 2) throw new Error(tool + " anchors were not stored");
+      if (element.tool !== tool || element.points.length !== (tool === "rectangle" || tool === "ellipse" ? 3 : 2)) throw new Error(tool + " anchors were not stored");
       await waitForCommittedCanvasInk(displayId, true, tool + " pixels");
       const testPoint = tool === "ellipse" ? { x: localEnd.x, y: (localStart.y + localEnd.y) / 2 }
         : tool === "rectangle" ? { x: (localStart.x + localEnd.x) / 2, y: localStart.y }
@@ -478,8 +480,8 @@ export function createSmokeChecks(context: SmokeContext) {
     await shortcutCommand("redo"); await waitForCommittedCanvasInk(displayId, true, "text Redo pixels");
     await selectTool("eraser");
     const center = {
-      x: display.bounds.x + element.points[0].x + (element.box.minX + element.box.maxX) * element.scaleX / 2,
-      y: display.bounds.y + element.points[0].y + (element.box.minY + element.box.maxY) * element.scaleY / 2
+      x: display.bounds.x + framePoint(element.points, (element.box.minX + element.box.maxX) / 2, (element.box.minY + element.box.maxY) / 2).x,
+      y: display.bounds.y + framePoint(element.points, (element.box.minX + element.box.maxX) / 2, (element.box.minY + element.box.maxY) / 2).y
     };
     await injectWindowsClick(Math.round(center.x), Math.round(center.y));
     await waitForCommittedCanvasInk(displayId, false, "text object erase");
@@ -1242,6 +1244,14 @@ export function createSmokeChecks(context: SmokeContext) {
       diagnostics.resizeTools = await verifySelectionResize({
         history: annotationHistory, publishDocument: context.publishDocument,
         command: shortcutCommand, state: context.state,
+      }, primary.id);
+      diagnostics.rotationTools = await verifySelectionRotation({
+        history: annotationHistory, publishDocument: context.publishDocument, command: shortcutCommand, state: context.state,
+        activateSelection: async () => {
+          if (!mainWindow) throw new Error("Missing controller for rotation");
+          await clickControllerElement(mainWindow, '[data-annotation-tool="select"]', "selection for rotation");
+          await waitFor(() => context.state().tool === "select", 5000, "selection for rotation active");
+        },
       }, primary.id);
     } finally {
       if (!underlay.isDestroyed()) underlay.destroy();

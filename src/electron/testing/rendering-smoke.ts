@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 /** Execute the compiled production planner/painter inside Chromium, not a mocked Canvas. */
 export async function verifyDirtyCanvasRendering(contents: WebContents) {
   await contents.executeJavaScript(`document.fonts.load('400 28px "Pretendard"', '한글 ABC').then(() => true)`);
-  const source = ["errors", "text", "history", "shape-geometry", "render-plan", "canvas-renderer"]
+  const source = ["errors", "primitive-frame", "rotation", "text", "history", "shape-geometry", "render-plan", "canvas-renderer"]
     .map((name) =>
       readFileSync(new URL(`../../annotation/${name}.js`, import.meta.url), "utf8")
         .replace(/^import .* from ["'][^"']+["'];?\r?\n/gm, "")
@@ -63,7 +63,7 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
         elements = [top, local, bottom]; compare('alpha-reorder');
         elements = []; compare('alpha-clear');
         const shapeSet = ['line', 'arrow', 'rectangle', 'ellipse'].map((tool, index) => ({
-          id: tool, tool, points: [{x:5.25+index,y:8.75}, {x:91.5,y:66.25-index}], color:'#007AFF', width:3.5, opacity:1,
+          id: tool, tool, points: shapeControlPoints(tool, {x:5.25+index,y:8.75}, {x:91.5,y:66.25-index}), color:'#007AFF', width:3.5, opacity:1,
         }));
         const textElement = createTextElement(a, 'text', {text:'한글 ABC\\n둘째 줄',fontSize:18}, {x:4.25,y:6.5}, '#1478AF');
         elements = [bottom, ...shapeSet, textElement, top]; compare('mixed-shapes-and-text');
@@ -91,6 +91,20 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
             elements = saved; compare('undo-resize-' + item.tool);
             elements = resized; compare('redo-resize-' + item.tool);
             elements = saved; compare('restore-resize-' + item.tool);
+          }
+        }
+        for (const item of [...shapeSet, textElement, bottom, top]) {
+          for (const angle of [Math.PI/2, Math.PI/4, -0.63, Math.PI]) {
+            const saved = elements;
+            elements = elements.map(element => element.id === item.id
+              ? rotateAnnotationElement(element, {x:45,y:35}, angle) : element);
+            compare('rotate-' + item.tool + '-' + angle);
+            const rotated = elements;
+            elements = elements.map(element => element.id === item.id
+              ? resizeAnnotationElement(element, {x:15,y:12}, 1.3, 0.7) : element);
+            compare('resize-rotated-' + item.tool);
+            elements = rotated; compare('undo-resize-rotated-' + item.tool);
+            elements = saved; compare('undo-rotate-' + item.tool);
           }
         }
         elements = []; compare('mixed-clear');
