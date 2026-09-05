@@ -21,7 +21,9 @@ jobs:
           node-version: 24.19.0
           cache: npm
       - name: Apply the reviewed file moves and path updates
-        run: python .github/reorganize.py
+        run: |
+          python .github/reorganize.py
+          python -c "from pathlib import Path; p=Path('tests/unit/electron/security-config.test.mjs'); s=p.read_text(encoding='utf-8'); p.write_text(s.replace('/^  (?:', '/^ {2}(?:'), encoding='utf-8', newline='\n')"
       - name: Install locked dependencies
         run: npm ci
       - name: Typecheck, all unit tests, and lint
@@ -46,12 +48,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add -A -- src tests scripts docs README.md package.json tsconfig.electron.json eslint.config.js .prettierignore
+          git add -A -- src tests scripts docs README.md package.json index.html tsconfig.electron.json eslint.config.js .prettierignore
           git rm .github/reorganize.py
           git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'refactor: organize runtime boundaries, tests, scripts and documentation'
+          git diff --exit-code
           git push origin HEAD:main
           git rev-parse HEAD > verification-logs/verified-source-commit.txt
           git ls-tree -r HEAD > verification-logs/verified-source-tree.txt
