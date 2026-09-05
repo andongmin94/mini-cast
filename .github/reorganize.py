@@ -1,6 +1,4 @@
-"""One-run preparation for the existing opt-in Windows verification job.
-Only verified product files are published; this file is removed by the job.
-"""
+"""One-run preparation. The existing opt-in job validates all changes then removes this file."""
 from pathlib import Path
 import base64
 import hashlib
@@ -133,7 +131,6 @@ replace(history, "  clearDisplay(displayId: number) {", """  translateElements(d
     if (validIds.some(id => !document.elementIds.has(id))) throw new AnnotationError("stale-document");
     if (dx === 0 && dy === 0) return null;
     const selected = new Set(validIds);
-    // Compute every destination before applying any of them: group edits are atomic.
     const moves = document.elements.flatMap((before, index) => selected.has(before.id)
       ? [{ index, before, after: translateAnnotationElement(before, dx, dy) }] : []);
     const entry: MoveHistoryEntry = { kind: "move", displayId, moves };
@@ -151,7 +148,6 @@ replace(history, '  private apply(entry: HistoryEntry) {\n    const document = t
     }""")
 replace(history, '  private revert(entry: HistoryEntry) {\n    const document = this.document(entry.displayId);', """  private applyMove(entry: MoveHistoryEntry, undo: boolean) {
     const document = this.document(entry.displayId);
-    // History entries preserve stacking positions; never silently move the wrong object.
     if (entry.moves.some(move => document.elements[move.index]?.id !== move.before.id))
       throw new AnnotationError("stale-document");
     const elements = document.elements.slice();
@@ -213,6 +209,7 @@ replace(overlay, '        onDocumentUpdate={applyAnnotationUpdate}\n      />', '
 
 smoke = "src/electron/testing/interaction-smoke.ts"
 replace(smoke, '  interface SmokeState {', blob("20f12c63d1b8e488a76861017c2374d2dd3fb661") + '  interface SmokeState {')
+replace(smoke, '!Boolean(await query("document.querySelector(\'[data-active-gesture]\')"))', '!(await query("document.querySelector(\'[data-active-gesture]\')"))')
 replace(smoke, '      await verifyShapeAndTextTools(primary.id, start, end);', '      await verifyShapeAndTextTools(primary.id, start, end);\n      await verifySelectionTools(primary.id, start, end);')
 render_smoke = "src/electron/testing/rendering-smoke.ts"
 replace(render_smoke, "        elements = []; compare('mixed-clear');", """        for (const moved of [...shapeSet, textElement, bottom, top]) {
@@ -271,4 +268,4 @@ Path("verification-logs/source-preparation.json").write_text(json.dumps({
     "base": BASE, "checkout": git("rev-parse", "HEAD").decode().strip(), "version": "0.5.0",
     "files": {name: hashlib.sha256(source.encode()).hexdigest() for name, source in prepared.items()},
 }, indent=2), encoding="utf-8")
-print("Prepared selection editing. Windows source, native input, package and integrity verification must pass before publication.")
+print("Prepared selection editing. All Windows checks must pass before publication.")
