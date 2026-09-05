@@ -26,7 +26,30 @@ jobs:
         with:
           node-version: 24.19.0
       - name: Apply scoped source improvements
-        run: python .github/core-hardening/measure.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('.github/core-hardening/apply.py')
+          s = p.read_text(encoding='utf-8')
+          old = "s = replace(s, 'stroke: cloneAnnotationStroke(stroke),', 'stroke,')"
+          new = "s = replace(s, '      stroke: cloneAnnotationStroke(stroke),', '      stroke,')"
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          python .github/core-hardening/measure.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/AnnotationSurface.tsx')
+          s = p.read_text(encoding='utf-8')
+          assert s.count('  useCallback,') == 1
+          assert s.count('export default function AnnotationSurface(') == 1
+          s = s.replace('  useCallback,', '  memo,\n  useCallback,')
+          s = s.replace('export default function AnnotationSurface(', 'function AnnotationSurface(')
+          s += '\n// Cursor position and keyboard display updates do not change annotation props.\nexport default memo(AnnotationSurface);\n'
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Install locked tooling
         run: npm ci --ignore-scripts
       - name: Format modified source
