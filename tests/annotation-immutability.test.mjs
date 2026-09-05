@@ -3,7 +3,17 @@ import test from "node:test";
 import { AnnotationHistory } from "../dist/annotation/history.js";
 
 function stroke(id, x = 5) {
-  return { id, tool: "pen", color: "#000000", width: 4, opacity: 1, points: [{ x, y: 10 }, { x: x + 10, y: 15 }] };
+  return {
+    id,
+    tool: "pen",
+    color: "#000000",
+    width: 4,
+    opacity: 1,
+    points: [
+      { x, y: 10 },
+      { x: x + 10, y: 15 },
+    ],
+  };
 }
 
 function history() {
@@ -25,11 +35,21 @@ test("snapshots are deeply frozen while caller-owned input remains writable", ()
   assert.ok(Object.isFrozen(view.strokes[0]));
   assert.ok(Object.isFrozen(view.strokes[0].points));
   assert.ok(Object.isFrozen(view.strokes[0].points[0]));
-  assert.throws(() => { view.revision = -1; }, TypeError);
-  assert.throws(() => { view.viewport.width = 20; }, TypeError);
-  assert.throws(() => { view.strokes.push(stroke("injected")); }, TypeError);
-  assert.throws(() => { view.strokes[0].color = "#FFFFFF"; }, TypeError);
-  assert.throws(() => { view.strokes[0].points[0].x = 900; }, TypeError);
+  assert.throws(() => {
+    view.revision = -1;
+  }, TypeError);
+  assert.throws(() => {
+    view.viewport.width = 20;
+  }, TypeError);
+  assert.throws(() => {
+    view.strokes.push(stroke("injected"));
+  }, TypeError);
+  assert.throws(() => {
+    view.strokes[0].color = "#FFFFFF";
+  }, TypeError);
+  assert.throws(() => {
+    view.strokes[0].points[0].x = 900;
+  }, TypeError);
   input.points[0].x = 500;
   input.points.push({ x: 80, y: 80 });
   assert.equal(view.strokes[0].points[0].x, 5);
@@ -131,7 +151,10 @@ test("retained snapshots stay unchanged across randomized editing and checkpoint
   const h = history();
   const views = [];
   let seed = 0x51a7;
-  const next = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
+  const next = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed;
+  };
   for (let i = 0; i < 2000; i += 1) {
     const display = 1 + (next() % 2);
     const op = next() % 7;
@@ -139,9 +162,18 @@ test("retained snapshots stay unchanged across randomized editing and checkpoint
     else if (op === 2) h.undo();
     else if (op === 3) h.redo();
     else if (op === 4) h.clearDisplay(display);
-    else if (op === 5) h.setDisplayViewport(display, 100 + (next() % 3) * 50, 100);
-    else { const c = h.clone(); h.addStroke(display, stroke(`temporary-${i}`)); h.restoreFrom(c); }
-    if (i % 40 === 0) { const view = h.getSnapshot(display); views.push([view, JSON.stringify(view)]); }
-    for (const [view, serialized] of views) assert.equal(JSON.stringify(view), serialized);
+    else if (op === 5)
+      h.setDisplayViewport(display, 100 + (next() % 3) * 50, 100);
+    else {
+      const c = h.clone();
+      h.addStroke(display, stroke(`temporary-${i}`));
+      h.restoreFrom(c);
+    }
+    if (i % 40 === 0) {
+      const view = h.getSnapshot(display);
+      views.push([view, JSON.stringify(view)]);
+    }
+    for (const [view, serialized] of views)
+      assert.equal(JSON.stringify(view), serialized);
   }
 });

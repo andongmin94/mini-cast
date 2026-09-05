@@ -42,11 +42,17 @@ function include(bounds: Bounds, point: AnnotationPoint) {
 }
 
 /** Build once per gesture; the source stroke must not change during the gesture. */
-export function prepareEraserStroke(stroke: AnnotationStroke): PreparedEraserStroke {
+export function prepareEraserStroke(
+  stroke: AnnotationStroke,
+): PreparedEraserStroke {
   if (!stroke.points.length) return { stroke, bounds: null, blocks: [] };
   const bounds = pointBounds(stroke.points[0]);
   const blocks: SegmentBlock[] = [];
-  for (let first = 1; first < stroke.points.length; first += SEGMENTS_PER_BLOCK) {
+  for (
+    let first = 1;
+    first < stroke.points.length;
+    first += SEGMENTS_PER_BLOCK
+  ) {
     const end = Math.min(first + SEGMENTS_PER_BLOCK, stroke.points.length);
     const blockBounds = pointBounds(stroke.points[first - 1]);
     for (let index = first; index < end; index += 1) {
@@ -60,8 +66,12 @@ export function prepareEraserStroke(stroke: AnnotationStroke): PreparedEraserStr
 }
 
 function overlaps(left: Bounds, right: Bounds) {
-  return left.minX <= right.maxX && left.maxX >= right.minX &&
-    left.minY <= right.maxY && left.maxY >= right.minY;
+  return (
+    left.minX <= right.maxX &&
+    left.maxX >= right.minX &&
+    left.minY <= right.maxY &&
+    left.maxY >= right.minY
+  );
 }
 
 /** Broad-phase bounds only reject impossible hits; the existing exact kernel decides hits. */
@@ -87,14 +97,29 @@ export function eraserSweepHitsPreparedStroke(
   const toleranceSquared = tolerance * tolerance;
   if (stroke.points.length === 1) {
     if (stats) stats.segmentTests += 1;
-    return segmentToSegmentDistanceSquared(start, end, stroke.points[0], stroke.points[0]) <= toleranceSquared;
+    return (
+      segmentToSegmentDistanceSquared(
+        start,
+        end,
+        stroke.points[0],
+        stroke.points[0],
+      ) <= toleranceSquared
+    );
   }
   for (const block of blocks) {
     if (stats) stats.blockBoundsTests += 1;
     if (!overlaps(block.bounds, query)) continue;
     for (let index = block.firstSegment; index < block.endSegment; index += 1) {
       if (stats) stats.segmentTests += 1;
-      if (segmentToSegmentDistanceSquared(start, end, stroke.points[index - 1], stroke.points[index]) <= toleranceSquared) return true;
+      if (
+        segmentToSegmentDistanceSquared(
+          start,
+          end,
+          stroke.points[index - 1],
+          stroke.points[index],
+        ) <= toleranceSquared
+      )
+        return true;
     }
   }
   return false;

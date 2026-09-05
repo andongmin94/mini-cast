@@ -111,7 +111,9 @@ test("snapshots and input objects cannot mutate stored history", () => {
   source.points[0].x = 999;
 
   const snapshot = history.getSnapshot(10);
-  snapshot.strokes[0].points[0].x = 777;
+  assert.throws(() => {
+    snapshot.strokes[0].points[0].x = 777;
+  }, TypeError);
   assert.deepEqual(history.getSnapshot(10).strokes[0].points[0], {
     x: 10,
     y: 20,
@@ -156,7 +158,10 @@ test("runtime validation rejects pathological geometry and style payloads", () =
     }),
     false,
   );
-  assert.equal(isAnnotationStroke({ ...stroke("bad-color"), color: "red" }), false);
+  assert.equal(
+    isAnnotationStroke({ ...stroke("bad-color"), color: "red" }),
+    false,
+  );
   assert.equal(
     isAnnotationStroke({ ...stroke("bad-opacity"), opacity: 0.5 }),
     false,
@@ -199,14 +204,16 @@ test("document and undo limits bound long-running session memory", () => {
     /Annotation point limit reached/,
   );
 
-  assert.equal(MAX_ANNOTATION_HISTORY_POINTS, MAX_ANNOTATION_POINTS_PER_DISPLAY);
+  assert.equal(
+    MAX_ANNOTATION_HISTORY_POINTS,
+    MAX_ANNOTATION_POINTS_PER_DISPLAY,
+  );
   assert.equal(pointHeavy.clearDisplay(1), 1);
   assert.equal(pointHeavy.undo(), 1);
   assert.equal(
-    pointHeavy.getSnapshot(1).strokes.reduce(
-      (total, item) => total + item.points.length,
-      0,
-    ),
+    pointHeavy
+      .getSnapshot(1)
+      .strokes.reduce((total, item) => total + item.points.length, 0),
     MAX_ANNOTATION_POINTS_PER_DISPLAY,
   );
   assert.equal(pointHeavy.undo(), null);
