@@ -831,6 +831,41 @@ export function createSmokeChecks(context: SmokeContext) {
       );
 
       const beforeCancellation = annotationHistory.getSnapshot(primary.id);
+      await selectTool("eraser");
+      await waitForOverlayInput(primary.id, true);
+      try {
+        await injectWindowsMouseButton(start.x, start.y, true);
+        await injectWindowsMouseMove(end.x, end.y);
+        await waitForCommittedCanvasInk(
+          primary.id,
+          false,
+          "held eraser preview removes the pen pixels",
+        );
+        await shortcutCommand("undo");
+        await waitFor(
+          async () =>
+            !(await rebuiltOverlay.webContents.executeJavaScript(
+              "Boolean(document.querySelector('[data-active-gesture]'))",
+            )),
+          5_000,
+          "Ctrl+Z cancels the held eraser gesture",
+        );
+        await waitForCommittedCanvasInk(
+          primary.id,
+          true,
+          "cancelled eraser preview restores the pen pixels",
+        );
+        if (
+          annotationHistory.getSnapshot(primary.id).revision !==
+          beforeCancellation.revision
+        ) {
+          throw new Error("Cancelling the eraser changed committed history");
+        }
+      } finally {
+        await injectWindowsMouseButton(end.x, end.y, false);
+      }
+      diagnostics.heldEraserUndo = true;
+
       await selectTool("pen");
       await waitForOverlayInput(primary.id, true);
       try {
