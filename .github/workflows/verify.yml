@@ -49,6 +49,27 @@ jobs:
       - name: 전체 의존성 보안 감사
         run: npm audit --audit-level=low
 
+      - name: 소스 renderer 빌드
+        run: npx vite build
+
+      - name: 패키징 전 실제 입력·Canvas 참조 비교
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $sentinel = Join-Path $env:RUNNER_TEMP ("mini-cast-source-" + [Guid]::NewGuid() + '.json')
+          $userData = Join-Path $env:RUNNER_TEMP ("mini-cast-source-userdata-" + [Guid]::NewGuid())
+          New-Item -ItemType Directory -Force -Path $userData, 'verification-logs' | Out-Null
+          & .\node_modules\.bin\electron.cmd . --interaction-smoke-test "--smoke-sentinel=$sentinel" "--smoke-user-data=$userData"
+          $exitCode = $LASTEXITCODE
+          if (-not (Test-Path -LiteralPath $sentinel)) { throw 'Source interaction did not return its diagnostic result.' }
+          $payload = Get-Content -LiteralPath $sentinel -Raw | ConvertFrom-Json
+          Copy-Item -LiteralPath $sentinel -Destination 'verification-logs/source-canvas.json'
+          Write-Host ($payload | ConvertTo-Json -Depth 12 -Compress)
+          if ($exitCode -ne 0 -or -not $payload.success) { throw "Source interaction failed: $($payload.error)" }
+          if (-not $payload.diagnostics.dirtyCanvasReference.success -or -not $payload.diagnostics.deltaTransport.gapRecovered) {
+            throw 'Source Canvas/delta coverage was not executed.'
+          }
+
       - name: MSI 및 포터블 패키징
         run: npm run build
 
