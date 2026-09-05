@@ -1,7 +1,7 @@
 name: PNG export validation
 
 # One-shot execution for the explicitly requested export increment. Product
-# commits do not trigger this job. The successful job removes this file.
+# commits do not trigger this job. Remove this workflow after final verification.
 on:
   push:
     branches: [main]
@@ -70,12 +70,14 @@ jobs:
         run: ./scripts/verify-diagnostics.ps1
       - name: Bundle and verify internal hashes
         run: ./scripts/package-bundle.ps1
-      - name: Publish only verified source and remove preparation files
+      - name: Publish only verified source and remove preparation script
         shell: bash
         run: |
           set -euo pipefail
           git add -A -- src tests scripts docs README.md package.json package-lock.json index.html tsconfig.electron.json eslint.config.js .prettierignore
-          git rm .github/reorganize.py .github/workflows/png-export-validation.yml
+          git diff --cached --binary > verification-logs/verified-source.patch
+          git restore --worktree -- .github/reorganize.py
+          git rm .github/reorganize.py
           git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
