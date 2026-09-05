@@ -11,8 +11,6 @@ guard = 'node -e "throw new Error(\'Text editing preparation incomplete; refusin
 package['scripts']['precheck'] = guard
 package_path.write_text(json.dumps(package, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 try:
-    # Read a fixed, already-reviewed ancestor through the checkout's Git transport.
-    # No GitHub API requests, personal token reads, or branch creation.
     source_commit = 'b12cc23f319f459b8cab77a55e7b5ee263b4264b'
     subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', source_commit], check=True)
     source = subprocess.check_output(['git', 'show', source_commit + ':.github/reorganize.py']).decode('utf-8')
@@ -32,6 +30,13 @@ test("native text-save shortcut injects Control and Enter", () => {
     source = source.replace(needle, extra + needle)
     source = source.replace("change('README.md', '#', '#', count=read('README.md').count('#'))\n", '')
     exec(compile(source, '<reviewed-existing-text-editing>', 'exec'))
+    change('src/annotation/errors.ts', 'const DOMAIN_MESSAGES = {', '''const DOMAIN_MESSAGES = {
+  "unavailable": "Annotation editing is currently unavailable",
+  "stale-gesture": "Annotation edit session expired or was cancelled",''')
+    change('src/electron/testing/text-edit-smoke.ts', '  const controller = mainWindow;', '  const candidateController = mainWindow;')
+    change('src/electron/testing/text-edit-smoke.ts',
+           '  if (!controller || !overlay) throw new Error("Missing text editor test windows");',
+           '  if (!candidateController || !overlay) throw new Error("Missing text editor test windows");\n  const controller = candidateController;')
     final = json.loads(package_path.read_text(encoding='utf-8'))
     if final['version'] != '0.8.0' or 'precheck' in final['scripts']:
         raise RuntimeError('Text editing preparation did not finish')
