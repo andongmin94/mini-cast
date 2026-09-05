@@ -10,9 +10,10 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
-  group: repository-cleanup
+  group: editable-annotation-files-validation
   cancel-in-progress: true
 
 jobs:
@@ -29,6 +30,54 @@ jobs:
         with:
           node-version: 24.19.0
           cache: npm
+      - name: Stop only the two superseded validation executions
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          @'
+          import { setTimeout as delay } from 'node:timers/promises';
+          const repo = 'andongmin94/mini-cast';
+          if (process.env.GITHUB_REPOSITORY !== repo) throw new Error('Unexpected repository');
+          const headers = { Accept: 'application/vnd.github+json', Authorization: `Bearer ${process.env.GH_TOKEN}`, 'X-GitHub-Api-Version': '2026-03-10' };
+          const targets = [
+            { id: 33956273624, sha: '2b6e88084c32645bced57fb0674d9e82d25c4f32', attempt: 26 },
+            { id: 33997642404, sha: 'c459565dd78ae0de0afe9286cd7967938860208e', attempt: 1 },
+          ];
+          for (const target of targets) {
+            if (String(target.id) === process.env.GITHUB_RUN_ID) throw new Error('Refusing self cancellation');
+            const url = `https://api.github.com/repos/${repo}/actions/runs/${target.id}`;
+            const read = async () => {
+              const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+              if (!response.ok) throw new Error(`Read run ${target.id}: ${response.status}`);
+              return response.json();
+            };
+            const initial = await read();
+            if (initial.head_sha !== target.sha || initial.run_attempt !== target.attempt || initial.head_branch !== 'main')
+              throw new Error(`Run ${target.id} is not the superseded execution`);
+            if (initial.status === 'completed') { console.log(`Already completed: ${target.id}`); continue; }
+            const cancel = async action => {
+              const response = await fetch(`${url}/${action}`, { method: 'POST', headers, signal: AbortSignal.timeout(15000) });
+              if (![202, 409].includes(response.status)) throw new Error(`${action} run ${target.id}: ${response.status}`);
+            };
+            await cancel('cancel');
+            let stopped = false;
+            for (let i = 0; i < 15; i++) {
+              if ((await read()).status === 'completed') { stopped = true; break; }
+              await delay(1000);
+            }
+            if (!stopped) {
+              await cancel('force-cancel');
+              for (let i = 0; i < 15; i++) {
+                if ((await read()).status === 'completed') { stopped = true; break; }
+                await delay(1000);
+              }
+            }
+            if (!stopped) throw new Error(`Run ${target.id} did not acknowledge cancellation`);
+            console.log(`Stopped superseded execution: ${target.id}`);
+          }
+          '@ | node --input-type=module -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Apply reviewed file changes and current guide
         run: |
           @'
