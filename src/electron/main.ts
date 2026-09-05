@@ -1,4 +1,8 @@
 import {
+  createAnnotationUpdate,
+  type AnnotationMutationResult,
+} from "../annotation/document-sync.js";
+import {
   app,
   dialog,
   globalShortcut,
@@ -30,7 +34,6 @@ import {
   isAnnotationStroke,
   readAnnotationStrokeIds,
   type AnnotationDocumentSnapshot,
-  type AnnotationMutationResult,
 } from "../annotation/history.js";
 import {
   ACTIVE_COMMAND_SHORTCUTS,
@@ -101,6 +104,7 @@ if (smokeOptions.disableHardwareAcceleration) app.disableHardwareAcceleration();
 type SettingsStore = ReturnType<typeof openSettingsStore>["store"];
 
 const annotationHistory = new AnnotationHistory();
+const publishedDocuments = new Map<number, AnnotationDocumentSnapshot>();
 const gestureLeases = new GestureLeaseRegistry();
 const unavailableShortcuts = new Set<string>();
 let annotationTool: AnnotationTool = "pass-through";
@@ -199,15 +203,20 @@ function sendAnnotationDocument(
   ),
   excludedWebContentsId: number | null = null,
 ) {
+  const update = createAnnotationUpdate(
+    publishedDocuments.get(displayId),
+    snapshot,
+  );
+  publishedDocuments.set(displayId, snapshot);
   overlayWindows.forEach((window, index) => {
     if (window.isDestroyed() || window.webContents.isDestroyed()) return;
     if (
       overlayDisplays[index]?.id === displayId &&
       window.webContents.id !== excludedWebContentsId
-    ) {
-      sendToWindow(window, "annotation-document-updated", snapshot);
-    }
+    )
+      sendToWindow(window, "annotation-document-updated", update);
   });
+  return update;
 }
 
 function annotationMutationResult(
@@ -217,8 +226,14 @@ function annotationMutationResult(
   return {
     accepted: false,
     reason,
-    document:
-      displayId === null ? null : annotationHistory.getSnapshot(displayId),
+    update:
+      displayId === null
+        ? null
+        : {
+            kind: "revision",
+            displayId,
+            revision: annotationHistory.getSnapshot(displayId).revision,
+          },
   };
 }
 
@@ -355,6 +370,8 @@ function initializeOverlay(event: IpcMainEvent) {
   );
   const display = overlayDisplays[index];
   if (!display) return;
+  const snapshot = annotationHistory.getSnapshot(display.id);
+  publishedDocuments.set(display.id, snapshot);
 
   sendToWebContents(event.sender, "overlay-init", {
     displayId: display.id,
@@ -367,11 +384,10 @@ function initializeOverlay(event: IpcMainEvent) {
     "annotation-state-updated",
     getAnnotationState(),
   );
-  sendToWebContents(
-    event.sender,
-    "annotation-document-updated",
-    annotationHistory.getSnapshot(display.id),
-  );
+  sendToWebContents(event.sender, "annotation-document-updated", {
+    kind: "snapshot",
+    document: snapshot,
+  });
 }
 
 function registerIpc() {
@@ -452,9 +468,12 @@ function registerIpc() {
         if (!isAnnotationStroke(stroke))
           return annotationMutationResult(displayId, "invalid-stroke");
         annotationHistory.addStroke(displayId, stroke);
-        const document = annotationHistory.getSnapshot(displayId);
-        sendAnnotationDocument(displayId, document, event.sender.id);
-        return { accepted: true, document };
+        const update = sendAnnotationDocument(
+          displayId,
+          undefined,
+          event.sender.id,
+        );
+        return { accepted: true, update };
       } catch (error) {
         if (!(error instanceof AnnotationError))
           console.error("Annotation commit failed:", error);
@@ -492,9 +511,12 @@ function registerIpc() {
         );
         if (changedDisplayId === null)
           return annotationMutationResult(displayId, "no-change");
-        const document = annotationHistory.getSnapshot(displayId);
-        sendAnnotationDocument(displayId, document, event.sender.id);
-        return { accepted: true, document };
+        const update = sendAnnotationDocument(
+          displayId,
+          undefined,
+          event.sender.id,
+        );
+        return { accepted: true, update };
       } catch (error) {
         console.error("Annotation erase failed:", error);
         return annotationMutationResult(displayId, "internal");
@@ -509,7 +531,10 @@ function registerIpc() {
     const displayId = isTopLevelSender(event)
       ? displayIdForSender(event.sender)
       : null;
-    if (displayId === null) throw new Error("Invalid document request");
+    if (displayId === null || displayRebuildInProgress)
+      throw new Error(
+        "Document is not available during display reconfiguration",
+      );
     return annotationHistory.getSnapshot(displayId);
   });
 
@@ -594,6 +619,7 @@ async function rebuildDisplays() {
     cancelActiveAnnotationGestures();
     const displays = getOrderedOverlayDisplays();
     historyCheckpoint = annotationHistory.clone();
+    publishedDocuments.clear();
     prepareDisplayHistory(displays);
     await createOverlayWindows(rendererUrl, displays, overlayCallbacks());
     overlaySwapCommitted = true;
@@ -601,6 +627,8 @@ async function rebuildDisplays() {
 
     const connectedIds = displays.map((display) => display.id);
     annotationHistory.retainDisplays(connectedIds);
+    for (const id of publishedDocuments.keys())
+      if (!connectedIds.includes(id)) publishedDocuments.delete(id);
     if (
       lastAnnotationDisplayId !== null &&
       !connectedIds.includes(lastAnnotationDisplayId)
@@ -621,6 +649,8 @@ async function rebuildDisplays() {
   } catch (error) {
     if (!overlaySwapCommitted && historyCheckpoint) {
       annotationHistory.restoreFrom(historyCheckpoint);
+      publishedDocuments.clear();
+      overlayDisplays.forEach((display) => sendAnnotationDocument(display.id));
     }
 
     try {

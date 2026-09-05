@@ -1,4 +1,4 @@
-import { AnnotationError, type AnnotationFailureReason } from "./errors.js";
+import { AnnotationError } from "./errors.js";
 
 export interface AnnotationPoint {
   readonly x: number;
@@ -27,14 +27,6 @@ export interface AnnotationDocumentSnapshot {
   readonly viewport: AnnotationViewport | null;
   readonly strokes: readonly AnnotationStroke[];
 }
-
-export type AnnotationMutationResult =
-  | { accepted: true; document: AnnotationDocumentSnapshot }
-  | {
-      accepted: false;
-      reason: AnnotationFailureReason;
-      document: AnnotationDocumentSnapshot | null;
-    };
 
 interface IndexedStroke {
   stroke: AnnotationStroke;

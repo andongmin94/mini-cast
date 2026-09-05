@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { shouldAdoptAnnotationDocument } from "@/annotation/document-order";
+import {
+  AnnotationReplica,
+  type AnnotationDocumentUpdate,
+} from "@/annotation/document-sync";
 import type { AnnotationDocumentSnapshot } from "@/annotation/history";
 import AnnotationSurface from "@/components/AnnotationSurface";
 import type {
@@ -99,10 +102,17 @@ export default function Overlay() {
   });
   const [keyPresses, setKeyPresses] = useState<KeyPress[]>([]);
   const [displayId, setDisplayId] = useState<number | null>(null);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const [replica] = useState(
+    () =>
+      new AnnotationReplica(
+        () => miniCast.getAnnotationDocument(),
+        setAnnotationDocument,
+      ),
+  );
 
   const settingsRef = useRef(settings);
   const displayIdRef = useRef<number | null>(null);
-  const documentRevisionRef = useRef(-1);
   const sourceSize = useRef({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -112,20 +122,20 @@ export default function Overlay() {
     settingsRef.current = settings;
   }, [settings]);
 
-  const adoptAnnotationDocument = useCallback(
-    (document: AnnotationDocumentSnapshot) => {
-      if (
-        shouldAdoptAnnotationDocument(
-          displayIdRef.current,
-          documentRevisionRef.current,
-          document,
-        )
-      ) {
-        documentRevisionRef.current = document.revision;
-        setAnnotationDocument(document);
+  const applyAnnotationUpdate = useCallback(
+    async (update: AnnotationDocumentUpdate) => {
+      try {
+        const next = await replica.receive(update);
+        if (next) setSyncNotice(null);
+        return next;
+      } catch (error) {
+        setSyncNotice(
+          "판서 동기화에 실패했습니다. 다음 편집에서 상태를 다시 확인합니다.",
+        );
+        throw error;
       }
     },
-    [],
+    [replica],
   );
 
   useEffect(() => {
@@ -178,7 +188,8 @@ export default function Overlay() {
       height,
     }: OverlayInit) => {
       displayIdRef.current = physicalId;
-      documentRevisionRef.current = -1;
+      replica.reset(physicalId);
+      setSyncNotice(null);
       clearKeyPressTimers();
       setKeyPresses([]);
       setAnnotationDocument(null);
@@ -199,7 +210,11 @@ export default function Overlay() {
         setSettings(next);
       }),
       miniCast.onAnnotationStateUpdated(setAnnotationState),
-      miniCast.onAnnotationDocumentUpdated(adoptAnnotationDocument),
+      miniCast.onAnnotationDocumentUpdated((update) => {
+        void applyAnnotationUpdate(update).catch(() => {
+          /* The notice is already visible. */
+        });
+      }),
       miniCast.onMouseMove((position) =>
         setMousePosition(position ? scalePosition(position) : null),
       ),
@@ -212,8 +227,9 @@ export default function Overlay() {
     return () => {
       clearKeyPressTimers();
       unsubscribe.forEach((stop) => stop());
+      replica.reset(null);
     };
-  }, [adoptAnnotationDocument]);
+  }, [applyAnnotationUpdate, replica]);
 
   const passive = annotationState.tool === "pass-through";
   const cursorPressed =
@@ -235,8 +251,18 @@ export default function Overlay() {
         settings={settings}
         displayId={displayId}
         document={annotationDocument}
-        onAuthoritativeDocument={adoptAnnotationDocument}
+        onDocumentUpdate={applyAnnotationUpdate}
       />
+
+      {syncNotice && (
+        <div
+          role="alert"
+          className="fixed top-4 left-4 rounded bg-slate-900 p-3 text-sm text-white"
+          style={{ zIndex: 5 }}
+        >
+          {syncNotice}
+        </div>
+      )}
 
       {mousePosition && passive && settings.showCursorHighlight && (
         <div

@@ -1,3 +1,4 @@
+import { verifyDirtyCanvasRendering } from "./rendering-smoke.js";
 import { app, BrowserWindow, screen, type WebContents } from "electron";
 import {
   existsSync,
@@ -222,6 +223,9 @@ export function createSmokeChecks(context: SmokeContext) {
         overlayDisplays.findIndex((item) => item.id === displayId)
       ];
     if (!target) throw new Error("Missing benchmark renderer");
+    diagnostics.dirtyCanvasReference = await verifyDirtyCanvasRendering(
+      target.webContents,
+    );
     await waitFor(
       async () =>
         Number(
@@ -241,6 +245,55 @@ export function createSmokeChecks(context: SmokeContext) {
     const publishAndPaintMs = performance.now() - publishStart;
     await selectTool("pen");
     await waitForOverlayInput(displayId, true);
+    // Probe the actual preload/invoke return. Deliberately do not feed this reply
+    // to the UI replica, simulating a lost commit acknowledgement. Native Undo
+    // must then recover the resulting revision gap from the authoritative source.
+    const deltaProbe = await target.webContents
+      .executeJavaScript(`(async () => {
+      const entries = [];
+      window.__miniCastWireAudit = { entries, stop: miniCast.onAnnotationDocumentUpdated(update => {
+        entries.push({ kind: update.kind, bytes: JSON.stringify(update).length,
+          inserted: update.kind === 'delta' ? update.inserted.length : null });
+      }) };
+      const gestureId = crypto.randomUUID();
+      miniCast.beginAnnotationGesture(gestureId);
+      try {
+        const result = await miniCast.commitAnnotationStroke(gestureId, {
+          id: crypto.randomUUID(), tool: 'pen', color: '#123456', width: 4, opacity: 1,
+          points: [{ x: 1, y: 1 }, { x: 2, y: 2 }],
+        });
+        if (!result.accepted || result.update.kind !== 'delta') throw new Error('Expected an accepted small delta reply');
+        return { kind: result.update.kind, replyBytes: JSON.stringify(result).length,
+          inserted: result.update.inserted.length, removed: result.update.removedIds.length };
+      } finally { miniCast.endAnnotationGesture(gestureId); }
+    })()`);
+    if (
+      deltaProbe.replyBytes >= 2048 ||
+      deltaProbe.inserted !== 1 ||
+      deltaProbe.removed !== 0
+    )
+      throw new Error("Small edit reply transferred unrelated geometry");
+    await shortcutCommand("undo");
+    await waitFor(
+      async () => {
+        const expected = annotationHistory.getSnapshot(displayId);
+        return (
+          expected.strokes.length === snapshot.strokes.length &&
+          Number(
+            await target.webContents.executeJavaScript(
+              "document.querySelector('[data-mini-cast-overlay]')?.dataset.annotationRevision",
+            ),
+          ) === expected.revision
+        );
+      },
+      10_000,
+      "revision-gap recovery after a lost commit reply",
+    );
+    diagnostics.deltaTransport = {
+      ...deltaProbe,
+      baselineSnapshotBytes: bytes,
+      gapRecovered: true,
+    };
     const dragStart = performance.now();
     await injectWindowsDrag(start.x, start.y, end.x, end.y);
     await waitFor(
@@ -284,6 +337,16 @@ export function createSmokeChecks(context: SmokeContext) {
       JSON.stringify(snapshot.strokes)
     )
       throw new Error("Large eraser Undo changed the document geometry");
+    const wireUpdates = await target.webContents.executeJavaScript(`(() => {
+      const audit = window.__miniCastWireAudit;
+      audit.stop(); delete window.__miniCastWireAudit; return audit.entries;
+    })()`);
+    if (
+      wireUpdates.length < 3 ||
+      wireUpdates.some((entry: { kind: string }) => entry.kind !== "delta")
+    )
+      throw new Error("Normal Undo/Redo edits did not use delta IPC");
+    diagnostics.deltaWireUpdates = wireUpdates;
     const metrics = {
       fixtureStrokes: 1000,
       fixturePoints: 128000,

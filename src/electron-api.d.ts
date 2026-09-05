@@ -1,6 +1,9 @@
 import type {
-  AnnotationDocumentSnapshot,
+  AnnotationDocumentUpdate,
   AnnotationMutationResult,
+} from "./annotation/document-sync";
+import type {
+  AnnotationDocumentSnapshot,
   AnnotationStroke,
 } from "./annotation/history";
 import type {
@@ -55,7 +58,7 @@ interface MiniCastBridge {
     listener: (state: AnnotationState) => void,
   ): Unsubscribe;
   onAnnotationDocumentUpdated(
-    listener: (document: AnnotationDocumentSnapshot) => void,
+    listener: (update: AnnotationDocumentUpdate) => void,
   ): Unsubscribe;
   onAnnotationGestureCancel(listener: (gestureId: string) => void): Unsubscribe;
 }

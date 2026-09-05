@@ -3,11 +3,13 @@ import { readFileSync } from "node:fs";
 
 /** Execute the compiled production planner/painter inside Chromium, not a mocked Canvas. */
 export async function verifyDirtyCanvasRendering(contents: WebContents) {
-  const source = ["render-plan", "canvas-renderer"].map(name =>
-    readFileSync(new URL(`../annotation/${name}.js`, import.meta.url), "utf8")
-      .replace(/^import .* from ["'][^"']+["'];?\r?\n/gm, "")
-      .replace(/^export /gm, ""),
-  ).join("\n");
+  const source = ["render-plan", "canvas-renderer"]
+    .map((name) =>
+      readFileSync(new URL(`../annotation/${name}.js`, import.meta.url), "utf8")
+        .replace(/^import .* from ["'][^"']+["'];?\r?\n/gm, "")
+        .replace(/^export /gm, ""),
+    )
+    .join("\n");
   return await contents.executeJavaScript(`(() => {
     ${source}
     const ratios = [1, 1.25, 1.5, 2, 2.5];
