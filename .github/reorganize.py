@@ -20,8 +20,9 @@ write('tests/unit/electron/text-edit-shortcuts.test.mjs', ''' + "'''" + r'''impo
 import test from "node:test";
 import { shortcutVirtualKeys } from "../../../dist/electron/testing/smoke.js";
 test("native text-save shortcut injects Control and Enter", () => {
-  assert.deepEqual(shortcutVirtualKeys("Ctrl+Enter"), [0x11, 0x0d]);
+  assert.deepEqual(shortcutKeysForTest(), [0x11, 0x0d]);
 });
+function shortcutKeysForTest() { return shortcutVirtualKeys("Ctrl+Enter"); }
 ''' + "'''" + r''')
 
 '''
@@ -37,6 +38,12 @@ test("native text-save shortcut injects Control and Enter", () => {
     change('src/electron/testing/text-edit-smoke.ts',
            '  if (!controller || !overlay) throw new Error("Missing text editor test windows");',
            '  if (!candidateController || !overlay) throw new Error("Missing text editor test windows");\n  const controller = candidateController;')
+    change('src/electron/testing/text-edit-smoke.ts',
+           '  await openEditor(); await setText("취소할 내용");',
+           '  const beforeCancel = state();\n  await openEditor(); await setText("취소할 내용");')
+    change('src/electron/testing/text-edit-smoke.ts',
+           '  assert.deepEqual(state(), edited);',
+           '  assert.deepEqual(state(), beforeCancel);')
     final = json.loads(package_path.read_text(encoding='utf-8'))
     if final['version'] != '0.8.0' or 'precheck' in final['scripts']:
         raise RuntimeError('Text editing preparation did not finish')
