@@ -11,6 +11,10 @@ export interface AnnotationTextDraft {
   readonly fontSize: number;
 }
 
+export interface AnnotationTextReplacement extends AnnotationTextDraft {
+  readonly box: TextInkBox;
+}
+
 export interface TextInkBox {
   readonly minX: number;
   readonly minY: number;

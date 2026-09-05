@@ -1,3 +1,5 @@
+import type { AnnotationTextEditSession, AnnotationTextEditResult } from "../annotation/text-edit";
+import type { AnnotationTextReplacement } from "../annotation/text";
 import type { AnnotationSelectionEdit } from "../annotation/selection";
 import type { AnnotationTextDraft } from "../annotation/text";
 import type {
@@ -41,6 +43,11 @@ interface MiniCastBridge {
   setAnnotationTool(tool: AnnotationTool): void;
   setAnnotationTextDraft(draft: AnnotationTextDraft): Promise<boolean>;
   setAnnotationTextEditing(editing: boolean): void;
+  requestAnnotationTextEdit(revision: number, elementId: string): Promise<boolean>;
+  getAnnotationTextEdit(): Promise<AnnotationTextEditSession | null>;
+  saveAnnotationTextEdit(id: string, value: AnnotationTextReplacement): Promise<AnnotationTextEditResult>;
+  cancelAnnotationTextEdit(id: string): void;
+  onAnnotationTextEdit(listener: (session: AnnotationTextEditSession | null) => void): Unsubscribe;
   sendAnnotationCommand(command: AnnotationCommand): void;
   beginAnnotationGesture(gestureId: string): void;
   commitAnnotationElement(

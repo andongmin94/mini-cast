@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { AnnotationTextEditSessions, type AnnotationTextEditResult } from "../annotation/text-edit.js";
 import { applyAnnotationSelectionEdit } from "../annotation/selection.js";
 import { readAnnotationTextDraft, type AnnotationTextDraft } from "../annotation/text.js";
 import {
@@ -107,6 +109,7 @@ if (smokeOptions.disableHardwareAcceleration) app.disableHardwareAcceleration();
 type SettingsStore = ReturnType<typeof openSettingsStore>["store"];
 
 const annotationHistory = new AnnotationHistory();
+const textEdits = new AnnotationTextEditSessions(annotationHistory);
 const publishedDocuments = new Map<number, AnnotationDocumentSnapshot>();
 const gestureLeases = new GestureLeaseRegistry();
 const unavailableShortcuts = new Set<string>();
@@ -330,7 +333,18 @@ function setControllerTextEditing(editing: boolean) {
   sendAnnotationState();
 }
 
+function sendTextEditSession() {
+  sendToWindow(mainWindow, "annotation-text-edit-session", textEdits.current);
+}
+
+function cancelTextEdit() {
+  if (!textEdits.cancel()) return;
+  sendTextEditSession();
+  setControllerTextEditing(false);
+}
+
 function setAnnotationTool(tool: AnnotationTool) {
+  cancelTextEdit();
   if (tool !== "text") setControllerTextEditing(false);
   if (tool !== annotationTool) cancelActiveAnnotationGestures();
   annotationTool = tool;
@@ -413,7 +427,10 @@ function registerIpc() {
   });
 
   ipcMain.on("hide-window", (event) => {
-    if (isControllerEvent(event)) hideMainWindow();
+    if (isControllerEvent(event)) {
+      cancelTextEdit();
+      hideMainWindow();
+    }
   });
 
   ipcMain.on("request-displays", (event) => {
@@ -451,8 +468,53 @@ function registerIpc() {
   });
   ipcMain.on("annotation-text-editing", (event, value: unknown) => {
     if (!isControllerEvent(event) || typeof value !== "boolean") return;
-    if (value && (!mainWindow?.isFocused() || annotationTool !== "text")) return;
-    setControllerTextEditing(value);
+    if (value && (!mainWindow?.isFocused() || (annotationTool !== "text" && !textEdits.current))) return;
+    // Disabling a submit button must not re-enable global Undo while a text save is pending.
+    setControllerTextEditing(value || Boolean(textEdits.current && mainWindow?.isFocused()));
+  });
+
+  ipcMain.handle("annotation-text-edit-open", (event, revision: unknown, elementId: unknown) => {
+    const displayId = isTopLevelSender(event) ? displayIdForSender(event.sender) : null;
+    if (displayId === null || displayRebuildInProgress || annotationTool !== "select" || !mainWindow || mainWindow.isDestroyed()) return false;
+    try {
+      textEdits.open(displayId, revision, elementId, randomUUID());
+      cancelActiveAnnotationGestures();
+      lastAnnotationDisplayId = displayId;
+      showMainWindow();
+      setControllerTextEditing(mainWindow.isFocused());
+      sendTextEditSession();
+      return true;
+    } catch (error) {
+      if (!(error instanceof AnnotationError)) console.error("Cannot open text editor:", error);
+      return false;
+    }
+  });
+  ipcMain.handle("annotation-text-edit-get", event => {
+    if (!isControllerEvent(event)) throw new Error("Invalid text edit session request");
+    return textEdits.current;
+  });
+  ipcMain.handle("annotation-text-edit-save", (event, id: unknown, value: unknown): AnnotationTextEditResult => {
+    if (!isControllerEvent(event) || displayRebuildInProgress || annotationTool !== "select" ||
+        !textEdits.current || !connectedDisplayIds().includes(textEdits.current.displayId))
+      return { accepted: false, reason: "unavailable" };
+    try {
+      const result = textEdits.save(id, value);
+      if (result.changed) sendAnnotationDocument(result.displayId);
+      sendTextEditSession();
+      setControllerTextEditing(false);
+      sendAnnotationState();
+      return { accepted: true, changed: result.changed };
+    } catch (error) {
+      if (!(error instanceof AnnotationError)) console.error("Text replacement failed:", error);
+      return { accepted: false, reason: error instanceof AnnotationError ? error.reason : "internal" };
+    }
+  });
+  ipcMain.on("annotation-text-edit-cancel", (event, id: unknown) => {
+    if (!isControllerEvent(event) || typeof id !== "string") return;
+    if (textEdits.cancel(id)) {
+      sendTextEditSession();
+      setControllerTextEditing(false);
+    }
   });
 
   ipcMain.on("annotation-command", (event, command: unknown) => {
@@ -660,6 +722,7 @@ async function rebuildDisplays() {
   if (shuttingDown) return;
 
   displayRebuildInProgress = true;
+  cancelTextEdit();
   let historyCheckpoint: AnnotationHistory | null = null;
   let overlaySwapCommitted = false;
 
@@ -832,7 +895,11 @@ async function initializeApp() {
 
   await createWindow(rendererUrl, () => setAnnotationTool("pass-through"));
   mainWindow?.on("blur", () => setControllerTextEditing(false));
+  mainWindow?.on("focus", () => {
+    if (textEdits.current) setControllerTextEditing(true);
+  });
   mainWindow?.webContents.on("did-start-loading", () => {
+    cancelTextEdit();
     setControllerTextEditing(false);
     controllerSettingsRead = false;
   });

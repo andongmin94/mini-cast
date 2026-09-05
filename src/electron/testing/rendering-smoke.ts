@@ -107,6 +107,19 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
             elements = saved; compare('undo-rotate-' + item.tool);
           }
         }
+        for (const angle of [0, Math.PI / 6]) {
+          const saved = elements;
+          const sourceText = rotateAnnotationElement(textElement, {x:30,y:20}, angle);
+          elements = elements.map(item => item.id === sourceText.id ? sourceText : item); compare('before-text-edit-' + angle);
+          const measured = createTextElement(a, 'measure-only', {text:'수정한 설명' + String.fromCharCode(10) + '두 번째 줄',fontSize:24}, {x:0,y:0}, '#1478AF');
+          const replacement = replaceAnnotationText(sourceText, {text:measured.text,fontSize:measured.fontSize,box:measured.box});
+          const beforeEdit = elements;
+          elements = elements.map(item => item.id === sourceText.id ? replacement : item); compare('text-edit-' + angle);
+          const afterEdit = elements;
+          elements = beforeEdit; compare('undo-text-edit-' + angle);
+          elements = afterEdit; compare('redo-text-edit-' + angle);
+          elements = saved; compare('restore-text-edit-' + angle);
+        }
         elements = []; compare('mixed-clear');
         for (let i = 0; i < 80; i++) {
           const saved = elements;

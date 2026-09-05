@@ -29,6 +29,13 @@ contextBridge.exposeInMainWorld("miniCast", {
     ipcRenderer.send("set-annotation-tool", tool),
   setAnnotationTextDraft: (draft: unknown) => ipcRenderer.invoke("set-annotation-text-draft", draft),
   setAnnotationTextEditing: (editing: unknown) => ipcRenderer.send("annotation-text-editing", editing),
+  requestAnnotationTextEdit: (revision: unknown, elementId: unknown) =>
+    ipcRenderer.invoke("annotation-text-edit-open", revision, elementId),
+  getAnnotationTextEdit: () => ipcRenderer.invoke("annotation-text-edit-get"),
+  saveAnnotationTextEdit: (id: unknown, value: unknown) =>
+    ipcRenderer.invoke("annotation-text-edit-save", id, value),
+  cancelAnnotationTextEdit: (id: unknown) => ipcRenderer.send("annotation-text-edit-cancel", id),
+  onAnnotationTextEdit: (listener: Listener) => on("annotation-text-edit-session", listener),
   sendAnnotationCommand: (command: unknown) =>
     ipcRenderer.send("annotation-command", command),
   beginAnnotationGesture: (gestureId: unknown) =>

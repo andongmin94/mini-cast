@@ -1,3 +1,4 @@
+import AnnotationExistingTextEditor from "./AnnotationExistingTextEditor";
 import type { AnnotationTextDraft } from "@/annotation/text";
 import { useEffect, useState } from "react";
 
@@ -235,6 +236,7 @@ export default function Controller() {
     <>
       <TitleBar />
       <div className="pointer-events-auto z-[999] h-[336px] overflow-y-auto p-4">
+        <AnnotationExistingTextEditor />
         {(saveStatus.state === "failed" || saveStatus.recovered) && (
           <div
             role="alert"

@@ -139,6 +139,7 @@ export function shortcutVirtualKeys(accelerator: string): number[] {
     Ctrl: 0x11,
     CommandOrControl: 0x11,
     Escape: 0x1b,
+    Enter: 0x0d,
   };
   return accelerator.split("+").map((part) => {
     if (special[part] !== undefined) return special[part];

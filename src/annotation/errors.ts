@@ -10,6 +10,8 @@ export type AnnotationFailureReason =
   | "internal";
 
 const DOMAIN_MESSAGES = {
+  "unavailable": "Annotation editing is currently unavailable",
+  "stale-gesture": "Annotation edit session expired or was cancelled",
   "stale-document": "Annotation document changed during editing",
   "invalid-element": "Invalid annotation element",
   "duplicate-element": "Duplicate annotation element id",

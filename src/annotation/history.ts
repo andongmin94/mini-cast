@@ -187,6 +187,23 @@ export function rotateAnnotationElement(element: AnnotationElement, center: Anno
   return immutableElement(rotated);
 }
 
+/** Re-measure content without resetting the existing affine frame, style or ID. */
+export function replaceAnnotationText(element: TextElement, value: unknown): TextElement {
+  if (!isAnnotationElement(element) || element.tool !== "text" || !isRecord(value))
+    throw new AnnotationError("invalid-element");
+  const draft = readAnnotationTextDraft(value);
+  if (!draft || draft.text !== value.text || !isRecord(value.box))
+    throw new AnnotationError("invalid-element");
+  const candidate: TextElement = {
+    ...element, text: draft.text, fontSize: draft.fontSize,
+    box: value.box as unknown as TextInkBox,
+  };
+  if (!isAnnotationElement(candidate)) throw new AnnotationError("invalid-element");
+  // A font remeasurement alone must not create an edit or clear Redo.
+  if (element.text === candidate.text && element.fontSize === candidate.fontSize) return element;
+  return immutableElement(candidate) as TextElement;
+}
+
 /** Translation preserves IDs and styles; invalid coordinates are rejected before publication. */
 export function translateAnnotationElement(element: AnnotationElement, dx: number, dy: number): AnnotationElement {
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new AnnotationError("invalid-element");
@@ -475,6 +492,15 @@ export class AnnotationHistory {
       element => rotateAnnotationElement(element, center, angle));
   }
 
+  editText(displayId: number, id: string, value: unknown) {
+    if (typeof id !== "string" || !id.length || id.length > 128) throw new AnnotationError("invalid-element");
+    const source = this.document(displayId).elements.find(element => element.id === id);
+    if (!source) throw new AnnotationError("stale-document");
+    if (source.tool !== "text") throw new AnnotationError("invalid-element");
+    const replacement = replaceAnnotationText(source, value);
+    return this.transformElements(displayId, [id], replacement === source, () => replacement);
+  }
+
   /** Build and validate every destination before replacing any source geometry. */
   private transformElements(displayId: number, ids: Iterable<string>, identity: boolean,
     transform: (element: AnnotationElement) => AnnotationElement) {
@@ -605,9 +631,16 @@ export class AnnotationHistory {
     const document = this.document(entry.displayId);
     if (entry.changes.some(change => document.elements[change.index]?.id !== change.before.id))
       throw new AnnotationError("stale-document");
+    // Text replacement can change storage cost, unlike a pure coordinate transform.
+    const pointCount = entry.changes.reduce((total, change) => total
+      - annotationElementCost(document.elements[change.index])
+      + annotationElementCost(undo ? change.before : change.after), document.pointCount);
+    if (!Number.isSafeInteger(pointCount) || pointCount < 0) throw new AnnotationError("invalid-element");
+    if (pointCount > MAX_ANNOTATION_POINTS_PER_DISPLAY) throw new AnnotationError("point-limit");
     const elements = document.elements.slice();
     for (const change of entry.changes) elements[change.index] = undo ? change.before : change.after;
     document.elements = elements;
+    document.pointCount = pointCount;
     this.touch(entry.displayId);
   }
 

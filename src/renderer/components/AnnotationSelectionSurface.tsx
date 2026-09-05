@@ -63,13 +63,18 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
   const alive = useRef(false);
   const epoch = useRef(0);
   const [count, setCount] = useState(0);
+  const [canEditText, setCanEditText] = useState(false);
+  const openingEditor = useRef(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [handleBounds, setHandleBounds] = useState<InkBounds | null>(null);
 
   const setSelection = useCallback((ids: readonly string[]) => {
     selected.current = ids;
-    if (alive.current) setCount(ids.length);
+    if (alive.current) {
+      setCount(ids.length);
+      setCanEditText(ids.length === 1 && current.current?.elements.find(element => element.id === ids[0])?.tool === "text");
+    }
   }, []);
 
   const paint = useCallback(() => {
@@ -343,6 +348,27 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
     if (drag.current?.pointerId === event.pointerId) cancelDrag();
   }
 
+  async function editSelectedText() {
+    const source = current.current;
+    const ids = selected.current;
+    if (!source || ids.length !== 1 || pending.current || drag.current || openingEditor.current) return;
+    if (source.elements.find(element => element.id === ids[0])?.tool !== "text") return;
+    const generation = epoch.current;
+    openingEditor.current = true;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const accepted = await miniCast.requestAnnotationTextEdit(source.revision, ids[0]);
+      if (!accepted && alive.current && epoch.current === generation)
+        setNotice("텍스트 편집을 열지 못했습니다. 진행 중인 편집을 마치고 다시 선택해 주세요.");
+    } catch {
+      if (alive.current && epoch.current === generation) setNotice("텍스트 편집 연결을 확인해 주세요.");
+    } finally {
+      openingEditor.current = false;
+      if (alive.current && epoch.current === generation) setBusy(false);
+    }
+  }
+
   function deleteSelected() {
     const source = current.current;
     if (!source || pending.current || drag.current || !selected.current.length) return;
@@ -383,6 +409,8 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
       <div className="pointer-events-auto fixed bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white"
         style={{ zIndex: 10 }} role="toolbar" aria-label="판서 선택 도구">
         <span role="status">{busy ? "편집 반영 중" : count ? `${count}개 선택 · 모서리로 크기 조절` : "객체 클릭 · Shift로 추가 선택"}</span>
+        <button type="button" data-selection-text-edit="" disabled={busy || !canEditText}
+          className="rounded px-2 py-1 hover:bg-slate-700 disabled:opacity-40" onClick={() => void editSelectedText()}>텍스트 수정</button>
         <button type="button" data-selection-delete="" disabled={busy || !count}
           className="rounded px-2 py-1 hover:bg-slate-700 disabled:opacity-40" onClick={deleteSelected}>선택 삭제</button>
         <button type="button" data-selection-clear="" disabled={busy || !count}

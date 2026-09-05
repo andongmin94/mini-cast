@@ -1,4 +1,5 @@
 import { framePoint } from "../../annotation/primitive-frame.js";
+import { verifyExistingTextEditing } from "./text-edit-smoke.js";
 import { verifySelectionRotation } from "./rotation-smoke.js";
 import { verifySelectionResize } from "./resize-smoke.js";
 import { verifyDirtyCanvasRendering } from "./rendering-smoke.js";
@@ -1251,6 +1252,14 @@ export function createSmokeChecks(context: SmokeContext) {
           if (!mainWindow) throw new Error("Missing controller for rotation");
           await clickControllerElement(mainWindow, '[data-annotation-tool="select"]', "selection for rotation");
           await waitFor(() => context.state().tool === "select", 5000, "selection for rotation active");
+        },
+      }, primary.id);
+      diagnostics.textEditingTools = await verifyExistingTextEditing({
+        history: annotationHistory, publishDocument: context.publishDocument, command: shortcutCommand,
+        activateSelection: async () => {
+          if (!mainWindow) throw new Error("Missing controller for text editing");
+          await clickControllerElement(mainWindow, '[data-annotation-tool="select"]', "selection for text editing");
+          await waitFor(() => context.state().tool === "select", 5000, "text selection active");
         },
       }, primary.id);
     } finally {
