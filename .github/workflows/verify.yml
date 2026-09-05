@@ -75,6 +75,7 @@ jobs:
         run: npm run build
 
       - name: 실제 Windows 입력·포터블·MSI 설치 검증
+        timeout-minutes: 10
         shell: pwsh
         run: ./scripts/verify-windows.ps1
 
