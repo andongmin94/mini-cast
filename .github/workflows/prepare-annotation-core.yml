@@ -4,15 +4,10 @@ on:
   push:
     branches: [perf/annotation-core-20260905]
     paths:
-      - .github/core-hardening/**
       - .github/workflows/prepare-annotation-core.yml
 
 permissions:
   contents: write
-
-concurrency:
-  group: prepare-annotation-core
-  cancel-in-progress: false
 
 jobs:
   prepare:
@@ -25,39 +20,46 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.19.0
-      - name: Apply scoped source improvements
+      - name: Add native eraser cancellation regression
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          p = Path('.github/core-hardening/apply.py')
+          p = Path('src/electron/interaction-smoke.ts')
           s = p.read_text(encoding='utf-8')
-          old = "s = replace(s, 'stroke: cloneAnnotationStroke(stroke),', 'stroke,')"
-          new = "s = replace(s, '      stroke: cloneAnnotationStroke(stroke),', '      stroke,')"
+          old = '      const beforeCancellation = annotationHistory.getSnapshot(primary.id);'
           assert s.count(old) == 1
+          new = old + '''
+                await selectTool("eraser");
+                await waitForOverlayInput(primary.id, true);
+                try {
+                  await injectWindowsMouseButton(start.x, start.y, true);
+                  await injectWindowsMouseMove(end.x, end.y);
+                  await waitForCommittedCanvasInk(primary.id, false, "held eraser preview removes the pen pixels");
+                  await shortcutCommand("undo");
+                  await waitFor(
+                    async () => !(await rebuiltOverlay.webContents.executeJavaScript(
+                      "Boolean(document.querySelector('[data-active-gesture]'))",
+                    )),
+                    5_000,
+                    "Ctrl+Z cancels the held eraser gesture",
+                  );
+                  await waitForCommittedCanvasInk(primary.id, true, "cancelled eraser preview restores the pen pixels");
+                  if (annotationHistory.getSnapshot(primary.id).revision !== beforeCancellation.revision) {
+                    throw new Error("Cancelling the eraser changed committed history");
+                  }
+                } finally {
+                  await injectWindowsMouseButton(end.x, end.y, false);
+                }
+                diagnostics.heldEraserUndo = true;
+          '''
           p.write_text(s.replace(old, new), encoding='utf-8')
-          PY
-          python .github/core-hardening/measure.py
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('src/components/AnnotationSurface.tsx')
-          s = p.read_text(encoding='utf-8')
-          assert s.count('  useCallback,') == 1
-          assert s.count('export default function AnnotationSurface(') == 1
-          s = s.replace('  useCallback,', '  memo,\n  useCallback,')
-          s = s.replace('export default function AnnotationSurface(', 'function AnnotationSurface(')
-          s += '\n// Cursor position and keyboard display updates do not change annotation props.\nexport default memo(AnnotationSurface);\n'
-          p.write_text(s, encoding='utf-8')
           PY
       - name: Install locked tooling
         run: npm ci --ignore-scripts
       - name: Format modified source
-        run: >-
-          npx prettier --write
-          src/annotation/history.ts src/annotation/geometry.ts src/annotation/eraser-index.ts
-          src/components/AnnotationSurface.tsx src/electron/interaction-smoke.ts
-          tests/annotation-history.test.mjs tests/annotation-immutability.test.mjs tests/eraser-index.test.mjs
+        run: npx prettier --write src/electron/interaction-smoke.ts
       - name: Typecheck
         run: npm run typecheck
       - name: Domain and geometry regressions
@@ -66,13 +68,13 @@ jobs:
         run: npm run lint
       - name: Dependency audit
         run: npm audit --audit-level=low
-      - name: Commit only verified application changes to review branch
+      - name: Commit verified regression scenario only
         shell: bash
         run: |
           set -euo pipefail
-          git add src tests package.json package-lock.json README.md
+          git add src/electron/interaction-smoke.ts
           git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'perf: share immutable annotation state and accelerate exact eraser queries'
+          git commit -m 'test: verify held eraser cancellation restores pixels without touching history'
           git push origin HEAD:refs/heads/perf/annotation-core-20260905
