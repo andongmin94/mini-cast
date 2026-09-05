@@ -1,3 +1,4 @@
+import { listenForAnnotationExports } from "@/renderer/lib/annotation-export";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -202,6 +203,7 @@ export default function Overlay() {
     };
 
     const unsubscribe = [
+      listenForAnnotationExports(() => displayIdRef.current),
       miniCast.onSettingsUpdated((next) => {
         if (
           !next.showKeyDisplay ||

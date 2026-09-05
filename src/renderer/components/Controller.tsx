@@ -1,3 +1,4 @@
+import AnnotationExportControls from "./AnnotationExportControls";
 import AnnotationExistingTextEditor from "./AnnotationExistingTextEditor";
 import type { AnnotationTextDraft } from "@/annotation/text";
 import { useEffect, useState } from "react";
@@ -499,6 +500,7 @@ export default function Controller() {
               canUndo={annotationState.canUndo}
               canRedo={annotationState.canRedo}
             />
+            <AnnotationExportControls displays={displays} />
           </TabsContent>
         </Tabs>
       </div>

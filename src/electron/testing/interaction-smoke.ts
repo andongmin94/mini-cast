@@ -1,3 +1,4 @@
+import { verifyAnnotationExports } from "./export-smoke.js";
 import { framePoint } from "../../annotation/primitive-frame.js";
 import { verifyTransientTools } from "./transient-smoke.js";
 import { verifyShapeFill } from "./fill-smoke.js";
@@ -1293,6 +1294,13 @@ export function createSmokeChecks(context: SmokeContext) {
           if (!mainWindow) throw new Error("Missing temporary-tool controller");
           await clickControllerElement(mainWindow, `[data-annotation-tool="${tool}"]`, "temporary tool");
           await waitFor(() => context.state().tool === tool, 5000, "temporary tool state");
+        },
+      }, primary.id);
+      diagnostics.exportTools = await verifyAnnotationExports({
+        history: annotationHistory, publishDocument: context.publishDocument,
+        click: async (selector, description) => {
+          if (!mainWindow) throw new Error("Missing PNG-export controller");
+          await clickControllerElement(mainWindow, selector, description);
         },
       }, primary.id);
     } finally {

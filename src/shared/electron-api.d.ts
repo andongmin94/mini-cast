@@ -1,3 +1,4 @@
+import type { AnnotationExportRequest, AnnotationExportResult, AnnotationExportRenderRequest } from "../annotation/export";
 import type { AnnotationTextEditSession, AnnotationTextEditResult } from "../annotation/text-edit";
 import type { AnnotationTextReplacement } from "../annotation/text";
 import type { AnnotationSelectionEdit } from "../annotation/selection";
@@ -26,6 +27,9 @@ import type {
 type Unsubscribe = () => void;
 
 interface MiniCastBridge {
+  exportAnnotation(request: AnnotationExportRequest): Promise<AnnotationExportResult>;
+  onAnnotationExportRender(listener: (request: AnnotationExportRenderRequest) => void): Unsubscribe;
+  completeAnnotationExport(id: string, bytes: Uint8Array | null): void;
   minimizeWindow(): void;
   hideWindow(): void;
   requestDisplays(): void;

@@ -1,3 +1,4 @@
+import { registerAnnotationExports } from "./annotation-export.js";
 import { randomUUID } from "node:crypto";
 import { AnnotationTextEditSessions, type AnnotationTextEditResult } from "../annotation/text-edit.js";
 import { applyAnnotationSelectionEdit } from "../annotation/selection.js";
@@ -431,6 +432,11 @@ function initializeOverlay(event: IpcMainEvent) {
 }
 
 function registerIpc() {
+  registerAnnotationExports({
+    history: annotationHistory,
+    unavailable: () => shuttingDown || displayRebuildInProgress || controllerTextEditing || Boolean(textEdits.current),
+    prepareFileDialog: () => setAnnotationTool("pass-through"),
+  });
   ipcMain.on("minimize-window", (event) => {
     if (!isControllerEvent(event)) return;
     setAnnotationTool("pass-through");

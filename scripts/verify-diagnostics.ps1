@@ -36,6 +36,10 @@ foreach ($file in $files) {
   foreach ($name in @('laser','fadingPixels','expiry','idleStopped','historyIsolated','clear','heldUndo','heldEscape','reload','permanentWritesRejected','redoPreserved','viewportReset','clickRouting')) {
     if (-not $result.diagnostics.transientTools.$name) { throw "Missing temporary-tool verification: $name" }
   }
+  foreach ($name in @('clipboard','transparent','pngFile','nativeDialog','cancel','pinnedRevision','historyIsolated','busy','senderRejected','emptyPreservesClipboard')) {
+    if (-not $result.diagnostics.exportTools.$name) { throw "Missing PNG export verification: $name" }
+  }
+  if ($result.diagnostics.exportTools.rendering.comparisons -ne 5) { throw 'PNG scale coverage was not executed.' }
   Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
   Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
 }
