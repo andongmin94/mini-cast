@@ -30,10 +30,22 @@ jobs:
         run: |
           set -euo pipefail
           python .github/quality-bootstrap/smoke.py
-          rm -rf .github/quality-bootstrap .github/workflows/prepare-quality-gate.yml
+          rm -rf .github/quality-bootstrap
+          git restore --source=HEAD -- .github/workflows
           python - <<'PY'
           from pathlib import Path
           import subprocess
+          window = Path('src/electron/window.ts')
+          source = window.read_text(encoding='utf-8')
+          before = '      window.webContents.on("did-finish-load", () => {'
+          assert source.count(before) == 1
+          source = source.replace(before, '      window.webContents.on("did-start-loading", () => callbacks.onOverlayGone?.(webContentsId));\n' + before)
+          window.write_text(source, encoding='utf-8')
+          main = Path('src/electron/main.ts')
+          source = main.read_text(encoding='utf-8')
+          before = '      gestureLeases.removeOwner(webContentsId);'
+          assert source.count(before) == 1
+          main.write_text(source.replace(before, '      if (gestureLeases.removeOwner(webContentsId)) sendAnnotationState();'), encoding='utf-8')
           paths = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
           for name in paths:
               path = Path(name)
@@ -43,6 +55,10 @@ jobs:
           PY
       - name: Install locked development tooling without native scripts
         run: npm ci --ignore-scripts
+      - name: Record current dependency audit
+        run: |
+          npm audit --json > "$RUNNER_TEMP/mini-cast-audit.json" || true
+          cat "$RUNNER_TEMP/mini-cast-audit.json"
       - name: Format changed TypeScript and tests
         shell: bash
         run: |
