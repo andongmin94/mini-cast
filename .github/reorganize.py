@@ -70,6 +70,35 @@ for item in manifest["files"]:
     if hashlib.sha256(output).hexdigest() != item["after"]:
         raise RuntimeError("Reconstructed source checksum mismatch: " + name)
     prepared[name] = output
+
+# Preserve the control-character policy without disabling ESLint's safety rule.
+name = "src/annotation/text.ts"
+source = prepared[name].decode("utf-8")
+old = r"/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(text)"
+if source.count(old) != 1:
+    raise RuntimeError("Control-character validation target changed")
+source = source.replace(old, "hasUnsupportedControlCharacters(text)")
+marker = "/** Plain text only; no HTML, persisted draft, or font/URL supplied over IPC. */"
+helper = """/** Newlines are allowed; tabs and CR are normalized before this check. */
+function hasUnsupportedControlCharacters(text: string): boolean {
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if ((code < 32 && code !== 10) || code === 127) return true;
+  }
+  return false;
+}
+
+"""
+prepared[name] = source.replace(marker, helper + marker, 1).encode("utf-8")
+name = "tests/unit/annotation/shapes-and-text.test.mjs"
+prepared[name] += b'\n' + """test("text control-character policy preserves normalized whitespace and rejects every other C0 code", () => {
+  for (let code = 0; code < 32; code += 1) {
+    const result = readAnnotationTextDraft({ text: "A" + String.fromCharCode(code) + "B", fontSize: 28 });
+    assert.equal(result !== null, [9, 10, 13].includes(code), `C0 code ${code}`);
+  }
+  assert.equal(readAnnotationTextDraft({ text: "A" + String.fromCharCode(127) + "B", fontSize: 28 }), null);
+});
+""".encode("utf-8")
 for name, output in prepared.items():
     target = Path(name)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -104,4 +133,4 @@ hook.write_text('#!/bin/sh\nprintf "%s\\n" "feat: add integrated shape and text 
 hook.chmod(0o755)
 Path("verification-logs").mkdir(exist_ok=True)
 Path("verification-logs/source-preparation.json").write_text(json.dumps({"base": manifest["base"], "checkout": git("rev-parse", "HEAD").decode().strip(), "version": "0.4.0", "files": {name: hashlib.sha256(data).hexdigest() for name, data in prepared.items()}}, indent=2), encoding="utf-8")
-print("Prepared 33 checksum-verified shape/text files. Full Windows verification must pass before publication.")
+print("Prepared 33 verified shape/text files including control-character policy regression. Windows checks must pass before publication.")
