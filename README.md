@@ -1,6 +1,8 @@
 <div align="center">
-  <img src="https://bio.andongmin.com/mini-cast/logo.svg" alt="MiniCast" height="160" />
-</div>
+
+<a href="https://bio.andongmin.com/mini-cast">
+<img src="https://bio.andongmin.com/mini-cast/logo.svg" alt="logo" height="200" />
+</a>
 
 # MiniCast
 
