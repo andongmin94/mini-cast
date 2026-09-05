@@ -24,3 +24,5 @@ if (-not $payload.diagnostics.flipTools.horizontal -or -not $payload.diagnostics
 }
 
 if (-not $payload.diagnostics.transientTools.redoPreserved -or -not $payload.diagnostics.transientTools.expiry) { throw 'Laser/fading-ink lifecycle was not verified.' }
+
+if (-not $payload.diagnostics.transientTools.viewportReset -or -not $payload.diagnostics.transientTools.clickRouting) { throw 'Temporary viewport/routing boundary was not verified.' }

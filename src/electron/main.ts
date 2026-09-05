@@ -546,7 +546,7 @@ function registerIpc() {
       return;
     }
 
-    lastAnnotationDisplayId = displayId;
+    if (!isTransientAnnotationTool(annotationTool)) lastAnnotationDisplayId = displayId;
     const previous = gestureLeases.begin(event.sender.id, gestureId);
     if (previous && previous !== gestureId) {
       sendToWebContents(event.sender, "annotation-gesture-cancel", previous);

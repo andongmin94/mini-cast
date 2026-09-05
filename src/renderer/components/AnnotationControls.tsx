@@ -86,7 +86,7 @@ export default function AnnotationControls({
 }: AnnotationControlsProps) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         {TOOL_OPTIONS.map(({ tool: option, label, shortcut, Icon }) => (
           <button
             key={option}

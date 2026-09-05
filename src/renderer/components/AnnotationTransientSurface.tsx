@@ -90,11 +90,16 @@ function AnnotationTransientSurface({ tool, color, width }: Props) {
   useLayoutEffect(() => {
     alive.current = true;
     const surface = canvas.current!;
+    const model = ink.current;
+    let viewport = "";
     const resize = () => {
       const ratio = Math.max(1, window.devicePixelRatio || 1);
       const w = Math.max(1, Math.round(surface.clientWidth * ratio));
       const h = Math.max(1, Math.round(surface.clientHeight * ratio));
-      if (surface.width === w && surface.height === h) return;
+      const nextViewport = `${surface.clientWidth}:${surface.clientHeight}:${ratio}`;
+      // CSS size and DPI can change while the physical backing-store size stays equal.
+      if (viewport === nextViewport) return;
+      viewport = nextViewport;
       clear();
       surface.width = w;
       surface.height = h;
@@ -109,9 +114,18 @@ function AnnotationTransientSurface({ tool, color, width }: Props) {
       miniCast.onAnnotationGestureCancel(id => { if (active.current?.id === id) cancel(); }),
       miniCast.onAnnotationTransientClear(clear),
       miniCast.onMouseMove(point => {
-        if (!point) { cursor.current = null; if (active.current) cancel(); }
-        else if (tool === "laser") cursor.current = point;
-        if (tool === "laser" || !point) requestPaint();
+        if (!point) {
+          const visibleCursor = cursor.current !== null;
+          cursor.current = null;
+          if (active.current) cancel();
+          else if (visibleCursor && tool === "laser") requestPaint();
+          return;
+        }
+        if (tool === "laser") {
+          const previous = cursor.current;
+          cursor.current = point;
+          if (!previous || previous.x !== point.x || previous.y !== point.y) requestPaint();
+        }
       }),
     ];
     resize();
@@ -119,7 +133,7 @@ function AnnotationTransientSurface({ tool, color, width }: Props) {
     return () => {
       alive.current = false;
       detach();
-      ink.current.clear();
+      model.clear();
       cursor.current = null;
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;

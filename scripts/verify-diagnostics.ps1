@@ -33,7 +33,7 @@ foreach ($file in $files) {
   foreach ($name in @('rectangle','ellipse','preview','settingsIsolation','interiorSelection','groupFill','unfill','undoRedo','noOp','interiorErase','reload','staleRevision','emptyDisabled')) {
     if (-not $result.diagnostics.fillTools.$name) { throw "Missing fill verification: $name" }
   }
-  foreach ($name in @('laser','fadingPixels','expiry','idleStopped','historyIsolated','clear','heldUndo','heldEscape','reload','permanentWritesRejected','redoPreserved')) {
+  foreach ($name in @('laser','fadingPixels','expiry','idleStopped','historyIsolated','clear','heldUndo','heldEscape','reload','permanentWritesRejected','redoPreserved','viewportReset','clickRouting')) {
     if (-not $result.diagnostics.transientTools.$name) { throw "Missing temporary-tool verification: $name" }
   }
   Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"

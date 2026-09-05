@@ -732,10 +732,10 @@ export function createSmokeChecks(context: SmokeContext) {
       async () => {
         const pointerEvents = (await target.webContents.executeJavaScript(
           `(() => {
-            const canvases = document.querySelectorAll("canvas");
-            return canvases.length > 1
-              ? getComputedStyle(canvases[1]).pointerEvents
-              : "missing";
+            const canvases = [...document.querySelectorAll("canvas")];
+            if (!canvases.length) return "missing";
+            return canvases.some(canvas => getComputedStyle(canvas).pointerEvents === "auto")
+              ? "auto" : "none";
           })()`,
           true,
         )) as string;
@@ -1278,6 +1278,17 @@ export function createSmokeChecks(context: SmokeContext) {
       }, primary.id);
       diagnostics.transientTools = await verifyTransientTools({
         history: annotationHistory, state: context.state, publishDocument: context.publishDocument, command: shortcutCommand,
+        checkClickRouting: async blocked => {
+          await waitForOverlayInput(primary.id, blocked);
+          const before = clickCount;
+          await injectWindowsClick(start.x, start.y);
+          if (blocked) {
+            const title = await underlay.webContents.executeJavaScript("document.title");
+            if (title !== `click-${before}`) throw new Error("Temporary tool leaked a pointerdown to the underlay");
+          } else {
+            await waitFor(() => clickCount === before + 1, 5000, "post-transient Escape actually restores underlay clicks");
+          }
+        },
         activateTool: async tool => {
           if (!mainWindow) throw new Error("Missing temporary-tool controller");
           await clickControllerElement(mainWindow, `[data-annotation-tool="${tool}"]`, "temporary tool");

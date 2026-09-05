@@ -10,6 +10,7 @@ interface Context {
   publishDocument(id: number): void;
   activateTool(tool: AnnotationTool): Promise<void>;
   command(command: AnnotationCommand): Promise<void>;
+  checkClickRouting(blocked: boolean): Promise<void>;
 }
 
 /** OS input and Canvas observations; no pointer events are synthesized in the renderer. */
@@ -51,11 +52,16 @@ export async function verifyTransientTools(context: Context, displayId: number) 
   await choose("fading-ink");
   assert.equal(context.state().canUndo,false); assert.equal(context.state().canRedo,false);
   await ready();
-  await query(`window.__temporaryBaseline = document.querySelector('canvas').getContext('2d').getImageData(0,0,document.querySelector('canvas').width,document.querySelector('canvas').height).data`);
+  await query(`(() => { const c=document.querySelector('canvas');
+    window.__temporaryBaseline=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    return true; })()`);
+  await context.checkClickRouting(true);
   await draw(); await leaseEnded();
   await waitFor(async()=> (await sample(210,220))?.[3]===255,1500,"temporary ink visible after release");
   await waitFor(async()=> { const alpha=(await sample(210,220))?.[3]; return alpha>0&&alpha<255; },4000,"temporary ink actually fades");
-  await waitFor(noTransientInk,3000,"temporary pixels expire completely");
+  await waitFor(async () => await noTransientInk() && await query(
+    `document.querySelector('[data-annotation-transient]')?.dataset.transientPoints === '0'`),
+    3000,"temporary pixels and retained points expire completely");
   assert.equal(await query(`document.querySelector('[data-annotation-transient]').dataset.transientPoints`),"0");
   assert.equal(await query(`document.querySelector('[data-annotation-transient]').dataset.transientAnimating`),"false"); unchanged();
   assert.equal(await query(`(() => {const c=document.querySelector('canvas'), d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;return d.every((v,i)=>v===window.__temporaryBaseline[i]);})()`),true);
@@ -73,13 +79,36 @@ export async function verifyTransientTools(context: Context, displayId: number) 
     await waitFor(noTransientInk,2000,"held Undo discards temporary preview"); unchanged();
   } finally { await injectWindowsMouseButton(b.x,b.y,false); }
 
+  // Real Chromium zoom changes CSS coordinates and DPR together; not a physical-monitor test.
+  await draw();
+  const viewport = await query(`(() => {const c=document.querySelector('[data-annotation-transient]');
+    return {width:c.width,height:c.height,cssWidth:c.clientWidth,ratio:window.devicePixelRatio};})()`);
+  const zoom = overlay.webContents.getZoomFactor();
+  try {
+    overlay.webContents.setZoomFactor(zoom * 2);
+    await waitFor(async () => await query(
+      `document.querySelector('[data-annotation-transient]').clientWidth`) !== viewport.cssWidth,
+      2000,"Chromium zoom changes temporary CSS coordinates");
+    await waitFor(async () => await noTransientInk() && await query(
+      `document.querySelector('[data-annotation-transient]')?.dataset.transientPoints === '0'`),
+      2000,"CSS/DPI change discards temporary coordinates");
+    const resized = await query(`(() => {const c=document.querySelector('[data-annotation-transient]');
+      return {width:c.width,height:c.height,ratio:window.devicePixelRatio};})()`);
+    assert.equal(resized.width,viewport.width); assert.equal(resized.height,viewport.height);
+    assert.notEqual(resized.ratio,viewport.ratio); unchanged();
+  } finally {
+    overlay.webContents.setZoomFactor(zoom);
+    await waitFor(async () => await query(
+      `document.querySelector('[data-annotation-transient]').clientWidth`) === viewport.cssWidth,
+      2000,"restore original Chromium zoom");
+  }
   await draw();
   const loaded=new Promise<void>(resolve=>overlay.webContents.once("did-finish-load",()=>resolve()));
   overlay.webContents.reload(); await loaded; await ready();
   await waitFor(async()=>Boolean(await query(`document.querySelector('[data-annotation-transient="fading-ink"]')`)),5000,"temporary surface reloads");
   await waitFor(noTransientInk,2000,"reload discards temporary ink"); unchanged();
 
-  await choose("laser"); const p=at(320,240); await injectWindowsMouseMove(p.x,p.y);
+  await choose("laser"); await context.checkClickRouting(true); const p=at(320,240); await injectWindowsMouseMove(p.x,p.y);
   await waitFor(async()=> { const pixel=await sample(325,240); return pixel?.[0]===255&&pixel?.[3]===255; },3000,"laser red ring tracks OS pointer");
   const q=at(430,300); await injectWindowsMouseMove(q.x,q.y);
   await waitFor(async()=> (await sample(325,240))?.[3]===0 && (await sample(435,300))?.[3]===255,3000,"laser leaves no trail");
@@ -100,9 +129,10 @@ export async function verifyTransientTools(context: Context, displayId: number) 
     await waitFor(()=>context.state().tool==="pass-through",3000,"Escape restores pass-through");
   } finally { await injectWindowsMouseButton(b.x,b.y,false); }
   await waitFor(async()=>!await query(`Boolean(document.querySelector('[data-annotation-transient]'))`),3000,"temporary layer removed on exit"); unchanged();
+  await context.checkClickRouting(false); unchanged();
   await choose("pen"); assert.equal(context.state().canRedo,true);
   await context.command("redo"); await waitFor(()=>state().elements.some(item=>item.id==="transient-redo"),3000,"permanent Redo remains usable");
   await context.command("undo"); await ready(); assert.deepEqual(state().elements,before.elements);
   return { laser:true, fadingPixels:true, expiry:true, idleStopped:true, historyIsolated:true, clear:true,
-    heldUndo:true, heldEscape:true, reload:true, permanentWritesRejected:true, redoPreserved:true };
+    heldUndo:true, heldEscape:true, reload:true, permanentWritesRejected:true, redoPreserved:true, viewportReset:true, clickRouting:true };
 }
