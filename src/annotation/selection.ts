@@ -7,6 +7,8 @@ import {
   resizeAnnotationElement,
   rotateAnnotationElement,
   flipAnnotationElement,
+  fillAnnotationElement,
+  isAnnotationFill,
   isFlipAxis,
   type FlipAxis,
   type AnnotationHistory,
@@ -28,6 +30,7 @@ export type AnnotationSelectionEdit =
       readonly dx: number; readonly dy: number; readonly lockAspect: boolean })
   | (SelectionEditBase & { readonly kind: "rotate"; readonly radians: number })
   | (SelectionEditBase & { readonly kind: "flip"; readonly axis: FlipAxis })
+  | (SelectionEditBase & { readonly kind: "fill"; readonly fill: string | null })
   | (SelectionEditBase & { readonly kind: "delete" });
 
 /** Validate the complete edit before touching the document or its history. */
@@ -37,6 +40,8 @@ export function readAnnotationSelectionEdit(value: unknown): AnnotationSelection
   if (typeof data.revision !== "number" || !Number.isSafeInteger(data.revision) || data.revision < 0) return null;
   const ids = readAnnotationElementIds(data.ids);
   if (!ids?.length || ids.length !== (data.ids as unknown[]).length) return null;
+  if (data.kind === "fill") return isAnnotationFill(data.fill)
+    ? { kind: "fill", revision: data.revision, ids, fill: data.fill } : null;
   if (data.kind === "delete") return { kind: "delete", revision: data.revision, ids };
   if (data.kind === "flip") return isFlipAxis(data.axis)
     ? { kind: "flip", revision: data.revision, ids, axis: data.axis } : null;
@@ -62,6 +67,7 @@ export function applyAnnotationSelectionEdit(history: AnnotationHistory, display
   if (document.revision !== edit.revision) throw new AnnotationError("stale-document");
   const present = new Set(document.elements.map(element => element.id));
   if (edit.ids.some(id => !present.has(id))) throw new AnnotationError("stale-document");
+  if (edit.kind === "fill") return history.fillElements(displayId, edit.ids, edit.fill);
   if (edit.kind === "delete") return history.removeElements(displayId, edit.ids);
   if (edit.kind === "move") return history.translateElements(displayId, edit.ids, edit.dx, edit.dy);
   // Never trust a renderer-supplied pivot or bounding box.
@@ -158,4 +164,9 @@ export function flipSelectionElements(elements: readonly AnnotationElement[], se
     return next;
   });
   return changed ? result : elements;
+}
+
+/** Style preview shares the same validation as the atomic history edit. */
+export function fillSelectionElements(elements: readonly AnnotationElement[], selected: ReadonlySet<string>, fill: string | null): readonly AnnotationElement[] {
+  return elements.map(element => selected.has(element.id) ? fillAnnotationElement(element, fill) : element);
 }

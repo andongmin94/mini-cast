@@ -101,6 +101,22 @@ export default function AnnotationControls({
         ))}
       </div>
 
+      <fieldset className="bg-muted space-y-2 rounded-md p-3">
+        <legend className="px-1 text-xs font-medium">사각형·타원 채우기</legend>
+        <label className="flex items-center gap-2 text-xs">
+          <input type="checkbox" data-annotation-shape-fill="" checked={settings.annotationShapeFillEnabled}
+            onChange={event => onSettingChange("annotationShapeFillEnabled", event.target.checked)} />
+          새 사각형·타원 내부 채우기
+        </label>
+        <label className="flex items-center justify-between gap-2 text-xs">
+          채우기 색상
+          <input type="color" data-annotation-shape-fill-color="" value={settings.annotationShapeFillColor}
+            onChange={event => onSettingChange("annotationShapeFillColor", event.target.value)}
+            className="color-picker rounded-md px-1 py-0.5" />
+        </label>
+        <p className="text-muted-foreground text-[11px]">기존 도형은 선택 후 ‘채우기 적용’ 또는 ‘채우기 제거’를 누르세요. 윤곽선 색상은 유지됩니다.</p>
+      </fieldset>
+
       {tool === "text" && <AnnotationTextComposer draft={textDraft} onPrepare={onPrepareText} />}
       <p className="text-muted-foreground text-center text-[11px]">
         판서 중에는 커서 하이라이트와 클릭 효과가 자동으로 숨겨집니다.

@@ -254,7 +254,7 @@ export default function Overlay() {
       data-annotation-elements={annotationDocument?.elements.length ?? 0}
     >
       {annotationState.tool === "select" ? (
-        <AnnotationSelectionSurface key={displayId} displayId={displayId}
+        <AnnotationSelectionSurface key={displayId} displayId={displayId} fillColor={settings.annotationShapeFillColor}
           document={annotationDocument} onDocumentUpdate={applyAnnotationUpdate} />
       ) : <AnnotationSurface
         tool={annotationState.tool}

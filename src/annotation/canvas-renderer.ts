@@ -63,6 +63,10 @@ export function drawAnnotationElement(context: CanvasRenderingContext2D, element
         for (let i = 1;i < points.length;i++) context.lineTo(points[i].x, points[i].y);
       }
     }
+    if ((element.tool === "rectangle" || element.tool === "ellipse") && element.fill !== undefined) {
+      context.fillStyle = element.fill;
+      context.fill();
+    }
     context.stroke();
   } finally { context.restore(); }
 }

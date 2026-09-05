@@ -1,6 +1,5 @@
-import { pointInFrame } from "./primitive-frame.js";
 import type { AnnotationPoint, AnnotationElement } from "./history.js";
-import { textOutline, elementInkPaths, ELLIPSE_FLATTENING_ERROR, type InkBounds } from "./shape-geometry.js";
+import { pointInElementFill, textOutline, elementInkPaths, ELLIPSE_FLATTENING_ERROR, type InkBounds } from "./shape-geometry.js";
 
 export function distanceSquared(left: AnnotationPoint, right: AnnotationPoint) {
   const dx = left.x - right.x;
@@ -116,10 +115,10 @@ export function pointHitsStroke(point: AnnotationPoint, element: AnnotationEleme
 /** Exhaustive reference kernel for object erasing; no interior hit for hollow shapes. */
 export function eraserSweepHitsStroke(start: AnnotationPoint, end: AnnotationPoint, element: AnnotationElement, eraserRadius: number) {
   if (!element.points.length) return false;
+  if (pointInElementFill(start, element) || pointInElementFill(end, element)) return true;
   let paths: readonly (readonly AnnotationPoint[])[];
   let tolerance = Math.max(0, eraserRadius);
   if (element.tool === "text") {
-    if (pointInFrame(start, element.points, element.box) || pointInFrame(end, element.points, element.box)) return true;
     paths = [textOutline(element)];
   } else {
     paths = elementInkPaths(element);

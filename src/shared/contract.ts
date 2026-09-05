@@ -47,6 +47,8 @@ export interface DisplayInfo {
 }
 
 export interface AnnotationPreferences {
+  annotationShapeFillEnabled: boolean;
+  annotationShapeFillColor: string;
   annotationPenColor: string;
   annotationHighlighterColor: string;
   annotationPenWidth: number;
@@ -111,6 +113,8 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   keyDisplayTextColor: "#FFFFFF",
   keyDisplayPosition: "bottom-right",
   showKeyDisplay: true,
+  annotationShapeFillEnabled: false,
+  annotationShapeFillColor: "#FFFFFF",
   annotationPenColor: "#FF3B30",
   annotationHighlighterColor: "#FFD60A",
   annotationPenWidth: 4,

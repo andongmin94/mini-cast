@@ -145,6 +145,34 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
             elements = saved; compare('restore-flip-' + item.tool + '-' + axis);
           }
         }
+        for (const tool of ['rectangle','ellipse']) {
+          const outline = {id:'filled-' + tool,tool,color:'#123456',width:3,opacity:1,
+            points:shapeControlPoints(tool,{x:25,y:20},{x:75,y:60})};
+          const filled = fillAnnotationElement(outline,'#24A148');
+          elements=[outline];compare('hollow-' + tool);
+          let p=a.getImageData(Math.round(50*ratio),Math.round(40*ratio),1,1).data;
+          if(p[3]!==0)throw new Error('Hollow interior unexpectedly painted');
+          elements=[filled];compare('solid-fill-' + tool);
+          p=a.getImageData(Math.round(50*ratio),Math.round(40*ratio),1,1).data;
+          if(p[0]!==36||p[1]!==161||p[2]!==72||p[3]!==255)throw new Error('Solid fill center has the wrong RGBA');
+          elements=[fillAnnotationElement(filled,null)];compare('remove-fill-' + tool);
+          p=a.getImageData(Math.round(50*ratio),Math.round(40*ratio),1,1).data;
+          if(p[3]!==0)throw new Error('Removed fill leaves interior pixels');
+          for(const angle of [0,0.63,Math.PI/2]) {
+            let e=rotateAnnotationElement(filled,{x:50,y:40},angle);
+            e=resizeAnnotationElement(e,{x:50,y:40},1.3,0.7);
+            for(const axis of ['horizontal','vertical']) {
+              const reflected=flipAnnotationElement(e,{x:50,y:40},axis);
+              elements=[reflected];compare('filled-affine-' + tool + '-' + angle + '-' + axis);
+              p=a.getImageData(Math.round(50*ratio),Math.round(40*ratio),1,1).data;
+              if(p[3]!==255)throw new Error('Affine filled center disappeared');
+              elements=[bottom,reflected,top];compare('filled-overlapping-alpha-' + tool);
+              elements=[bottom,fillAnnotationElement(reflected,'#FABC12'),top];compare('recolor-filled-' + tool);
+              elements=[bottom,top];compare('erase-filled-' + tool);
+              elements=[bottom,reflected,top];compare('undo-filled-' + tool);
+            }
+          }
+        }
         elements = []; compare('mixed-clear');
         for (let i = 0; i < 80; i++) {
           const saved = elements;

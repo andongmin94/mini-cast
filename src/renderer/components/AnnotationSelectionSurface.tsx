@@ -3,16 +3,17 @@ import { memo, useCallback, useLayoutEffect, useRef, useState, type PointerEvent
 import { paintCommittedAnnotations } from "@/annotation/canvas-renderer";
 import type { AnnotationDocumentUpdate } from "@/annotation/document-sync";
 import { annotationFailureMessage } from "@/annotation/errors";
-import type { AnnotationDocumentSnapshot, AnnotationElement, AnnotationPoint, FlipAxis } from "@/annotation/history";
+import { isFillableShape, type AnnotationDocumentSnapshot, type AnnotationElement, type AnnotationPoint, type FlipAxis } from "@/annotation/history";
 import type { CommittedRenderState } from "@/annotation/render-plan";
 import type { InkBounds } from "@/annotation/shape-geometry";
 import { RESIZE_HANDLES, RESIZE_HANDLE_SIZE, resizeHandlePoint, resizeHandleDisplayBounds, type ResizeHandle } from "@/annotation/resize";
 import {
   annotationSelectionBounds, hitTestAnnotationSelection, selectionAfterClick,
-  translateSelectionElements, resizeSelectionElements, rotateSelectionElements, flipSelectionElements, type AnnotationSelectionEdit,
+  translateSelectionElements, resizeSelectionElements, rotateSelectionElements, fillSelectionElements, flipSelectionElements, type AnnotationSelectionEdit,
 } from "@/annotation/selection";
 
 interface Props {
+  fillColor: string;
   displayId: number | null;
   document: AnnotationDocumentSnapshot | null;
   onDocumentUpdate(update: AnnotationDocumentUpdate): Promise<AnnotationDocumentSnapshot | null>;
@@ -51,7 +52,7 @@ function sameBounds(a: InkBounds | null, b: InkBounds | null) {
 }
 
 /** Selection and handles are transient. Accepted edits alone enter authoritative history. */
-function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: Props) {
+function AnnotationSelectionSurface({ displayId, document, fillColor, onDocumentUpdate }: Props) {
   const committedCanvas = useRef<HTMLCanvasElement>(null);
   const inputCanvas = useRef<HTMLCanvasElement>(null);
   const current = useRef(document);
@@ -64,6 +65,7 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
   const epoch = useRef(0);
   const [count, setCount] = useState(0);
   const [canEditText, setCanEditText] = useState(false);
+  const [canFill, setCanFill] = useState(false);
   const openingEditor = useRef(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -73,6 +75,10 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
     selected.current = ids;
     if (alive.current) {
       setCount(ids.length);
+      setCanFill(ids.length > 0 && ids.every(id => {
+        const element = current.current?.elements.find(item => item.id === id);
+        return element !== undefined && isFillableShape(element);
+      }));
       setCanEditText(ids.length === 1 && current.current?.elements.find(element => element.id === ids[0])?.tool === "text");
     }
   }, []);
@@ -210,7 +216,7 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
     if (drag.current && (!document || document.displayId !== drag.current.source.displayId || document.revision !== drag.current.source.revision)) cancelDrag();
     const present = new Set(document?.elements.map(element => element.id) ?? []);
     const retained = selected.current.filter(id => present.has(id));
-    if (retained.length !== selected.current.length) setSelection(retained);
+    setSelection(retained);
     requestPaint();
   }, [document, cancelDrag, requestPaint, setSelection]);
 
@@ -386,6 +392,21 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
     }
   }
 
+  function fillSelected(fill: string | null) {
+    const source = current.current;
+    if (!source || pending.current || drag.current || openingEditor.current || !selected.current.length) return;
+    const ids = [...selected.current];
+    try {
+      const preview = fillSelectionElements(source.elements, new Set(ids), fill);
+      const id = crypto.randomUUID();
+      setNotice(null);
+      miniCast.beginAnnotationGesture(id);
+      void submit(id, { kind: "fill", revision: source.revision, ids, fill }, preview);
+    } catch {
+      setNotice("사각형·타원만 선택해야 채우기를 바꿀 수 있습니다. 기존 판서는 유지됩니다.");
+    }
+  }
+
   function deleteSelected() {
     const source = current.current;
     if (!source || pending.current || drag.current || !selected.current.length) return;
@@ -432,6 +453,11 @@ function AnnotationSelectionSurface({ displayId, document, onDocumentUpdate }: P
         <button type="button" data-selection-flip="vertical" disabled={busy || !count}
           title="선택 영역 중심을 기준으로 상하 반전"
           className="rounded px-2 py-1 hover:bg-slate-700 disabled:opacity-40" onClick={() => flipSelected("vertical")}>상하 반전</button>
+        <button type="button" data-selection-fill="" disabled={busy || !canFill}
+          title="컨트롤러의 채우기 색상 적용" className="flex items-center gap-1 rounded px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
+          onClick={() => fillSelected(fillColor)}><span aria-hidden="true" className="inline-block size-3 rounded-sm border border-white" style={{ backgroundColor: fillColor }} />채우기 적용</button>
+        <button type="button" data-selection-unfill="" disabled={busy || !canFill}
+          className="rounded px-2 py-1 hover:bg-slate-700 disabled:opacity-40" onClick={() => fillSelected(null)}>채우기 제거</button>
         <button type="button" data-selection-text-edit="" disabled={busy || !canEditText}
           className="rounded px-2 py-1 hover:bg-slate-700 disabled:opacity-40" onClick={() => void editSelectedText()}>텍스트 수정</button>
         <button type="button" data-selection-delete="" disabled={busy || !count}

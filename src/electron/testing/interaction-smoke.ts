@@ -1,4 +1,5 @@
 import { framePoint } from "../../annotation/primitive-frame.js";
+import { verifyShapeFill } from "./fill-smoke.js";
 import { verifySelectionFlip } from "./flip-smoke.js";
 import { verifyExistingTextEditing } from "./text-edit-smoke.js";
 import { verifySelectionRotation } from "./rotation-smoke.js";
@@ -1270,6 +1271,9 @@ export function createSmokeChecks(context: SmokeContext) {
           await clickControllerElement(mainWindow, '[data-annotation-tool="select"]', "selection for text editing");
           await waitFor(() => context.state().tool === "select", 5000, "text selection active");
         },
+      }, primary.id);
+      diagnostics.fillTools = await verifyShapeFill({
+        history: annotationHistory, publishDocument: context.publishDocument, command: shortcutCommand, state: context.state,
       }, primary.id);
     } finally {
       if (!underlay.isDestroyed()) underlay.destroy();

@@ -152,6 +152,8 @@ export function normalizeOverlaySettings(
       "showKeyDisplay",
       DEFAULT_OVERLAY_SETTINGS.showKeyDisplay,
     ),
+    annotationShapeFillEnabled: readBoolean(source, "annotationShapeFillEnabled", DEFAULT_OVERLAY_SETTINGS.annotationShapeFillEnabled),
+    annotationShapeFillColor: readHexColor(source, "annotationShapeFillColor", DEFAULT_OVERLAY_SETTINGS.annotationShapeFillColor),
     annotationPenColor: readHexColor(
       source,
       "annotationPenColor",

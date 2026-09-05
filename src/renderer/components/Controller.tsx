@@ -78,6 +78,8 @@ function fromOverlaySettings(settings: OverlaySettings): Settings {
     keyDisplayTextColor: settings.keyDisplayTextColor,
     keyDisplayPosition: settings.keyDisplayPosition,
     showKeyDisplay: settings.showKeyDisplay,
+    annotationShapeFillEnabled: settings.annotationShapeFillEnabled,
+    annotationShapeFillColor: settings.annotationShapeFillColor,
     annotationPenColor: settings.annotationPenColor,
     annotationHighlighterColor: settings.annotationHighlighterColor,
     annotationPenWidth: settings.annotationPenWidth,
@@ -109,6 +111,8 @@ function toOverlaySettings(settings: Settings): OverlaySettings {
     keyDisplayTextColor: settings.keyDisplayTextColor,
     keyDisplayPosition: settings.keyDisplayPosition,
     showKeyDisplay: settings.showKeyDisplay,
+    annotationShapeFillEnabled: settings.annotationShapeFillEnabled,
+    annotationShapeFillColor: settings.annotationShapeFillColor,
     annotationPenColor: settings.annotationPenColor,
     annotationHighlighterColor: settings.annotationHighlighterColor,
     annotationPenWidth: settings.annotationPenWidth,
@@ -487,13 +491,7 @@ export default function Controller() {
               textDraft={annotationState.textDraft}
               onPrepareText={prepareAnnotationText}
               tool={annotationState.tool}
-              settings={{
-                annotationPenColor: settings.annotationPenColor,
-                annotationHighlighterColor: settings.annotationHighlighterColor,
-                annotationPenWidth: settings.annotationPenWidth,
-                annotationHighlighterWidth: settings.annotationHighlighterWidth,
-                annotationEraserWidth: settings.annotationEraserWidth,
-              }}
+              settings={settings}
               onToolChange={chooseAnnotationTool}
               onCommand={sendAnnotationCommand}
               onSettingChange={setAnnotationPreference}

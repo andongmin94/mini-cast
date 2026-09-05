@@ -34,6 +34,8 @@ export interface StrokeElement extends ElementStyle {
 }
 
 export interface ShapeElement extends ElementStyle {
+  /** Solid interior color for rectangle/ellipse; absent means outline only. */
+  readonly fill?: string;
   readonly tool: ShapeTool;
   /** Line/arrow: two endpoints. Rectangle/ellipse: origin, x end, y end. */
   readonly points: readonly AnnotationPoint[];
@@ -143,7 +145,10 @@ function immutableElement(element: AnnotationElement): AnnotationElement {
     ...common, tool: "text", text: element.text, fontSize: element.fontSize,
     box: Object.freeze({ minX: element.box.minX, minY: element.box.minY, maxX: element.box.maxX, maxY: element.box.maxY }),
   });
-  return Object.freeze({ ...common, tool: element.tool, width: element.width });
+  return Object.freeze({ ...common, tool: element.tool, width: element.width,
+    ...((element.tool === "rectangle" || element.tool === "ellipse") && element.fill !== undefined
+      ? { fill: element.fill } : {}),
+  });
 }
 
 function scaleElement(element: AnnotationElement, scaleX: number, scaleY: number): AnnotationElement {
@@ -224,6 +229,27 @@ export function flipAnnotationElement(element: AnnotationElement, center: Annota
   return immutableElement(flipped);
 }
 
+/** Null removes the fill; only bounded solid RGB colors enter the document. */
+export function isAnnotationFill(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && HEX_COLOR.test(value));
+}
+
+export function isFillableShape(element: AnnotationElement): element is ShapeElement & { tool: "rectangle" | "ellipse" } {
+  return element.tool === "rectangle" || element.tool === "ellipse";
+}
+
+/** A style edit retains the original geometry, stacking order and stroke. */
+export function fillAnnotationElement(element: AnnotationElement, fill: string | null): AnnotationElement {
+  if (!isAnnotationFill(fill) || !isAnnotationElement(element) || !isFillableShape(element))
+    throw new AnnotationError("invalid-element");
+  const color = fill === null ? null : fill.toUpperCase();
+  if ((element.fill?.toUpperCase() ?? null) === color) return element;
+  const result = { ...element };
+  if (color === null) delete result.fill;
+  else result.fill = color;
+  return immutableElement(result);
+}
+
 /** Translation preserves IDs and styles; invalid coordinates are rejected before publication. */
 export function translateAnnotationElement(element: AnnotationElement, dx: number, dy: number): AnnotationElement {
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new AnnotationError("invalid-element");
@@ -299,6 +325,8 @@ export function isAnnotationElement(value: unknown): value is AnnotationElement 
   if (!Array.isArray(value.points) || !value.points.length ||
     value.points.length > MAX_ANNOTATION_POINTS_PER_STROKE || !value.points.every(isFinitePoint)) return false;
   if (typeof value.color !== "string" || !HEX_COLOR.test(value.color)) return false;
+  if ("fill" in value && ((value.tool !== "rectangle" && value.tool !== "ellipse") ||
+      typeof value.fill !== "string" || !HEX_COLOR.test(value.fill))) return false;
   if (value.tool === "text") {
     const draft = readAnnotationTextDraft(value);
     if (!draft || draft.text !== value.text || value.points.length !== 3 || value.opacity !== 1 || "scaleX" in value || "scaleY" in value) return false;
@@ -516,6 +544,12 @@ export class AnnotationHistory {
     if (!isFinitePoint(center) || !isFlipAxis(axis)) throw new AnnotationError("invalid-element");
     return this.transformElements(displayId, ids, false,
       element => flipAnnotationElement(element, center, axis));
+  }
+
+  fillElements(displayId: number, ids: Iterable<string>, fill: string | null) {
+    if (!isAnnotationFill(fill)) throw new AnnotationError("invalid-element");
+    return this.transformElements(displayId, ids, false,
+      element => fillAnnotationElement(element, fill));
   }
 
   editText(displayId: number, id: string, value: unknown) {

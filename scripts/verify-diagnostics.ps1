@@ -30,6 +30,9 @@ foreach ($file in $files) {
   foreach ($name in @('horizontal','vertical','groupShift','undoRedo','pixels','mirroredText','delete','reload','staleRevision','emptyDisabled')) {
     if (-not $result.diagnostics.flipTools.$name) { throw "Missing flip verification: $name" }
   }
+  foreach ($name in @('rectangle','ellipse','preview','settingsIsolation','interiorSelection','groupFill','unfill','undoRedo','noOp','interiorErase','reload','staleRevision','emptyDisabled')) {
+    if (-not $result.diagnostics.fillTools.$name) { throw "Missing fill verification: $name" }
+  }
   Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
   Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
 }

@@ -28,16 +28,22 @@ export function frameCorners(points: readonly AnnotationPoint[], box: TextInkBox
 }
 
 /** Convex affine rectangles, including rotated text layout areas. */
-export function pointInFrame(point: AnnotationPoint, points: readonly AnnotationPoint[], box: TextInkBox): boolean {
+export function frameCoordinates(point: AnnotationPoint, points: readonly AnnotationPoint[]): AnnotationPoint | null {
+  if (points.length !== 3) return null;
   const [origin, xEnd, yEnd] = points;
   const a = xEnd.x - origin.x, b = xEnd.y - origin.y;
   const c = yEnd.x - origin.x, d = yEnd.y - origin.y;
   const determinant = a * d - b * c;
-  if (!Number.isFinite(determinant) || determinant === 0) return false;
+  if (!Number.isFinite(determinant) || determinant === 0) return null;
   const dx = point.x - origin.x, dy = point.y - origin.y;
   const x = (d * dx - c * dy) / determinant;
   const y = (a * dy - b * dx) / determinant;
-  return x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY;
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+export function pointInFrame(point: AnnotationPoint, points: readonly AnnotationPoint[], box: TextInkBox): boolean {
+  const local = frameCoordinates(point, points);
+  return local !== null && local.x >= box.minX && local.x <= box.maxX && local.y >= box.minY && local.y <= box.maxY;
 }
 
 export function validTextFrame(points: readonly AnnotationPoint[], box: TextInkBox, coordinateLimit: number): boolean {

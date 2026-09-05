@@ -1,5 +1,5 @@
 import type { AnnotationElement, AnnotationPoint, InkElement, ShapeTool } from "./history.js";
-import { frameCorners, framePoint } from "./primitive-frame.js";
+import { frameCorners, framePoint, frameCoordinates, pointInFrame } from "./primitive-frame.js";
 
 export interface InkBounds { minX: number; minY: number; maxX: number; maxY: number }
 export const ELLIPSE_FLATTENING_ERROR = 0.125;
@@ -56,6 +56,16 @@ export function elementInkPaths(element: InkElement): readonly (readonly Annotat
 export function textOutline(element: Extract<AnnotationElement, { tool: "text" }>): readonly AnnotationPoint[] {
   const corners = frameCorners(element.points, element.box);
   return [...corners, corners[0]];
+}
+
+/** Exact interior hit in local coordinates; outline-only shapes never hit inside. */
+export function pointInElementFill(point: AnnotationPoint, element: AnnotationElement): boolean {
+  if (element.tool === "text") return pointInFrame(point, element.points, element.box);
+  if ((element.tool !== "rectangle" && element.tool !== "ellipse") || element.fill === undefined) return false;
+  const local = frameCoordinates(point, element.points);
+  if (!local) return false;
+  if (element.tool === "rectangle") return local.x >= 0 && local.x <= 1 && local.y >= 0 && local.y <= 1;
+  return (local.x - 0.5) ** 2 + (local.y - 0.5) ** 2 <= 0.25;
 }
 
 const boundsCache = new WeakMap<AnnotationElement, InkBounds>();

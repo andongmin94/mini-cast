@@ -598,7 +598,9 @@ function AnnotationSurface({
       return;
     }
     if (isShapeTool(tool)) {
-      activeObjectRef.current = { id: crypto.randomUUID(), tool, points: shapeControlPoints(tool, point, point), color: settings.annotationPenColor, width: settings.annotationPenWidth, opacity: 1 };
+      activeObjectRef.current = { id: crypto.randomUUID(), tool, points: shapeControlPoints(tool, point, point),
+        ...((tool === "rectangle" || tool === "ellipse") && settings.annotationShapeFillEnabled
+          ? { fill: settings.annotationShapeFillColor } : {}), color: settings.annotationPenColor, width: settings.annotationPenWidth, opacity: 1 };
       clearGesture();
       return;
     }
