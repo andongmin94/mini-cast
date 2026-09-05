@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://andongmin.com/mini-cast/logo.svg" alt="MiniCast" height="160" />
+  <img src="https://bio.andongmin.com/mini-cast/logo.svg" alt="MiniCast" height="160" />
 </div>
 
 # MiniCast
