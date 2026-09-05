@@ -224,7 +224,16 @@ export class AnnotationReplica {
             /* The awaiting caller owns the visible failure. */
           });
       }
-      await this.recovery;
+      try {
+        await this.recovery;
+      } catch (error) {
+        // A late failure belongs to its original generation. A newer pushed
+        // snapshot can also have completed the recovery before this reply fails.
+        if (generation !== this.generation) return null;
+        if (this.current && this.current.revision >= requiredRevision)
+          return this.current;
+        throw error;
+      }
       if (generation !== this.generation) return null;
       if (this.current && this.current.revision >= requiredRevision)
         return this.current;
