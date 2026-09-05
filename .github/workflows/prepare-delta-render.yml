@@ -48,7 +48,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add src tests package.json package-lock.json README.md .github/workflows/verify.yml
+          git add src tests package.json package-lock.json README.md
           git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
