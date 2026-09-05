@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -9,7 +10,11 @@ import {
 
 import { annotationFailureMessage } from "@/annotation/errors";
 import { shouldAdoptAnnotationDocument } from "@/annotation/document-order";
-import { eraserSweepHitsStroke, pointHitsStroke } from "@/annotation/geometry";
+import {
+  prepareEraserStroke,
+  eraserSweepHitsPreparedStroke,
+  type PreparedEraserStroke,
+} from "@/annotation/eraser-index";
 import { MAX_ANNOTATION_POINTS_PER_STROKE } from "@/annotation/history";
 import type {
   AnnotationDocumentSnapshot,
@@ -160,7 +165,7 @@ function strokeStyle(tool: StrokeTool, settings: OverlaySettings) {
       };
 }
 
-export default function AnnotationSurface({
+function AnnotationSurface({
   tool,
   settings,
   displayId,
@@ -178,7 +183,8 @@ export default function AnnotationSurface({
   const activePointerRef = useRef<number | null>(null);
   const activeGestureIdRef = useRef<string | null>(null);
   const activeStrokeRef = useRef<ActiveStroke | null>(null);
-  const eraserBaseRef = useRef<readonly AnnotationStroke[] | null>(null);
+  const eraserBaseRef = useRef<readonly PreparedEraserStroke[] | null>(null);
+  const eraserFrameRef = useRef<number | null>(null);
   const activeErasedIdsRef = useRef<Set<string>>(new Set());
   const lastEraserPointRef = useRef<AnnotationPoint | null>(null);
   const eraserRadiusRef = useRef(settings.annotationEraserWidth / 2);
@@ -191,6 +197,12 @@ export default function AnnotationSurface({
 
   const visibleStrokes = useCallback(() => {
     const committed = documentRef.current?.strokes ?? [];
+    if (
+      !pendingStrokesRef.current.size &&
+      !pendingRemovalIdsRef.current.size &&
+      !activeErasedIdsRef.current.size
+    )
+      return committed;
     const committedIds = new Set(committed.map((stroke) => stroke.id));
     const pending = [...pendingStrokesRef.current.values()].filter(
       (stroke) => !committedIds.has(stroke.id),
@@ -238,6 +250,8 @@ export default function AnnotationSurface({
 
   const reconcilePendingWithDocument = useCallback(
     (next: AnnotationDocumentSnapshot) => {
+      if (!pendingStrokesRef.current.size && !pendingRemovalIdsRef.current.size)
+        return;
       const committedIds = new Set(next.strokes.map((stroke) => stroke.id));
       pendingStrokesRef.current.forEach((_stroke, id) => {
         if (committedIds.has(id)) pendingStrokesRef.current.delete(id);
@@ -270,12 +284,19 @@ export default function AnnotationSurface({
     [onAuthoritativeDocument, reconcilePendingWithDocument],
   );
 
+  const cancelEraserPaint = useCallback(() => {
+    if (eraserFrameRef.current !== null)
+      cancelAnimationFrame(eraserFrameRef.current);
+    eraserFrameRef.current = null;
+  }, []);
+
   const clearGesture = useCallback(() => {
     clearCanvas(gestureCanvasRef.current);
   }, []);
 
   const finishGestureState = useCallback(
     (notifyMain: boolean) => {
+      cancelEraserPaint();
       const gestureId = activeGestureIdRef.current;
       const pointerId = activePointerRef.current;
       const gestureCanvas = gestureCanvasRef.current;
@@ -298,8 +319,10 @@ export default function AnnotationSurface({
         miniCast.endAnnotationGesture(gestureId);
       }
     },
-    [clearGesture],
+    [cancelEraserPaint, clearGesture],
   );
+
+  useEffect(() => () => finishGestureState(true), [finishGestureState]);
 
   const cancelGesture = useCallback(
     (gestureId?: string) => {
@@ -395,24 +418,29 @@ export default function AnnotationSurface({
     let changed = false;
     points.forEach((point) => {
       const previous = lastEraserPointRef.current;
-      base.forEach((stroke) => {
-        if (activeErasedIdsRef.current.has(stroke.id)) return;
-        const hit = previous
-          ? eraserSweepHitsStroke(
-              previous,
-              point,
-              stroke,
-              eraserRadiusRef.current,
-            )
-          : pointHitsStroke(point, stroke, eraserRadiusRef.current);
-        if (hit) {
-          activeErasedIdsRef.current.add(stroke.id);
+      base.forEach((prepared) => {
+        if (activeErasedIdsRef.current.has(prepared.stroke.id)) return;
+        if (
+          eraserSweepHitsPreparedStroke(
+            previous ?? point,
+            point,
+            prepared,
+            eraserRadiusRef.current,
+          )
+        ) {
+          activeErasedIdsRef.current.add(prepared.stroke.id);
           changed = true;
         }
       });
       lastEraserPointRef.current = point;
     });
-    if (changed) renderCommitted();
+    if (changed && eraserFrameRef.current === null) {
+      const gestureId = activeGestureIdRef.current;
+      eraserFrameRef.current = requestAnimationFrame(() => {
+        eraserFrameRef.current = null;
+        if (gestureId === activeGestureIdRef.current) renderCommitted();
+      });
+    }
   }
 
   function commitGesture() {
@@ -512,7 +540,7 @@ export default function AnnotationSurface({
 
     const point = pointerPoints(event)[0];
     if (tool === "eraser") {
-      eraserBaseRef.current = visibleStrokes();
+      eraserBaseRef.current = visibleStrokes().map(prepareEraserStroke);
       activeErasedIdsRef.current = new Set();
       lastEraserPointRef.current = null;
       eraserRadiusRef.current = settings.annotationEraserWidth / 2;
@@ -599,3 +627,6 @@ export default function AnnotationSurface({
     </>
   );
 }
+
+// Cursor position and keyboard display updates do not change annotation props.
+export default memo(AnnotationSurface);

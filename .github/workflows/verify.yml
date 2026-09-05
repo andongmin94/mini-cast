@@ -56,6 +56,20 @@ jobs:
         shell: pwsh
         run: ./scripts/verify-windows.ps1
 
+      - name: 판서 코어 성능 및 취소 진단
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem verification-logs -File -Filter '*interaction-sentinel.json')
+          if ($files.Count -ne 2) { throw "Expected both interaction diagnostics, found $($files.Count)." }
+          foreach ($file in $files) {
+            $result = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
+            if (-not $result.success -or -not $result.diagnostics.heldEraserUndo) {
+              throw "Missing successful held-eraser cancellation check: $($file.Name)"
+            }
+            Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
+            Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
+          }
+
       - name: 산출물 SHA-256 생성
         shell: pwsh
         run: |

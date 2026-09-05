@@ -1,31 +1,31 @@
 import { AnnotationError, type AnnotationFailureReason } from "./errors.js";
 
 export interface AnnotationPoint {
-  x: number;
-  y: number;
+  readonly x: number;
+  readonly y: number;
 }
 
 export type StrokeTool = "pen" | "highlighter";
 
 export interface AnnotationStroke {
-  id: string;
-  tool: StrokeTool;
-  points: readonly AnnotationPoint[];
-  color: string;
-  width: number;
-  opacity: number;
+  readonly id: string;
+  readonly tool: StrokeTool;
+  readonly points: readonly AnnotationPoint[];
+  readonly color: string;
+  readonly width: number;
+  readonly opacity: number;
 }
 
 export interface AnnotationViewport {
-  width: number;
-  height: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 export interface AnnotationDocumentSnapshot {
-  displayId: number;
-  revision: number;
-  viewport: AnnotationViewport | null;
-  strokes: readonly AnnotationStroke[];
+  readonly displayId: number;
+  readonly revision: number;
+  readonly viewport: AnnotationViewport | null;
+  readonly strokes: readonly AnnotationStroke[];
 }
 
 export type AnnotationMutationResult =
@@ -90,21 +90,18 @@ function isFinitePoint(value: unknown): value is AnnotationPoint {
   );
 }
 
-function clonePoint(point: AnnotationPoint): AnnotationPoint {
-  return { x: point.x, y: point.y };
-}
-
-export function cloneAnnotationStroke(
-  stroke: AnnotationStroke,
-): AnnotationStroke {
-  return {
+/** Copy untrusted input exactly once, then share only deeply immutable geometry. */
+function immutableStroke(stroke: AnnotationStroke): AnnotationStroke {
+  return Object.freeze({
     id: stroke.id,
     tool: stroke.tool,
-    points: stroke.points.map(clonePoint),
+    points: Object.freeze(
+      stroke.points.map(({ x, y }) => Object.freeze({ x, y })),
+    ),
     color: stroke.color,
     width: stroke.width,
     opacity: stroke.opacity,
-  };
+  });
 }
 
 function scaleStroke(
@@ -113,24 +110,28 @@ function scaleStroke(
   scaleY: number,
 ): AnnotationStroke {
   const widthScale = Math.sqrt(Math.abs(scaleX * scaleY));
-  return {
-    ...cloneAnnotationStroke(stroke),
-    points: stroke.points.map((point) => ({
-      x: point.x * scaleX,
-      y: point.y * scaleY,
-    })),
+  return Object.freeze({
+    ...stroke,
+    points: Object.freeze(
+      stroke.points.map((point) =>
+        Object.freeze({
+          x: point.x * scaleX,
+          y: point.y * scaleY,
+        }),
+      ),
+    ),
     width: Math.min(128, Math.max(0.5, stroke.width * widthScale)),
-  };
+  });
 }
 
 function cloneHistoryEntry(entry: HistoryEntry): HistoryEntry {
   if (entry.kind === "add") {
-    return { ...entry, stroke: cloneAnnotationStroke(entry.stroke) };
+    return { ...entry };
   }
   return {
     ...entry,
     strokes: entry.strokes.map(({ stroke, index }) => ({
-      stroke: cloneAnnotationStroke(stroke),
+      stroke,
       index,
     })),
   };
@@ -224,6 +225,7 @@ export function readAnnotationStrokeIds(value: unknown) {
 export class AnnotationHistory {
   private documents = new Map<number, DocumentState>();
   private revisions = new Map<number, number>();
+  private snapshots = new Map<number, AnnotationDocumentSnapshot>();
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
 
@@ -242,12 +244,14 @@ export class AnnotationHistory {
   }
 
   restoreFrom(source: AnnotationHistory) {
+    if (source === this) return;
+    this.snapshots.clear();
     this.documents = new Map(
       [...source.documents].map(([displayId, document]) => [
         displayId,
         {
           viewport: document.viewport ? { ...document.viewport } : null,
-          strokes: document.strokes.map(cloneAnnotationStroke),
+          strokes: document.strokes.slice(),
           strokeIds: new Set(document.strokeIds),
           pointCount: document.pointCount,
         },
@@ -258,14 +262,21 @@ export class AnnotationHistory {
     this.redoStack = source.redoStack.map(cloneHistoryEntry);
   }
 
+  /** Stable for this revision. Never mutate a returned snapshot or its geometry. */
   getSnapshot(displayId: number): AnnotationDocumentSnapshot {
+    const cached = this.snapshots.get(displayId);
+    if (cached) return cached;
     const document = this.document(displayId);
-    return {
+    const snapshot: AnnotationDocumentSnapshot = Object.freeze({
       displayId,
       revision: this.revisions.get(displayId) ?? 0,
-      viewport: document.viewport ? { ...document.viewport } : null,
-      strokes: document.strokes.map(cloneAnnotationStroke),
-    };
+      viewport: document.viewport
+        ? Object.freeze({ ...document.viewport })
+        : null,
+      strokes: Object.freeze(document.strokes.slice()),
+    });
+    this.snapshots.set(displayId, snapshot);
+    return snapshot;
   }
 
   retainDisplays(displayIds: Iterable<number>) {
@@ -276,6 +287,7 @@ export class AnnotationHistory {
       if (retained.has(displayId)) continue;
       this.documents.delete(displayId);
       this.revisions.delete(displayId);
+      this.snapshots.delete(displayId);
       removedDocuments += 1;
     }
     this.undoStack = this.undoStack.filter((entry) =>
@@ -336,7 +348,7 @@ export class AnnotationHistory {
       throw new AnnotationError("point-limit");
     }
 
-    const stored = cloneAnnotationStroke(stroke);
+    const stored = immutableStroke(stroke);
     const entry: AddHistoryEntry = {
       kind: "add",
       displayId,
@@ -355,7 +367,7 @@ export class AnnotationHistory {
     const removed: IndexedStroke[] = [];
     this.document(displayId).strokes.forEach((stroke, index) => {
       if (!idSet.has(stroke.id)) return;
-      removed.push({ stroke: cloneAnnotationStroke(stroke), index });
+      removed.push({ stroke, index });
     });
     if (!removed.length) return null;
 
@@ -429,6 +441,7 @@ export class AnnotationHistory {
   }
 
   private touch(displayId: number) {
+    this.snapshots.delete(displayId);
     this.revisions.set(displayId, (this.revisions.get(displayId) ?? 0) + 1);
   }
 
@@ -451,7 +464,7 @@ export class AnnotationHistory {
       document.strokes.splice(
         Math.min(entry.index, document.strokes.length),
         0,
-        cloneAnnotationStroke(entry.stroke),
+        entry.stroke,
       );
       document.strokeIds.add(entry.stroke.id);
       document.pointCount += entry.stroke.points.length;
@@ -518,7 +531,7 @@ export class AnnotationHistory {
       document.strokes.splice(
         Math.min(index, document.strokes.length),
         0,
-        cloneAnnotationStroke(stroke),
+        stroke,
       );
       document.strokeIds.add(stroke.id);
       document.pointCount += stroke.points.length;

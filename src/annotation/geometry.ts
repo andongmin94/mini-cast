@@ -1,9 +1,6 @@
 import type { AnnotationPoint, AnnotationStroke } from "./history.js";
 
-export function distanceSquared(
-  left: AnnotationPoint,
-  right: AnnotationPoint,
-) {
+export function distanceSquared(left: AnnotationPoint, right: AnnotationPoint) {
   const dx = left.x - right.x;
   const dy = left.y - right.y;
   return dx * dx + dy * dy;
@@ -20,8 +17,7 @@ function pointToSegmentDistanceSquared(
   if (lengthSquared === 0) return distanceSquared(point, start);
 
   const projection =
-    ((point.x - start.x) * segmentX +
-      (point.y - start.y) * segmentY) /
+    ((point.x - start.x) * segmentX + (point.y - start.y) * segmentY) /
     lengthSquared;
   const clamped = Math.max(0, Math.min(1, projection));
   return distanceSquared(point, {
@@ -80,12 +76,11 @@ function segmentsIntersect(
       onSegment(secondEnd, firstStart, firstEnd)) ||
     (Math.abs(third) <= epsilon &&
       onSegment(firstStart, secondStart, secondEnd)) ||
-    (Math.abs(fourth) <= epsilon &&
-      onSegment(firstEnd, secondStart, secondEnd))
+    (Math.abs(fourth) <= epsilon && onSegment(firstEnd, secondStart, secondEnd))
   );
 }
 
-function segmentToSegmentDistanceSquared(
+export function segmentToSegmentDistanceSquared(
   firstStart: AnnotationPoint,
   firstEnd: AnnotationPoint,
   secondStart: AnnotationPoint,

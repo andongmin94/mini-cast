@@ -7,6 +7,11 @@ import {
   rmdirSync,
 } from "node:fs";
 import { performance } from "node:perf_hooks";
+import {
+  prepareEraserStroke,
+  eraserSweepHitsPreparedStroke,
+} from "../annotation/eraser-index.js";
+import { eraserSweepHitsStroke } from "../annotation/geometry.js";
 import type { AnnotationHistory } from "../annotation/history.js";
 import type {
   AnnotationCommand,
@@ -167,6 +172,46 @@ export function createSmokeChecks(context: SmokeContext) {
     const snapshotStart = performance.now();
     const snapshot = annotationHistory.getSnapshot(displayId);
     const snapshotMs = performance.now() - snapshotStart;
+    const cacheStart = performance.now();
+    for (let iteration = 0; iteration < 1000; iteration += 1) {
+      if (annotationHistory.getSnapshot(displayId) !== snapshot)
+        throw new Error("Stable revision was unnecessarily cloned");
+    }
+    const cachedSnapshotReads1000Ms = performance.now() - cacheStart;
+    const prepareStart = performance.now();
+    const prepared = snapshot.strokes.map(prepareEraserStroke);
+    const eraserPrepareMs = performance.now() - prepareStart;
+    const sweepStart = { x: 350, y: 10 };
+    const sweepEnd = { x: 450, y: 10 };
+    const eraserQueryStats = {
+      strokeBoundsTests: 0,
+      blockBoundsTests: 0,
+      segmentTests: 0,
+    };
+    const indexedStart = performance.now();
+    const indexedIds = prepared
+      .filter((item) =>
+        eraserSweepHitsPreparedStroke(
+          sweepStart,
+          sweepEnd,
+          item,
+          4,
+          eraserQueryStats,
+        ),
+      )
+      .map((item) => item.stroke.id);
+    const indexedEraserMs = performance.now() - indexedStart;
+    const referenceStart = performance.now();
+    const referenceIds = snapshot.strokes
+      .filter((item) => eraserSweepHitsStroke(sweepStart, sweepEnd, item, 4))
+      .map((item) => item.id);
+    const exhaustiveEraserMs = performance.now() - referenceStart;
+    if (JSON.stringify(indexedIds) !== JSON.stringify(referenceIds))
+      throw new Error("Indexed eraser differs from exhaustive reference");
+    if (eraserQueryStats.segmentTests >= 12800)
+      throw new Error(
+        "Local eraser query traversed too much unrelated geometry",
+      );
     const serializeStart = performance.now();
     const bytes = Buffer.byteLength(JSON.stringify(snapshot));
     const serializeMs = performance.now() - serializeStart;
@@ -214,15 +259,46 @@ export function createSmokeChecks(context: SmokeContext) {
       10_000,
       "native Undo on the large document",
     );
+    await selectTool("eraser");
+    await waitForOverlayInput(displayId, true);
+    const eraseStart = performance.now();
+    await injectWindowsDrag(start.x, start.y, end.x, end.y);
+    await waitFor(
+      () =>
+        annotationHistory.getSnapshot(displayId).strokes.length <
+        snapshot.strokes.length,
+      10_000,
+      "native indexed erasing on the 128k-point document",
+    );
+    const nativeEraseIncludingInjectionMs = performance.now() - eraseStart;
+    await shortcutCommand("undo");
+    await waitFor(
+      () =>
+        annotationHistory.getSnapshot(displayId).strokes.length ===
+        snapshot.strokes.length,
+      10_000,
+      "Undo restores every stroke removed by the indexed eraser",
+    );
+    if (
+      JSON.stringify(annotationHistory.getSnapshot(displayId).strokes) !==
+      JSON.stringify(snapshot.strokes)
+    )
+      throw new Error("Large eraser Undo changed the document geometry");
     const metrics = {
       fixtureStrokes: 1000,
       fixturePoints: 128000,
       snapshotBytes: bytes,
       fixtureMs,
       snapshotMs,
+      cachedSnapshotReads1000Ms,
+      eraserPrepareMs,
+      indexedEraserMs,
+      exhaustiveEraserMs,
+      eraserQueryStats,
       serializeMs,
       publishAndPaintMs,
       nativeDragIncludingInjectionMs,
+      nativeEraseIncludingInjectionMs,
       mainMemory: process.memoryUsage(),
       processes: app
         .getAppMetrics()
@@ -755,6 +831,41 @@ export function createSmokeChecks(context: SmokeContext) {
       );
 
       const beforeCancellation = annotationHistory.getSnapshot(primary.id);
+      await selectTool("eraser");
+      await waitForOverlayInput(primary.id, true);
+      try {
+        await injectWindowsMouseButton(start.x, start.y, true);
+        await injectWindowsMouseMove(end.x, end.y);
+        await waitForCommittedCanvasInk(
+          primary.id,
+          false,
+          "held eraser preview removes the pen pixels",
+        );
+        await shortcutCommand("undo");
+        await waitFor(
+          async () =>
+            !(await rebuiltOverlay.webContents.executeJavaScript(
+              "Boolean(document.querySelector('[data-active-gesture]'))",
+            )),
+          5_000,
+          "Ctrl+Z cancels the held eraser gesture",
+        );
+        await waitForCommittedCanvasInk(
+          primary.id,
+          true,
+          "cancelled eraser preview restores the pen pixels",
+        );
+        if (
+          annotationHistory.getSnapshot(primary.id).revision !==
+          beforeCancellation.revision
+        ) {
+          throw new Error("Cancelling the eraser changed committed history");
+        }
+      } finally {
+        await injectWindowsMouseButton(end.x, end.y, false);
+      }
+      diagnostics.heldEraserUndo = true;
+
       await selectTool("pen");
       await waitForOverlayInput(primary.id, true);
       try {
