@@ -103,10 +103,8 @@ Start-Sleep -Milliseconds 50
 }
 
 export function injectWindowsDrag(
-  startX: number,
-  startY: number,
-  endX: number,
-  endY: number,
+  startX: number, startY: number, endX: number, endY: number,
+  modifiers: readonly "Shift"[] = [],
 ) {
   const steps = 12;
   const movements = Array.from({ length: steps }, (_, index) => {
@@ -115,14 +113,22 @@ export function injectWindowsDrag(
     const y = Math.round(startY + (endY - startY) * progress);
     return `[MiniCastMouse]::SetCursorPos(${x}, ${y}) | Out-Null\nStart-Sleep -Milliseconds 20`;
   }).join("\n");
-  const script = `${MOUSE_NATIVE_DECLARATION}
+  const keys = modifiers.map(key => shortcutVirtualKeys(key)[0]);
+  const press = keys.map(key => `[MiniCastKeyboard]::Key(${key}, $false)`).join("\n");
+  const release = [...keys].reverse().map(key => `[MiniCastKeyboard]::Key(${key}, $true)`).join("\n");
+  return runPowerShell(`${MOUSE_NATIVE_DECLARATION}
+${keys.length ? KEY_NATIVE_DECLARATION : ""}
+try {
+${press}
 [MiniCastMouse]::SetCursorPos(${Math.round(startX)}, ${Math.round(startY)}) | Out-Null
 Start-Sleep -Milliseconds 100
 [MiniCastMouse]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
 ${movements}
+} finally {
 [MiniCastMouse]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
-`;
-  return runPowerShell(script);
+${release}
+}
+`);
 }
 
 export function shortcutVirtualKeys(accelerator: string): number[] {

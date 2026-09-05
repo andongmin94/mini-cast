@@ -82,3 +82,5 @@ Windows 결과물은 `output/`에 생성됩니다. 현재 배포 대상은 Windo
 작업 브랜치는 `main` 하나만 사용합니다. Actions 검증은 자동 실행하지 않으며, 필요한 시점에 `Verify`를 직접 실행합니다.
 
 도형의 Shift 보정과 텍스트 배치 방법은 [도형·텍스트 가이드](docs/ANNOTATION-TOOLS.md)를 참고합니다.
+
+선택한 객체는 네 모서리 핸들로 크기를 조절합니다. Shift로 비율을 유지하며 그룹 조절도 한 번에 실행취소합니다. 자세한 동작은 [판서 도구 가이드](docs/ANNOTATION-TOOLS.md)를 참고합니다.

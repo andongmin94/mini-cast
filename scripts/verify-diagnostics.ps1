@@ -18,6 +18,9 @@ foreach ($file in $files) {
   foreach ($name in @('topmost','move','undoRedo','delete','heldUndo','staleRevision','reload')) {
     if (-not $result.diagnostics.selectionTools.$name) { throw "Missing selection verification: $name" }
   }
+  foreach ($name in @('handles','noOp','resize','undoRedo','groupShift','pixels','heldUndo','staleRevision','activeReload','heldEscape')) {
+    if (-not $result.diagnostics.resizeTools.$name) { throw "Missing resize verification: $name" }
+  }
   Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
   Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
 }

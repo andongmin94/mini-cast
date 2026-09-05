@@ -1,3 +1,4 @@
+import { verifySelectionResize } from "./resize-smoke.js";
 import { verifyDirtyCanvasRendering } from "./rendering-smoke.js";
 import { app, BrowserWindow, globalShortcut, screen, type WebContents } from "electron";
 import {
@@ -1238,6 +1239,10 @@ export function createSmokeChecks(context: SmokeContext) {
       );
       await verifyShapeAndTextTools(primary.id, start, end);
       await verifySelectionTools(primary.id, start, end);
+      diagnostics.resizeTools = await verifySelectionResize({
+        history: annotationHistory, publishDocument: context.publishDocument,
+        command: shortcutCommand, state: context.state,
+      }, primary.id);
     } finally {
       if (!underlay.isDestroyed()) underlay.destroy();
       await selectTool("pass-through");

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 /** Execute the compiled production planner/painter inside Chromium, not a mocked Canvas. */
 export async function verifyDirtyCanvasRendering(contents: WebContents) {
   await contents.executeJavaScript(`document.fonts.load('400 28px "Pretendard"', '한글 ABC').then(() => true)`);
-  const source = ["text", "shape-geometry", "render-plan", "canvas-renderer"]
+  const source = ["errors", "text", "history", "shape-geometry", "render-plan", "canvas-renderer"]
     .map((name) =>
       readFileSync(new URL(`../../annotation/${name}.js`, import.meta.url), "utf8")
         .replace(/^import .* from ["'][^"']+["'];?\r?\n/gm, "")
@@ -78,6 +78,20 @@ export async function verifyDirtyCanvasRendering(contents: WebContents) {
             points: element.points.map(point => ({ x: point.x + 17.25, y: point.y - 11.5 })) } : element);
           compare('move-' + moved.tool);
           elements = saved; compare('undo-move-' + moved.tool);
+        }
+        // Exercise the actual resize helper, including text overhang, alpha and
+        // same-ID dirty invalidation at five backing-store ratios.
+        for (const item of [...shapeSet, textElement, bottom, top]) {
+          for (const [sx, sy] of [[1.3, 0.7], [0.6, 1.4], [1.25, 1.25]]) {
+            const saved = elements;
+            elements = elements.map(element => element.id === item.id
+              ? resizeAnnotationElement(element, { x: 30.25, y: 20.75 }, sx, sy) : element);
+            compare('resize-' + item.tool + '-' + sx + '-' + sy);
+            const resized = elements;
+            elements = saved; compare('undo-resize-' + item.tool);
+            elements = resized; compare('redo-resize-' + item.tool);
+            elements = saved; compare('restore-resize-' + item.tool);
+          }
         }
         elements = []; compare('mixed-clear');
         for (let i = 0; i < 80; i++) {

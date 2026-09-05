@@ -3,12 +3,14 @@ import {
   MAX_ANNOTATION_COORDINATE,
   readAnnotationElementIds,
   translateAnnotationElement,
+  resizeAnnotationElement,
   type AnnotationHistory,
   type AnnotationElement,
   type AnnotationPoint,
 } from "./history.js";
 import { pointHitsStroke } from "./geometry.js";
 import { elementInkBounds, type InkBounds } from "./shape-geometry.js";
+import { isResizeHandle, selectionResizeTransform, type ResizeHandle } from "./resize.js";
 
 interface SelectionEditBase {
   readonly revision: number;
@@ -17,6 +19,8 @@ interface SelectionEditBase {
 
 export type AnnotationSelectionEdit =
   | (SelectionEditBase & { readonly kind: "move"; readonly dx: number; readonly dy: number })
+  | (SelectionEditBase & { readonly kind: "resize"; readonly handle: ResizeHandle;
+      readonly dx: number; readonly dy: number; readonly lockAspect: boolean })
   | (SelectionEditBase & { readonly kind: "delete" });
 
 /** Validate the complete edit before touching the document or its history. */
@@ -27,10 +31,13 @@ export function readAnnotationSelectionEdit(value: unknown): AnnotationSelection
   const ids = readAnnotationElementIds(data.ids);
   if (!ids?.length || ids.length !== (data.ids as unknown[]).length) return null;
   if (data.kind === "delete") return { kind: "delete", revision: data.revision, ids };
-  if (data.kind !== "move" || typeof data.dx !== "number" || typeof data.dy !== "number" ||
+  if ((data.kind !== "move" && data.kind !== "resize") || typeof data.dx !== "number" || typeof data.dy !== "number" ||
       !Number.isFinite(data.dx) || !Number.isFinite(data.dy) ||
       Math.abs(data.dx) > 2 * MAX_ANNOTATION_COORDINATE || Math.abs(data.dy) > 2 * MAX_ANNOTATION_COORDINATE) return null;
-  return { kind: "move", revision: data.revision, ids, dx: data.dx, dy: data.dy };
+  if (data.kind === "move") return { kind: "move", revision: data.revision, ids, dx: data.dx, dy: data.dy };
+  if (!isResizeHandle(data.handle) || typeof data.lockAspect !== "boolean") return null;
+  return { kind: "resize", revision: data.revision, ids, handle: data.handle,
+    dx: data.dx, dy: data.dy, lockAspect: data.lockAspect };
 }
 
 /** Optimistic concurrency protects an edit from a concurrent Undo or display reset. */
@@ -41,9 +48,13 @@ export function applyAnnotationSelectionEdit(history: AnnotationHistory, display
   if (document.revision !== edit.revision) throw new AnnotationError("stale-document");
   const present = new Set(document.elements.map(element => element.id));
   if (edit.ids.some(id => !present.has(id))) throw new AnnotationError("stale-document");
-  return edit.kind === "delete"
-    ? history.removeElements(displayId, edit.ids)
-    : history.translateElements(displayId, edit.ids, edit.dx, edit.dy);
+  if (edit.kind === "delete") return history.removeElements(displayId, edit.ids);
+  if (edit.kind === "move") return history.translateElements(displayId, edit.ids, edit.dx, edit.dy);
+  // Never trust a renderer-supplied pivot or bounding box.
+  const bounds = annotationSelectionBounds(document.elements, new Set(edit.ids));
+  if (!bounds) throw new AnnotationError("stale-document");
+  const transform = selectionResizeTransform(bounds, edit.handle, edit.dx, edit.dy, edit.lockAspect);
+  return history.resizeElements(displayId, edit.ids, transform.anchor, transform.scaleX, transform.scaleY);
 }
 
 /** Match visible ink, not an empty shape interior, and prefer the topmost object. */
@@ -92,4 +103,17 @@ export function translateSelectionElements(
 ): readonly AnnotationElement[] {
   if (dx === 0 && dy === 0) return elements;
   return elements.map(element => selected.has(element.id) ? translateAnnotationElement(element, dx, dy) : element);
+}
+
+/** Always transform the pointer-down document, never an already rounded preview. */
+export function resizeSelectionElements(
+  elements: readonly AnnotationElement[], selected: ReadonlySet<string>,
+  handle: ResizeHandle, dx: number, dy: number, lockAspect: boolean,
+): readonly AnnotationElement[] {
+  const bounds = annotationSelectionBounds(elements, selected);
+  if (!bounds) return elements;
+  const { anchor, scaleX, scaleY } = selectionResizeTransform(bounds, handle, dx, dy, lockAspect);
+  if (scaleX === 1 && scaleY === 1) return elements;
+  return elements.map(element => selected.has(element.id)
+    ? resizeAnnotationElement(element, anchor, scaleX, scaleY) : element);
 }

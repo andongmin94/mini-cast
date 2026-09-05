@@ -82,17 +82,17 @@ interface RemoveHistoryEntry {
   elements: readonly IndexedElement[];
 }
 
-interface MoveHistoryEntry {
-  kind: "move";
+interface TransformHistoryEntry {
+  kind: "transform";
   displayId: number;
-  moves: readonly {
+  changes: readonly {
     index: number;
     before: AnnotationElement;
     after: AnnotationElement;
   }[];
 }
 
-type HistoryEntry = AddHistoryEntry | RemoveHistoryEntry | MoveHistoryEntry;
+type HistoryEntry = AddHistoryEntry | RemoveHistoryEntry | TransformHistoryEntry;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -154,6 +154,36 @@ function scaleElement(element: AnnotationElement, scaleX: number, scaleY: number
   });
 }
 
+function validResizeTransform(anchor: AnnotationPoint, scaleX: number, scaleY: number) {
+  return isFinitePoint(anchor) && Number.isFinite(scaleX) && Number.isFinite(scaleY) && scaleX > 0 && scaleY > 0;
+}
+
+/** Same geometry for preview and commit. Bounds/width overflow rejects the edit;
+ * it is never silently clamped into a different shape. */
+export function resizeAnnotationElement(
+  element: AnnotationElement, anchor: AnnotationPoint, scaleX: number, scaleY: number,
+): AnnotationElement {
+  if (!validResizeTransform(anchor, scaleX, scaleY) || !isAnnotationElement(element))
+    throw new AnnotationError("invalid-element");
+  if (scaleX === 1 && scaleY === 1) return element;
+  const points = element.points.map(point => ({
+    x: anchor.x + (point.x - anchor.x) * scaleX,
+    y: anchor.y + (point.y - anchor.y) * scaleY,
+  }));
+  const resized: AnnotationElement = element.tool === "text"
+    ? { ...element, points, scaleX: element.scaleX * scaleX, scaleY: element.scaleY * scaleY }
+    : { ...element, points, width: element.width * Math.sqrt(scaleX * scaleY) };
+  if (!isAnnotationElement(resized)) throw new AnnotationError("invalid-element");
+  if (resized.tool === "text") {
+    const point = resized.points[0];
+    const edges = [point.x + resized.box.minX * resized.scaleX, point.x + resized.box.maxX * resized.scaleX,
+      point.y + resized.box.minY * resized.scaleY, point.y + resized.box.maxY * resized.scaleY];
+    if (edges.some(value => !Number.isFinite(value) || Math.abs(value) > MAX_ANNOTATION_COORDINATE))
+      throw new AnnotationError("invalid-element");
+  }
+  return immutableElement(resized);
+}
+
 /** Translation preserves IDs and styles; invalid coordinates are rejected before publication. */
 export function translateAnnotationElement(element: AnnotationElement, dx: number, dy: number): AnnotationElement {
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new AnnotationError("invalid-element");
@@ -170,7 +200,7 @@ export function translateAnnotationElement(element: AnnotationElement, dx: numbe
 }
 
 function cloneHistoryEntry(entry: HistoryEntry): HistoryEntry {
-  if (entry.kind === "move") return { ...entry, moves: entry.moves.map(move => ({ ...move })) };
+  if (entry.kind === "transform") return { ...entry, changes: entry.changes.map(change => ({ ...change })) };
   if (entry.kind === "add") {
     return { ...entry };
   }
@@ -190,10 +220,10 @@ function scaleHistoryEntry(
   scaleY: number,
 ): HistoryEntry {
   if (entry.displayId !== displayId) return entry;
-  if (entry.kind === "move") return { ...entry, moves: entry.moves.map(move => ({
-    index: move.index,
-    before: scaleElement(move.before, scaleX, scaleY),
-    after: scaleElement(move.after, scaleX, scaleY),
+  if (entry.kind === "transform") return { ...entry, changes: entry.changes.map(change => ({
+    index: change.index,
+    before: scaleElement(change.before, scaleX, scaleY),
+    after: scaleElement(change.after, scaleX, scaleY),
   })) };
   if (entry.kind === "add") {
     return { ...entry, stroke: scaleElement(entry.stroke, scaleX, scaleY) };
@@ -210,7 +240,7 @@ function scaleHistoryEntry(
 function historyEntryPointCount(entry: HistoryEntry) {
   // Account for displaced geometry. Destinations are shared with the current
   // document or a following history entry, rather than copied for each owner.
-  if (entry.kind === "move") return entry.moves.reduce((sum, move) => sum + annotationElementCost(move.before), 0);
+  if (entry.kind === "transform") return entry.changes.reduce((sum, change) => sum + annotationElementCost(change.before), 0);
   return entry.kind === "add"
     ? annotationElementCost(entry.stroke)
     : entry.elements.reduce(
@@ -424,18 +454,31 @@ export class AnnotationHistory {
   }
 
   translateElements(displayId: number, ids: Iterable<string>, dx: number, dy: number) {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new AnnotationError("invalid-element");
+    return this.transformElements(displayId, ids, dx === 0 && dy === 0,
+      element => translateAnnotationElement(element, dx, dy));
+  }
+
+  resizeElements(displayId: number, ids: Iterable<string>, anchor: AnnotationPoint, scaleX: number, scaleY: number) {
+    if (!validResizeTransform(anchor, scaleX, scaleY)) throw new AnnotationError("invalid-element");
+    return this.transformElements(displayId, ids, scaleX === 1 && scaleY === 1,
+      element => resizeAnnotationElement(element, anchor, scaleX, scaleY));
+  }
+
+  /** Build and validate every destination before replacing any source geometry. */
+  private transformElements(displayId: number, ids: Iterable<string>, identity: boolean,
+    transform: (element: AnnotationElement) => AnnotationElement) {
     const values = [...ids];
     const validIds = readAnnotationElementIds(values);
-    if (!validIds || validIds.length !== values.length || !Number.isFinite(dx) || !Number.isFinite(dy))
-      throw new AnnotationError("invalid-element");
+    if (!validIds || validIds.length !== values.length) throw new AnnotationError("invalid-element");
     if (!validIds.length) return null;
     const document = this.document(displayId);
     if (validIds.some(id => !document.elementIds.has(id))) throw new AnnotationError("stale-document");
-    if (dx === 0 && dy === 0) return null;
+    if (identity) return null;
     const selected = new Set(validIds);
-    const moves = document.elements.flatMap((before, index) => selected.has(before.id)
-      ? [{ index, before, after: translateAnnotationElement(before, dx, dy) }] : []);
-    const entry: MoveHistoryEntry = { kind: "move", displayId, moves };
+    const changes = document.elements.flatMap((before, index) => selected.has(before.id)
+      ? [{ index, before, after: transform(before) }] : []);
+    const entry: TransformHistoryEntry = { kind: "transform", displayId, changes };
     this.apply(entry);
     this.commit(entry);
     return displayId;
@@ -507,8 +550,8 @@ export class AnnotationHistory {
 
   private apply(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
-    if (entry.kind === "move") {
-      this.applyMove(entry, false);
+    if (entry.kind === "transform") {
+      this.applyTransform(entry, false);
       return;
     }
     if (entry.kind === "add") {
@@ -548,20 +591,20 @@ export class AnnotationHistory {
     this.touch(entry.displayId);
   }
 
-  private applyMove(entry: MoveHistoryEntry, undo: boolean) {
+  private applyTransform(entry: TransformHistoryEntry, undo: boolean) {
     const document = this.document(entry.displayId);
-    if (entry.moves.some(move => document.elements[move.index]?.id !== move.before.id))
+    if (entry.changes.some(change => document.elements[change.index]?.id !== change.before.id))
       throw new AnnotationError("stale-document");
     const elements = document.elements.slice();
-    for (const move of entry.moves) elements[move.index] = undo ? move.before : move.after;
+    for (const change of entry.changes) elements[change.index] = undo ? change.before : change.after;
     document.elements = elements;
     this.touch(entry.displayId);
   }
 
   private revert(entry: HistoryEntry) {
     const document = this.document(entry.displayId);
-    if (entry.kind === "move") {
-      this.applyMove(entry, true);
+    if (entry.kind === "transform") {
+      this.applyTransform(entry, true);
       return;
     }
     if (entry.kind === "add") {
