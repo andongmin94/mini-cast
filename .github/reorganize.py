@@ -20,9 +20,8 @@ write('tests/unit/electron/text-edit-shortcuts.test.mjs', ''' + "'''" + r'''impo
 import test from "node:test";
 import { shortcutVirtualKeys } from "../../../dist/electron/testing/smoke.js";
 test("native text-save shortcut injects Control and Enter", () => {
-  assert.deepEqual(shortcutKeysForTest(), [0x11, 0x0d]);
+  assert.deepEqual(shortcutVirtualKeys("Ctrl+Enter"), [0x11, 0x0d]);
 });
-function shortcutKeysForTest() { return shortcutVirtualKeys("Ctrl+Enter"); }
 ''' + "'''" + r''')
 
 '''
