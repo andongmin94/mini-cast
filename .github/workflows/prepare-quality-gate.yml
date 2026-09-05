@@ -1,11 +1,9 @@
-name: Assemble quality fixes on review branch
+name: Validate assembled quality fixes
 
 on:
   push:
     branches: [fix/quality-gate-20260905]
-    paths:
-      - .github/quality-bootstrap/**
-      - .github/workflows/prepare-quality-gate.yml
+    paths: [.github/workflows/prepare-quality-gate.yml]
 
 permissions:
   contents: write
@@ -15,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  assemble:
+  validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -26,58 +24,25 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.19.0
-      - name: Assemble exact source changes
-        run: |
-          set -euo pipefail
-          python .github/quality-bootstrap/smoke.py
-          rm -rf .github/quality-bootstrap
-          git restore --source=HEAD -- .github/workflows
-          python - <<'PY'
-          from pathlib import Path
-          import subprocess
-          window = Path('src/electron/window.ts')
-          source = window.read_text(encoding='utf-8')
-          before = '      window.webContents.on("did-finish-load", () => {'
-          assert source.count(before) == 1
-          source = source.replace(before, '      window.webContents.on("did-start-loading", () => callbacks.onOverlayGone?.(webContentsId));\n' + before)
-          window.write_text(source, encoding='utf-8')
-          main = Path('src/electron/main.ts')
-          source = main.read_text(encoding='utf-8')
-          before = '      gestureLeases.removeOwner(webContentsId);'
-          assert source.count(before) == 1
-          main.write_text(source.replace(before, '      if (gestureLeases.removeOwner(webContentsId)) sendAnnotationState();'), encoding='utf-8')
-          paths = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
-          for name in paths:
-              path = Path(name)
-              if path.is_file():
-                  text = path.read_text(encoding='utf-8')
-                  path.write_text('\n'.join(line.rstrip() for line in text.splitlines()) + '\n', encoding='utf-8')
-          PY
-      - name: Install locked development tooling without native scripts
-        run: npm ci --ignore-scripts
-      - name: Record current dependency audit
-        run: |
-          npm audit --json > "$RUNNER_TEMP/mini-cast-audit.json" || true
-          cat "$RUNNER_TEMP/mini-cast-audit.json"
-      - name: Format changed TypeScript and tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          git add -A
-          git diff --cached --name-only --diff-filter=ACMR -z -- '*.ts' '*.tsx' '*.cts' '*.mjs' | xargs -0 -r npx prettier --write
-          git add -A
-          git diff --cached --check
-      - name: Commit assembled source to the review branch only
-        shell: bash
+      - name: Update the two vulnerable transitive dependencies within existing ranges
+        run: npm update fast-uri @xmldom/xmldom --package-lock-only --ignore-scripts
+      - name: Verify the complete dependency graph
+        run: npm audit --audit-level=low
+      - name: Commit the lockfile to the review branch
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix: handle persistence and annotation failures; test production interaction paths'
-          git push origin HEAD:refs/heads/fix/quality-gate-20260905
+          git add package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: update fast-uri and xmldom security patches'
+            git push origin HEAD:refs/heads/fix/quality-gate-20260905
+          fi
+      - name: Install locked tooling
+        run: npm ci --ignore-scripts
       - name: Typecheck
         run: npm run typecheck
-      - name: Domain regressions
-        run: npm test
+      - name: Domain regressions with a display for the native hook library
+        run: xvfb-run -a npm test
       - name: Lint
         run: npm run lint
