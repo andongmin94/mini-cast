@@ -1,12 +1,8 @@
 name: Verify
 
-# Windows gate: production input/lifecycle, revisioned delta IPC,
-# exact dirty/full Canvas equivalence, recovery and package integrity.
+# Run explicitly from Actions. Ordinary main commits do not trigger CI emails.
+# Failures remain failures; no checks are suppressed or marked successful.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
