@@ -1,3 +1,4 @@
+import type { AnnotationFileRequest, AnnotationFileResult } from "../annotation/document-file";
 import type { AnnotationExportRequest, AnnotationExportResult, AnnotationExportRenderRequest } from "../annotation/export";
 import type { AnnotationTextEditSession, AnnotationTextEditResult } from "../annotation/text-edit";
 import type { AnnotationTextReplacement } from "../annotation/text";
@@ -27,6 +28,7 @@ import type {
 type Unsubscribe = () => void;
 
 interface MiniCastBridge {
+  annotationFile(request: AnnotationFileRequest): Promise<AnnotationFileResult>;
   exportAnnotation(request: AnnotationExportRequest): Promise<AnnotationExportResult>;
   onAnnotationExportRender(listener: (request: AnnotationExportRenderRequest) => void): Unsubscribe;
   completeAnnotationExport(id: string, bytes: Uint8Array | null): void;

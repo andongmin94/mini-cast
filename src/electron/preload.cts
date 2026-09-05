@@ -10,6 +10,7 @@ function on(channel: string, listener: Listener) {
 }
 
 contextBridge.exposeInMainWorld("miniCast", {
+  annotationFile: (request: unknown) => ipcRenderer.invoke("annotation-file", request),
   exportAnnotation: (request: unknown) => ipcRenderer.invoke("annotation-export", request),
   onAnnotationExportRender: (listener: Listener) => on("annotation-export-render", listener),
   completeAnnotationExport: (id: unknown, bytes: unknown) => ipcRenderer.send("annotation-export-rendered", id, bytes),

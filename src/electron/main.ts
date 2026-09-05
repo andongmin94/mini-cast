@@ -1,3 +1,5 @@
+import { AnnotationIoGate } from "./annotation-io-gate.js";
+import { registerAnnotationFiles } from "./annotation-files.js";
 import { registerAnnotationExports } from "./annotation-export.js";
 import { randomUUID } from "node:crypto";
 import { AnnotationTextEditSessions, type AnnotationTextEditResult } from "../annotation/text-edit.js";
@@ -111,6 +113,7 @@ if (smokeOptions.disableHardwareAcceleration) app.disableHardwareAcceleration();
 type SettingsStore = ReturnType<typeof openSettingsStore>["store"];
 
 const annotationHistory = new AnnotationHistory();
+const annotationIo = new AnnotationIoGate();
 const textEdits = new AnnotationTextEditSessions(annotationHistory);
 const publishedDocuments = new Map<number, AnnotationDocumentSnapshot>();
 const gestureLeases = new GestureLeaseRegistry();
@@ -346,6 +349,7 @@ function cancelTextEdit() {
 }
 
 function setAnnotationTool(tool: AnnotationTool) {
+  if (annotationIo.busy && tool !== "pass-through") { sendAnnotationState(); return; }
   cancelTextEdit();
   if (tool !== "text") setControllerTextEditing(false);
   if (tool !== annotationTool) cancelActiveAnnotationGestures();
@@ -432,7 +436,18 @@ function initializeOverlay(event: IpcMainEvent) {
 }
 
 function registerIpc() {
+  registerAnnotationFiles({
+    history: annotationHistory, gate: annotationIo,
+    unavailable: () => shuttingDown || displayRebuildInProgress || controllerTextEditing || Boolean(textEdits.current),
+    prepareDialog: () => setAnnotationTool("pass-through"),
+    documentChanged: displayId => {
+      lastAnnotationDisplayId = displayId;
+      sendAnnotationDocument(displayId);
+      sendAnnotationState();
+    },
+  });
   registerAnnotationExports({
+    gate: annotationIo,
     history: annotationHistory,
     unavailable: () => shuttingDown || displayRebuildInProgress || controllerTextEditing || Boolean(textEdits.current),
     prepareFileDialog: () => setAnnotationTool("pass-through"),

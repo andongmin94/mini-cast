@@ -1,3 +1,4 @@
+import type { AnnotationIoGate } from "./annotation-io-gate.js";
 import { app, clipboard, ClipboardItem, dialog, ipcMain, nativeImage, screen, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -8,6 +9,7 @@ import { writePngFile } from "./png-file.js";
 import { mainWindow, overlayDisplays, overlayWindows } from "./window.js";
 
 interface Options {
+  gate: AnnotationIoGate;
   history: AnnotationHistory;
   unavailable(): boolean;
   prepareFileDialog(): void;
@@ -16,7 +18,6 @@ interface Options {
 /** Native clipboard/filesystem access is not exposed as a general renderer API. */
 export function registerAnnotationExports(options: Options) {
   const renders = new ExportRenderSession();
-  let busy = false;
   const topLevel = (event: IpcMainEvent | IpcMainInvokeEvent) =>
     !event.sender.isDestroyed() && event.senderFrame === event.sender.mainFrame;
 
@@ -31,7 +32,7 @@ export function registerAnnotationExports(options: Options) {
       return { status: "error", reason: "invalid-request" };
     const request = readAnnotationExportRequest(value);
     if (!request) return { status: "error", reason: "invalid-request" };
-    if (busy) return { status: "error", reason: "busy" };
+    if (options.gate.busy) return { status: "error", reason: "busy" };
     if (options.unavailable()) return { status: "error", reason: "unavailable" };
     const index = overlayDisplays.findIndex(display => display.id === request.displayId);
     const target = overlayWindows[index];
@@ -39,7 +40,8 @@ export function registerAnnotationExports(options: Options) {
     if (!target || target.isDestroyed() || target.webContents.isDestroyed() || !physical)
       return { status: "error", reason: "unavailable" };
 
-    busy = true;
+    const release = options.gate.acquire();
+    if (!release) return { status: "error", reason: "busy" };
     let cancelled = false;
     let publishing = false;
     let publication: Promise<void> | null = null;
@@ -114,7 +116,7 @@ export function registerAnnotationExports(options: Options) {
       return reason === "cancelled" ? { status: "cancelled" } : { status: "error", reason };
     } finally {
       renders.cancel();
-      busy = false;
+      release();
       contents.removeListener("did-start-loading", invalidate);
       contents.removeListener("destroyed", invalidate);
       owner.removeListener("did-start-loading", invalidate);

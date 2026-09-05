@@ -99,7 +99,14 @@ interface TransformHistoryEntry {
   }[];
 }
 
-type HistoryEntry = AddHistoryEntry | RemoveHistoryEntry | TransformHistoryEntry;
+interface ReplaceHistoryEntry {
+  kind: "replace";
+  displayId: number;
+  before: readonly AnnotationElement[];
+  after: readonly AnnotationElement[];
+}
+
+type HistoryEntry = AddHistoryEntry | RemoveHistoryEntry | TransformHistoryEntry | ReplaceHistoryEntry;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -148,6 +155,36 @@ function immutableElement(element: AnnotationElement): AnnotationElement {
   return Object.freeze({ ...common, tool: element.tool, width: element.width,
     ...((element.tool === "rectangle" || element.tool === "ellipse") && element.fill !== undefined
       ? { fill: element.fill } : {}),
+  });
+}
+
+/** Validate a complete bounded collection before taking ownership of any data. */
+export function copyAnnotationElements(value: unknown): readonly AnnotationElement[] {
+  if (!Array.isArray(value)) throw new AnnotationError("invalid-element");
+  if (value.length > MAX_ANNOTATION_ELEMENTS_PER_DISPLAY) throw new AnnotationError("element-limit");
+  const ids = new Set<string>();
+  let points = 0;
+  for (const element of value) {
+    if (!isAnnotationElement(element)) throw new AnnotationError("invalid-element");
+    for (const point of element.points) if (!isFinitePoint(point)) throw new AnnotationError("invalid-element");
+    if (ids.has(element.id)) throw new AnnotationError("duplicate-element");
+    ids.add(element.id);
+    points += annotationElementCost(element);
+    if (points > MAX_ANNOTATION_POINTS_PER_DISPLAY) throw new AnnotationError("point-limit");
+  }
+  return Object.freeze(value.map(immutableElement));
+}
+
+function sameAnnotationElements(left: readonly AnnotationElement[], right: readonly AnnotationElement[]) {
+  return left.length === right.length && left.every((a, index) => {
+    const b = right[index];
+    if (a === b) return true;
+    if (a.id !== b.id || a.tool !== b.tool || a.color !== b.color || a.opacity !== b.opacity ||
+        a.points.length !== b.points.length || !a.points.every((point, i) => point.x === b.points[i].x && point.y === b.points[i].y)) return false;
+    if (a.tool === "text") return b.tool === "text" && a.text === b.text && a.fontSize === b.fontSize &&
+      a.box.minX === b.box.minX && a.box.minY === b.box.minY && a.box.maxX === b.box.maxX && a.box.maxY === b.box.maxY;
+    return b.tool !== "text" && a.width === b.width &&
+      ("fill" in a ? a.fill : undefined) === ("fill" in b ? b.fill : undefined);
   });
 }
 
@@ -266,6 +303,7 @@ export function translateAnnotationElement(element: AnnotationElement, dx: numbe
 }
 
 function cloneHistoryEntry(entry: HistoryEntry): HistoryEntry {
+  if (entry.kind === "replace") return { ...entry };
   if (entry.kind === "transform") return { ...entry, changes: entry.changes.map(change => ({ ...change })) };
   if (entry.kind === "add") {
     return { ...entry };
@@ -286,6 +324,10 @@ function scaleHistoryEntry(
   scaleY: number,
 ): HistoryEntry {
   if (entry.displayId !== displayId) return entry;
+  if (entry.kind === "replace") return { ...entry,
+    before: Object.freeze(entry.before.map(element => scaleElement(element, scaleX, scaleY))),
+    after: Object.freeze(entry.after.map(element => scaleElement(element, scaleX, scaleY))),
+  };
   if (entry.kind === "transform") return { ...entry, changes: entry.changes.map(change => ({
     index: change.index,
     before: scaleElement(change.before, scaleX, scaleY),
@@ -304,6 +346,12 @@ function scaleHistoryEntry(
 }
 
 function historyEntryPointCount(entry: HistoryEntry) {
+  // Either side may become the displaced document after Undo. Keep the newest
+  // full-budget replacement undoable without undercounting the larger side.
+  if (entry.kind === "replace") return Math.max(
+    entry.before.reduce((sum, element) => sum + annotationElementCost(element), 0),
+    entry.after.reduce((sum, element) => sum + annotationElementCost(element), 0),
+  );
   // Account for displaced geometry. Destinations are shared with the current
   // document or a following history entry, rather than copied for each owner.
   if (entry.kind === "transform") return entry.changes.reduce((sum, change) => sum + annotationElementCost(change.before), 0);
@@ -467,6 +515,20 @@ export class AnnotationHistory {
     );
     this.touch(displayId);
     return true;
+  }
+
+  /** One complete, undoable replacement; failed validation never changes the document. */
+  replaceDocumentElements(displayId: number, value: unknown, expectedRevision: number) {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 ||
+        (this.revisions.get(displayId) ?? 0) !== expectedRevision) throw new AnnotationError("stale-document");
+    const after = copyAnnotationElements(value);
+    const document = this.document(displayId);
+    if (sameAnnotationElements(document.elements, after)) return null;
+    const entry: ReplaceHistoryEntry = { kind: "replace", displayId,
+      before: Object.freeze(document.elements.slice()), after };
+    this.apply(entry);
+    this.commit(entry);
+    return displayId;
   }
 
   addElement(displayId: number, stroke: AnnotationElement) {
@@ -649,6 +711,7 @@ export class AnnotationHistory {
   }
 
   private apply(entry: HistoryEntry) {
+    if (entry.kind === "replace") { this.applyDocumentReplacement(entry, false); return; }
     const document = this.document(entry.displayId);
     if (entry.kind === "transform") {
       this.applyTransform(entry, false);
@@ -691,6 +754,17 @@ export class AnnotationHistory {
     this.touch(entry.displayId);
   }
 
+  private applyDocumentReplacement(entry: ReplaceHistoryEntry, undo: boolean) {
+    const document = this.document(entry.displayId);
+    if (!sameAnnotationElements(document.elements, undo ? entry.after : entry.before))
+      throw new AnnotationError("stale-document");
+    const elements = undo ? entry.before : entry.after;
+    document.elements = elements.slice();
+    document.elementIds = new Set(elements.map(element => element.id));
+    document.pointCount = elements.reduce((sum, element) => sum + annotationElementCost(element), 0);
+    this.touch(entry.displayId);
+  }
+
   private applyTransform(entry: TransformHistoryEntry, undo: boolean) {
     const document = this.document(entry.displayId);
     if (entry.changes.some(change => document.elements[change.index]?.id !== change.before.id))
@@ -709,6 +783,7 @@ export class AnnotationHistory {
   }
 
   private revert(entry: HistoryEntry) {
+    if (entry.kind === "replace") { this.applyDocumentReplacement(entry, true); return; }
     const document = this.document(entry.displayId);
     if (entry.kind === "transform") {
       this.applyTransform(entry, true);

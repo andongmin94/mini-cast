@@ -1,3 +1,4 @@
+import { verifyAnnotationFiles } from "./document-file-smoke.js";
 import { verifyAnnotationExports } from "./export-smoke.js";
 import { framePoint } from "../../annotation/primitive-frame.js";
 import { verifyTransientTools } from "./transient-smoke.js";
@@ -1301,6 +1302,13 @@ export function createSmokeChecks(context: SmokeContext) {
         click: async (selector, description) => {
           if (!mainWindow) throw new Error("Missing PNG-export controller");
           await clickControllerElement(mainWindow, selector, description);
+        },
+      }, primary.id);
+      diagnostics.documentFiles = await verifyAnnotationFiles({
+        history: annotationHistory, publishDocument: context.publishDocument, command: shortcutCommand,
+        click: async (selector, label) => {
+          if (!mainWindow) throw new Error("Missing document-file controller");
+          await clickControllerElement(mainWindow, selector, label);
         },
       }, primary.id);
     } finally {

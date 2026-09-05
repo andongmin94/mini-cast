@@ -40,6 +40,9 @@ foreach ($file in $files) {
     if (-not $result.diagnostics.exportTools.$name) { throw "Missing PNG export verification: $name" }
   }
   if ($result.diagnostics.exportTools.rendering.comparisons -ne 5) { throw 'PNG scale coverage was not executed.' }
+  foreach ($name in @('nativeSave','nativeOpen','pinnedSave','undoRedo','pixels','cancel','invalidFile','staleOpen','sharedGate','senderRejected','reload')) {
+    if (-not $result.diagnostics.documentFiles.$name) { throw "Missing editable-file verification: $name" }
+  }
   Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
   Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
 }
