@@ -1,4 +1,4 @@
-import type { AnnotationCommand, AnnotationTool } from "./contract.js";
+import type { AnnotationCommand, AnnotationTool } from "../shared/contract.js";
 
 export interface ToolShortcut {
   accelerator: string;

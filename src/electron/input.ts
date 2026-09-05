@@ -10,7 +10,7 @@ import type {
   KeyPress,
   MouseButton,
   MouseButtonEvent,
-} from "./contract.js";
+} from "../shared/contract.js";
 import type { OverlayDisplayMeta } from "./display.js";
 import { sendToWindow } from "./ipc.js";
 import {

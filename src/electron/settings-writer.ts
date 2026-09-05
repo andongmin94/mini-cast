@@ -1,4 +1,4 @@
-import type { OverlaySettings } from "./contract.js";
+import type { OverlaySettings } from "../shared/contract.js";
 
 export type SettingsWriteState = "saved" | "pending" | "failed";
 

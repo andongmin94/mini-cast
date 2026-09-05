@@ -12,6 +12,7 @@
   },
   "include": [
     "src/annotation/**/*.ts",
+    "src/shared/**/*.ts",
     "src/electron/**/*.ts",
     "src/electron/**/*.cts"
   ],

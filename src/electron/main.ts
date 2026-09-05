@@ -53,7 +53,7 @@ import {
   type AnnotationTool,
   type OverlaySettings,
   type SettingsSaveStatus,
-} from "./contract.js";
+} from "../shared/contract.js";
 import {
   getConnectedDisplays,
   getOrderedOverlayDisplays,
@@ -68,10 +68,10 @@ import {
 } from "./input.js";
 import { sendToWebContents, sendToWindow } from "./ipc.js";
 import { CoalescingSerialExecutor } from "./serial-executor.js";
-import { readSmokeOptions, writeSmokeSentinel } from "./smoke.js";
-import { normalizeOverlaySettings, overlaySettingsEqual } from "./settings.js";
+import { readSmokeOptions, writeSmokeSentinel } from "./testing/smoke.js";
+import { normalizeOverlaySettings, overlaySettingsEqual } from "../shared/settings.js";
 import { closeSplash, createSplash } from "./splash.js";
-import { createSmokeChecks } from "./interaction-smoke.js";
+import { createSmokeChecks } from "./testing/interaction-smoke.js";
 import { createTray, destroyTray, isTrayReady } from "./tray.js";
 import {
   createOverlayWindows,

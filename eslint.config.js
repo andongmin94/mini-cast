@@ -31,9 +31,9 @@ export default tseslint.config(
   },
   {
     files: [
-      "src/App.tsx",
-      "src/main.tsx",
-      "src/components/**/*.{ts,tsx}",
+      "src/renderer/App.tsx",
+      "src/renderer/main.tsx",
+      "src/renderer/components/**/*.{ts,tsx}",
     ],
     languageOptions: {
       globals: globals.browser,

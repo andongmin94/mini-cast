@@ -1,6 +1,6 @@
 import Store from "electron-store";
 
-import { DEFAULT_OVERLAY_SETTINGS, type OverlaySettings } from "./contract.js";
+import { DEFAULT_OVERLAY_SETTINGS, type OverlaySettings } from "../shared/contract.js";
 
 /** Let electron-store handle atomic writes and invalid JSON recovery. */
 export function openSettingsStore() {
