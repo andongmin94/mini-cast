@@ -55,3 +55,9 @@ foreach ($file in @('unpacked-interaction-sentinel.json', 'unpacked-software-int
   $boundary = $result.diagnostics.integrationBoundaries
   if (-not $boundary.failedWriteCancelsQuit -or -not $boundary.trayAndShortcutsSurvive -or -not $boundary.hiddenExport -or -not $boundary.minimizedExport -or -not $boundary.lateReplyIgnored -or -not $boundary.redundantResize -or $boundary.heldViewport.Count -ne 4) { throw 'Packaged integration boundary coverage missing.' }
 }
+
+foreach ($file in @('unpacked-interaction-sentinel.json', 'unpacked-software-interaction-sentinel.json')) {
+  $result = Get-Content -LiteralPath (Join-Path 'verification-logs' $file) -Raw | ConvertFrom-Json
+  $quit = $result.diagnostics.unsavedQuit
+  if (-not $quit.defaultCancel -or -not $quit.escapeCancel -or -not $quit.repeatedQuit -or -not $quit.documentPreserved -or -not $quit.pngNotSaved -or -not $result.diagnostics.documentFiles.savedState) { throw 'Packaged unsaved-document protection missing.' }
+}

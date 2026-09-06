@@ -120,6 +120,7 @@ function Invoke-MiniCastSmoke {
       throw "$Label did not handle its settings fixture as expected."
     }
     if ((Get-Content -LiteralPath (Join-Path $userData 'quit-publication.txt') -Raw) -ne 'complete') { throw "$Label did not complete its pending publication before quit." }
+    if ($Mode -eq 'interaction' -and (Get-Content -LiteralPath (Join-Path $userData 'quit-discard.txt') -Raw) -ne 'confirmed') { throw "$Label did not explicitly confirm unsaved discard." }
     $saved = Get-Content -LiteralPath (Join-Path $userData 'config.json') -Raw | ConvertFrom-Json
     if ($saved.settings.cursorSize -ne $payload.expectedQuitCursorSize) {
       throw "$Label did not flush the final preference on normal quit."
@@ -182,9 +183,9 @@ Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'unpac
 Write-Host 'Verifying the explicit software-rendering fallback...'
 Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'unpacked-software-startup' -DisableHardwareAcceleration
 Write-Host 'Verifying real Windows click-through and annotation routing...'
-Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-interaction' -TimeoutSeconds 210
+Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-interaction' -TimeoutSeconds 300
 Write-Host 'Verifying annotation routing with the software-rendering fallback...'
-Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-software-interaction' -TimeoutSeconds 210 -DisableHardwareAcceleration
+Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode interaction -Label 'unpacked-software-interaction' -TimeoutSeconds 300 -DisableHardwareAcceleration
 Write-Host 'Verifying recovery of an actually corrupt settings file...'
 Invoke-MiniCastSmoke -Executable $unpackedExecutable -Mode startup -Label 'corrupt-settings-startup' -CorruptSettings
 Write-Host 'Verifying portable launcher startup and complete shutdown...'

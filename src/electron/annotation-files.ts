@@ -5,7 +5,7 @@ import {
   serializeAnnotationFile, type AnnotationFileResult,
 } from "../annotation/document-file.js";
 import { AnnotationError } from "../annotation/errors.js";
-import type { AnnotationHistory } from "../annotation/history.js";
+import type { AnnotationHistory, AnnotationDocumentSnapshot } from "../annotation/history.js";
 import type { AnnotationIoGate } from "./annotation-io-gate.js";
 import { AnnotationIoLifetime } from "./annotation-io-lifetime.js";
 import { loadAnnotationFile, saveAnnotationFile } from "./annotation-file-store.js";
@@ -17,6 +17,7 @@ interface Options {
   unavailable(): boolean;
   prepareDialog(): void;
   documentChanged(displayId: number): void;
+  saved(snapshot: AnnotationDocumentSnapshot): void;
 }
 
 export function registerAnnotationFiles(options: Options) {
@@ -62,7 +63,10 @@ export function registerAnnotationFiles(options: Options) {
         });
         if (result.canceled || !result.filePath) return { status: "cancelled" };
         valid();
-        await lifetime.publish(options.gate, () => saveAnnotationFile(result.filePath!, serialized));
+        await lifetime.publish(options.gate, async () => {
+          await saveAnnotationFile(result.filePath!, serialized);
+          options.saved(original);
+        });
         return { status: "saved", fileName: path.basename(result.filePath), elements: original.elements.length,
           revision: original.revision, changed: false };
       }
@@ -89,6 +93,7 @@ export function registerAnnotationFiles(options: Options) {
       }
       unchanged();
       const changed = options.history.replaceDocumentElements(request.displayId, elements, original.revision) !== null;
+      options.saved(options.history.getSnapshot(request.displayId));
       if (changed) options.documentChanged(request.displayId);
       return { status: "opened", fileName: path.basename(opened.filePaths[0]), elements: elements.length,
         revision: options.history.getSnapshot(request.displayId).revision, changed };

@@ -1,3 +1,5 @@
+import { verifyUnsavedQuit } from "./unsaved-quit-smoke.js";
+import type { AnnotationSaveState } from "../annotation-save-state.js";
 import { verifyIntegrationBoundaries } from "./integration-boundary-smoke.js";
 import type { AnnotationIoGate } from "../annotation-io-gate.js";
 import { verifyAnnotationBoards } from "./board-smoke.js";
@@ -53,6 +55,7 @@ import {
 } from "../window.js";
 
 export interface SmokeContext {
+  saved: AnnotationSaveState;
   gate: AnnotationIoGate;
   quitWaiting(): boolean;
   history: AnnotationHistory;
@@ -1310,6 +1313,7 @@ export function createSmokeChecks(context: SmokeContext) {
         },
       }, primary.id);
       diagnostics.documentFiles = await verifyAnnotationFiles({
+        saved: context.saved,
         history: annotationHistory, publishDocument: context.publishDocument, command: shortcutCommand,
         click: async (selector, label) => {
           if (!mainWindow) throw new Error("Missing document-file controller");
@@ -1357,6 +1361,10 @@ export function createSmokeChecks(context: SmokeContext) {
           if (!mainWindow) throw new Error("Missing boundary controller");
           await clickControllerElement(mainWindow, selector, label);
         },
+      }, primary.id);
+      diagnostics.unsavedQuit = await verifyUnsavedQuit({
+        history: annotationHistory, saved: context.saved, quitWaiting: context.quitWaiting,
+        publishDocument: context.publishDocument,
       }, primary.id);
     } finally {
       if (!underlay.isDestroyed()) underlay.destroy();

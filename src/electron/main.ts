@@ -1,3 +1,5 @@
+import { AnnotationSaveState } from "./annotation-save-state.js";
+import { acceptUnsavedSmokeQuit } from "./testing/unsaved-quit-smoke.js";
 import { QuitCoordinator } from "./quit-coordinator.js";
 import { writeFile } from "node:fs/promises";
 import { AnnotationBoards, readAnnotationBoardRequest, type AnnotationBoardResult } from "../annotation/board.js";
@@ -118,6 +120,7 @@ type SettingsStore = ReturnType<typeof openSettingsStore>["store"];
 const annotationHistory = new AnnotationHistory();
 const annotationBoards = new AnnotationBoards();
 const annotationIo = new AnnotationIoGate();
+const annotationSaveState = new AnnotationSaveState();
 const textEdits = new AnnotationTextEditSessions(annotationHistory);
 const publishedDocuments = new Map<number, AnnotationDocumentSnapshot>();
 const gestureLeases = new GestureLeaseRegistry();
@@ -135,8 +138,12 @@ let displayRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let displayRefreshExecutor: CoalescingSerialExecutor | null = null;
 let displayRebuildInProgress = false;
 let shuttingDown = false;
+let quitDialogOpen = false;
 const quitCoordinator = new QuitCoordinator({
   publication: () => annotationIo.publication,
+  busy: () => annotationIo.busy || displayRebuildInProgress,
+  unsaved: getUnsavedAnnotationKey,
+  confirm: confirmUnsavedAnnotations,
   cleanup: () => runCleanupSteps([
     stopDisplayRefresh, prepareWindowsForQuit, () => { persistSettingsNow(); },
     () => globalShortcut.unregisterAll(), stopInputCapture, destroyTray,
@@ -153,6 +160,51 @@ const quitCoordinator = new QuitCoordinator({
     }).catch(notificationError => console.error("Cannot show cancelled-quit notice:", notificationError));
   },
 });
+
+function getUnsavedAnnotationKey() {
+  return annotationSaveState.key(overlayDisplays.map(display => annotationHistory.getSnapshot(display.id)));
+}
+
+async function confirmUnsavedAnnotations(): Promise<boolean> {
+  const controller = mainWindow;
+  if (!controller || controller.isDestroyed() || annotationIo.busy || displayRebuildInProgress) return false;
+  const count = overlayDisplays.filter(display => annotationSaveState.isDirty(annotationHistory.getSnapshot(display.id))).length;
+  const abort = new AbortController();
+  const invalidate = () => abort.abort();
+  quitDialogOpen = true;
+  cancelActiveAnnotationGestures();
+  refreshTransientAnnotationShortcuts();
+  setOverlayInteractive(false);
+  setAnnotationInputMode(false);
+  showMainWindow();
+  controller.on("hide", invalidate);
+  controller.on("minimize", invalidate);
+  controller.on("closed", invalidate);
+  controller.webContents.on("did-start-loading", invalidate);
+  controller.webContents.on("destroyed", invalidate);
+  try {
+    const result = await dialog.showMessageBox(controller, {
+      type: "warning", title: "저장하지 않은 판서",
+      message: `${count}개 화면에 저장하지 않은 판서가 있습니다.`,
+      detail: "종료하면 현재 판서를 잃습니다. 보관하려면 돌아가서 각 화면을 .minicast 파일로 저장하세요. PNG·이미지 복사는 편집 가능한 파일 저장을 대신하지 않습니다.",
+      buttons: ["돌아가기", "저장하지 않고 종료"], defaultId: 0, cancelId: 0, noLink: true, signal: abort.signal,
+    });
+    return result.response === 1 && !abort.signal.aborted;
+  } finally {
+    controller.removeListener("hide", invalidate);
+    controller.removeListener("minimize", invalidate);
+    controller.removeListener("closed", invalidate);
+    controller.webContents.removeListener("did-start-loading", invalidate);
+    controller.webContents.removeListener("destroyed", invalidate);
+    quitDialogOpen = false;
+    if (!shuttingDown) {
+      const interactive = annotationTool !== "pass-through";
+      setOverlayInteractive(interactive);
+      setAnnotationInputMode(interactive);
+      refreshTransientAnnotationShortcuts();
+    }
+  }
+}
 
 function connectedDisplayIds(
   displays: readonly OverlayDisplayMeta[] = overlayDisplays,
@@ -333,7 +385,7 @@ function refreshTransientAnnotationShortcuts() {
     globalShortcut.unregister(accelerator);
     unavailableShortcuts.delete(accelerator);
   });
-  if (annotationTool === "pass-through" || controllerTextEditing) return;
+  if (annotationTool === "pass-through" || controllerTextEditing || quitDialogOpen) return;
 
   registerShortcut(ESCAPE_SHORTCUT, () => setAnnotationTool("pass-through"));
   ACTIVE_COMMAND_SHORTCUTS.forEach(({ accelerator, command }) => {
@@ -377,6 +429,7 @@ function cancelTextEdit() {
 }
 
 function setAnnotationTool(tool: AnnotationTool) {
+  if (quitDialogOpen) { sendAnnotationState(); return; }
   if (annotationIo.busy && tool !== "pass-through") { sendAnnotationState(); return; }
   cancelTextEdit();
   if (tool !== "text") setControllerTextEditing(false);
@@ -397,7 +450,7 @@ function sendAnnotationCommand(
   command: AnnotationCommand,
   origin: AnnotationCommandOrigin = "shortcut",
 ) {
-  if (displayRebuildInProgress) return;
+  if (displayRebuildInProgress || quitDialogOpen) return;
 
   if (isTransientAnnotationTool(annotationTool)) {
     // Temporary tools cannot accidentally consume the permanent Undo/Redo history.
@@ -475,7 +528,7 @@ function registerIpc() {
     const request = readAnnotationBoardRequest(value);
     if (!request) return { accepted: false, reason: "invalid-request" };
     if (annotationIo.busy) return { accepted: false, reason: "busy" };
-    if (shuttingDown || displayRebuildInProgress || controllerTextEditing || textEdits.current ||
+    if (shuttingDown || displayRebuildInProgress || quitDialogOpen || controllerTextEditing || textEdits.current ||
         !annotationBoards.has(request.displayId)) return { accepted: false, reason: "unavailable" };
     const changed = annotationBoards.set(request.displayId, request.mode);
     if (changed) {
@@ -490,7 +543,10 @@ function registerIpc() {
   });
   registerAnnotationFiles({
     history: annotationHistory, gate: annotationIo,
-    unavailable: () => shuttingDown || displayRebuildInProgress || controllerTextEditing || Boolean(textEdits.current),
+    saved: snapshot => {
+      if (connectedDisplayIds().includes(snapshot.displayId)) annotationSaveState.markSaved(snapshot);
+    },
+    unavailable: () => shuttingDown || displayRebuildInProgress || quitDialogOpen || controllerTextEditing || Boolean(textEdits.current),
     prepareDialog: () => setAnnotationTool("pass-through"),
     documentChanged: displayId => {
       lastAnnotationDisplayId = displayId;
@@ -501,7 +557,7 @@ function registerIpc() {
   registerAnnotationExports({
     gate: annotationIo,
     history: annotationHistory,
-    unavailable: () => shuttingDown || displayRebuildInProgress || controllerTextEditing || Boolean(textEdits.current),
+    unavailable: () => shuttingDown || displayRebuildInProgress || quitDialogOpen || controllerTextEditing || Boolean(textEdits.current),
     prepareFileDialog: () => setAnnotationTool("pass-through"),
   });
   ipcMain.on("minimize-window", (event) => {
@@ -613,7 +669,7 @@ function registerIpc() {
     if (
       displayId === null ||
       displayRebuildInProgress ||
-      annotationTool === "pass-through" ||
+      annotationTool === "pass-through" || quitDialogOpen ||
       !isGestureId(gestureId)
     ) {
       return;
@@ -822,6 +878,7 @@ async function rebuildDisplays() {
 
     const connectedIds = displays.map((display) => display.id);
     annotationHistory.retainDisplays(connectedIds);
+    annotationSaveState.retainDisplays(connectedIds);
     annotationBoards.retainDisplays(connectedIds);
     sendAnnotationBoards();
     for (const id of publishedDocuments.keys())
@@ -919,13 +976,14 @@ async function runSmokeTest() {
     settingsPath,
     settingsState: () => settingsWriter?.state ?? "failed",
     gate: annotationIo,
+    saved: annotationSaveState,
     quitWaiting: () => quitCoordinator.waiting,
   });
   const test =
     mode === "interaction"
       ? checks.performInteractionSmoke()
       : checks.inspectAllRenderers();
-  const timeoutMs = mode === "interaction" ? 180_000 : 30_000;
+  const timeoutMs = mode === "interaction" ? 240_000 : 30_000;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -967,7 +1025,9 @@ async function runSmokeTest() {
     await writeFile(path.join(app.getPath("userData"), "quit-publication.txt"), "complete", "utf8");
   });
   void publication.then(release, release);
+  const discard = getUnsavedAnnotationKey() !== null ? acceptUnsavedSmokeQuit() : Promise.resolve();
   app.quit();
+  await discard;
 }
 
 async function initializeApp() {

@@ -15,7 +15,7 @@ function fixture() {
   const gate = new AnnotationIoGate();
   const calls = { blocked: 0, cleanup: 0, resumed: 0, failed: [] };
   const event = { preventDefault() { calls.blocked++; } };
-  const quit = new QuitCoordinator({ publication: () => gate.publication,
+  const quit = new QuitCoordinator({ busy: () => false, unsaved: () => null, confirm: async () => true, publication: () => gate.publication,
     cleanup: () => calls.cleanup++, resume: () => { calls.resumed++; quit.beforeQuit(event); },
     failed: error => calls.failed.push(error) });
   return { gate, quit, event, calls };
@@ -86,7 +86,7 @@ test("a second publication appearing during quit resumption must also settle", a
   let cleanup = 0, resumes = 0; const event = { preventDefault() {} };
   const release = gate.acquire(); const publication = gate.publish(() => first.promise);
   const handled = publication.finally(release); let handledSecond;
-  const quit = new QuitCoordinator({ publication: () => gate.publication, cleanup: () => cleanup++,
+  const quit = new QuitCoordinator({ busy: () => false, unsaved: () => null, confirm: async () => true, publication: () => gate.publication, cleanup: () => cleanup++,
     resume() {
       resumes++;
       if (resumes === 1) { const finish = gate.acquire(); handledSecond = gate.publish(() => second.promise).finally(finish); }

@@ -1,3 +1,4 @@
+import type { AnnotationSaveState } from "../annotation-save-state.js";
 import { app, clipboard } from "electron";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -10,6 +11,7 @@ import { mainWindow, overlayDisplays, overlayWindows } from "../window.js";
 import { injectWindowsShortcut, waitFor } from "./smoke.js";
 
 interface Context {
+  saved: AnnotationSaveState;
   history: AnnotationHistory;
   publishDocument(displayId: number): void;
   click(selector: string, label: string): Promise<void>;
@@ -83,18 +85,22 @@ export async function verifyAnnotationFiles(context: Context, displayId: number)
   const file = parseAnnotationFile(await readFile(filePath, "utf8"));
   if (JSON.stringify(file.elements) !== originalElements || history.getSnapshot(displayId).elements.length !== original.elements.length + 1)
     throw new Error("Editable save did not pin content or changed the live document");
+  if (!context.saved.isDirty(history.getSnapshot(displayId))) throw new Error("Pinned save marked newer edits as saved");
   const beforeOpen = history.getSnapshot(displayId), beforePixels = await pixels();
   await open(); await nativeDialog("판서 파일 열기"); await choosePath(filePath); await nativeDialog("판서 교체 확인");
   await injectWindowsShortcut("Right"); await injectWindowsShortcut("Enter");
   await waitFor(async () => await status() === "opened", 7000, "editable file opened");
   if (elements() !== originalElements) throw new Error("Open did not restore exact editable geometry");
+  if (context.saved.isDirty(history.getSnapshot(displayId))) throw new Error("Opened file was not a clean baseline");
   const openedPixels = await pixels();
   if (openedPixels === beforePixels) throw new Error("Open did not repaint the removed extra object");
   await context.click('[data-annotation-tool="pen"]', "pen for native file Undo");
   await context.command("undo");
   if (elements() !== JSON.stringify(beforeOpen.elements) || await pixels() !== beforePixels) throw new Error("One Undo did not restore the replaced document and pixels");
+  if (!context.saved.isDirty(history.getSnapshot(displayId))) throw new Error("Undo of file open lost dirty state");
   await context.command("redo");
   if (elements() !== originalElements || await pixels() !== openedPixels) throw new Error("Redo did not restore loaded objects and pixels");
+  if (context.saved.isDirty(history.getSnapshot(displayId))) throw new Error("Redo of file open did not restore saved contents");
   const stable = history.getSnapshot(displayId);
   await save(); await nativeDialog("판서 파일 저장"); await injectWindowsShortcut("Escape");
   await waitFor(async () => await status() === "cancelled", 5000, "editable save cancelled");
@@ -118,5 +124,5 @@ export async function verifyAnnotationFiles(context: Context, displayId: number)
   target.webContents.reload(); await loaded; await ready();
   if (elements() !== JSON.stringify(concurrent.elements)) throw new Error("Loaded document lost on renderer reload");
   return { nativeSave: true, nativeOpen: true, pinnedSave: true, undoRedo: true, pixels: true,
-    cancel: true, invalidFile: true, staleOpen: true, sharedGate: true, senderRejected: true, reload: true };
+    savedState: true, cancel: true, invalidFile: true, staleOpen: true, sharedGate: true, senderRejected: true, reload: true };
 }
