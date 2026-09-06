@@ -84,7 +84,7 @@ replace(path,'      data-mini-cast-overlay=""','      data-mini-cast-overlay=""\
 path='src/electron/testing/interaction-smoke.ts'
 files[path]='import { verifyAnnotationBoards } from "./board-smoke.js";\n'+source(path)
 old='      }, primary.id);\n    } finally {\n      if (!underlay.isDestroyed()) underlay.destroy();'
-new='''      }, primary.id);
+new=r'''      }, primary.id);
       diagnostics.boardTools = await verifyAnnotationBoards({
         history: annotationHistory, state: context.state, publishDocument: context.publishDocument,
         refreshDisplays: context.refreshDisplays,
@@ -94,9 +94,30 @@ new='''      }, primary.id);
         },
         checkPassThrough: async () => {
           await waitForOverlayInput(primary.id, false);
-          const before = clickCount;
-          await injectWindowsClick(start.x, start.y);
-          await waitFor(() => clickCount === before + 1, 5000, "board Escape restores native underlay clicks");
+          // Native dialogs can change foreground order. Re-establish the witness
+          // window, but never alter production overlay input flags to make a test pass.
+          if (underlay.isDestroyed()) throw new Error("Board input witness was destroyed");
+          underlay.show();
+          underlay.focus();
+          const witness = underlay.getContentBounds();
+          const point = { x: witness.x + Math.round(witness.width / 2), y: witness.y + Math.round(witness.height / 2) };
+          const previousTitle = await underlay.webContents.executeJavaScript("document.title") as string;
+          const match = /^click-(\d+)$/.exec(previousTitle);
+          if (!match) throw new Error(`Invalid board witness counter: ${previousTitle}`);
+          const expectedTitle = `click-${Number(match[1]) + 1}`;
+          await injectWindowsClick(point.x, point.y);
+          try {
+            await waitFor(async () => await underlay.webContents.executeJavaScript("document.title") === expectedTitle,
+              5000, "board Escape restores native underlay clicks");
+          } catch (error) {
+            console.error("BOARD_CLICK_ROUTING", JSON.stringify({ point, expectedTitle,
+              observedTitle: await underlay.webContents.executeJavaScript("document.title"),
+              witness: { bounds: witness, visible: underlay.isVisible(), focused: underlay.isFocused() },
+              controller: mainWindow ? { bounds: mainWindow.getBounds(), topmost: mainWindow.isAlwaysOnTop(), visible: mainWindow.isVisible() } : null,
+              state: context.state(), cursor: screen.getCursorScreenPoint(),
+            }));
+            throw error;
+          }
         },
       }, primary.id);
     } finally {
