@@ -1,0 +1,266 @@
+name: Integration hardening
+
+# One requested execution. This file is removed in the product commit before validation.
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/integration-hardening.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: integration-hardening
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      source: ${{ steps.publish.outputs.source }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - name: Apply reviewed integration boundaries
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          import subprocess, json
+          base = 'b0976ebae797d1f4d05deced37d175f48b3e090b'
+          modules = '8567812462e55f7e7c35aed607e36ba2fc903e39'
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          git('fetch','--depth=1','origin',base)
+          git('diff','--exit-code',base,'HEAD','--','.',':!.github/workflows/integration-hardening.yml')
+          git('fetch','--depth=1','origin',modules)
+          paths = git('diff','--name-only',base,modules).splitlines()
+          assert paths and all(p.startswith(('src/','tests/','scripts/')) for p in paths)
+          git('checkout',modules,'--',*paths)
+          def edit(name, old, new, count=1):
+              p=Path(name); s=p.read_text(encoding='utf-8')
+              assert s.count(old)==count, (name,old[:90],s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8',newline='\n')
+          p=Path('src/electron/main.ts')
+          p.write_text('import { QuitCoordinator } from "./quit-coordinator.js";\nimport { writeFile } from "node:fs/promises";\n'+p.read_text(encoding='utf-8'),encoding='utf-8',newline='\n')
+          edit('src/electron/main.ts','let shuttingDown = false;','''let shuttingDown = false;
+          const quitCoordinator = new QuitCoordinator({
+            publication: () => annotationIo.publication,
+            cleanup: () => runCleanupSteps([
+              stopDisplayRefresh, prepareWindowsForQuit, () => { persistSettingsNow(); },
+              () => globalShortcut.unregisterAll(), stopInputCapture, destroyTray,
+            ]),
+            resume: () => app.quit(),
+            failed: (error) => {
+              console.error("Quit cancelled because annotation publication failed:", error);
+              showMainWindow();
+              void dialog.showMessageBox({
+                type: "error", title: "저장 실패로 종료 취소",
+                message: "판서를 저장하지 못해 종료를 취소했습니다.",
+                detail: "현재 판서는 유지됩니다. 저장 경로나 권한을 확인하고 다시 저장한 뒤 종료하세요.",
+                buttons: ["확인"], defaultId: 0, cancelId: 0, noLink: true,
+              }).catch(notificationError => console.error("Cannot show cancelled-quit notice:", notificationError));
+            },
+          });''')
+          edit('src/electron/main.ts','''  app.on("before-quit", () => {
+              runCleanupSteps([
+                stopDisplayRefresh,
+                prepareWindowsForQuit,
+                () => {
+                  persistSettingsNow();
+                },
+                () => globalShortcut.unregisterAll(),
+                stopInputCapture,
+                destroyTray,
+              ]);
+            });''','''  app.on("before-quit", event => quitCoordinator.beforeQuit(event));''')
+          edit('src/electron/window.ts','''export function quitApplication() {
+            prepareWindowsForQuit();
+            app.quit();
+          }''','''export function quitApplication() {
+            app.quit();
+          }''')
+          edit('src/electron/main.ts','''    settingsState: () => settingsWriter?.state ?? "failed",
+            });''','''    settingsState: () => settingsWriter?.state ?? "failed",
+              gate: annotationIo,
+              quitWaiting: () => quitCoordinator.waiting,
+            });''')
+          edit('src/electron/main.ts','''  scheduleSettingsPersist();
+            app.quit();
+          }
+
+          async function initializeApp()''','''  scheduleSettingsPersist();
+            const release = annotationIo.acquire();
+            if (!release) throw new Error("Smoke quit found an occupied I/O gate");
+            const publication = annotationIo.publish(async () => {
+              if (!quitCoordinator.waiting || !isTrayReady() || shuttingDown)
+                throw new Error("Success-path quit cleaned resources before publication");
+              await new Promise(resolve => setTimeout(resolve, 150));
+              if (!isTrayReady() || shuttingDown) throw new Error("Resources vanished during quit deferral");
+              await writeFile(path.join(app.getPath("userData"), "quit-publication.txt"), "complete", "utf8");
+            });
+            void publication.then(release, release);
+            app.quit();
+          }
+
+          async function initializeApp()''')
+          p=Path('src/renderer/components/AnnotationSurface.tsx')
+          p.write_text('import { observeAnnotationViewport } from "@/renderer/lib/annotation-viewport";\n'+p.read_text(encoding='utf-8'),encoding='utf-8',newline='\n')
+          edit(str(p),'''    const resize = () => {
+                resizeCanvas(committed);
+                resizeCanvas(gesture);
+                clearGesture();
+                renderCommitted(true);
+              };
+              resize();
+
+              const observer = new ResizeObserver(resize);
+              observer.observe(committed);
+              return () => observer.disconnect();
+            }, [clearGesture, renderCommitted]);''','''    return observeAnnotationViewport(committed, () => {
+                finishGestureState(true);
+                resizeCanvas(committed);
+                resizeCanvas(gesture);
+                renderCommitted(true);
+              });
+            }, [finishGestureState, renderCommitted]);''')
+          p=Path('src/electron/testing/interaction-smoke.ts')
+          p.write_text('import { verifyIntegrationBoundaries } from "./integration-boundary-smoke.js";\nimport type { AnnotationIoGate } from "../annotation-io-gate.js";\n'+p.read_text(encoding='utf-8'),encoding='utf-8',newline='\n')
+          edit(str(p),'export interface SmokeContext {','export interface SmokeContext {\n  gate: AnnotationIoGate;\n  quitWaiting(): boolean;')
+          edit(str(p),'''    } finally {
+                if (!underlay.isDestroyed()) underlay.destroy();''','''      diagnostics.integrationBoundaries = await verifyIntegrationBoundaries({
+                  history: annotationHistory, gate: context.gate, quitWaiting: context.quitWaiting, state: context.state,
+                  click: async (selector, label) => {
+                    if (!mainWindow) throw new Error("Missing boundary controller");
+                    await clickControllerElement(mainWindow, selector, label);
+                  },
+                }, primary.id);
+              } finally {
+                if (!underlay.isDestroyed()) underlay.destroy();''')
+          edit('src/electron/testing/document-file-smoke.ts','async function nativeDialog(title: string)', 'export async function nativeDialog(title: string)')
+          p=Path('src/electron/testing/integration-boundary-smoke.ts')
+          s=p.read_text(encoding='utf-8').replace('injectWindowsMouseButton("left", true)','injectWindowsMouseButton(x, y, true)').replace('injectWindowsMouseButton("left", false)','injectWindowsMouseButton(x + 30, y + 20, false)')
+          s=s.replace('query("document.querySelector(\'canvas[data-active-gesture]\')")','query("Boolean(document.querySelector(\'canvas[data-active-gesture]\'))")')
+          p.write_text(s,encoding='utf-8',newline='\n')
+          p=Path('scripts/package-bundle.ps1'); s=p.read_text(encoding='utf-8'); assert 'Read-Git @(' in s
+          p.write_text(s.replace('Read-Git @(', 'Read-Git -Arguments @('),encoding='utf-8',newline='\n')
+          p=Path('scripts/verify-source.ps1')
+          with p.open('a',encoding='utf-8',newline='\n') as f:
+              f.write('''\nif ((Get-Content -LiteralPath (Join-Path $userData 'quit-publication.txt') -Raw) -ne 'complete') { throw 'Successful publication was not completed before normal exit.' }
+          if (-not $payload.diagnostics.integrationBoundaries.failedWriteCancelsQuit -or -not $payload.diagnostics.integrationBoundaries.hiddenExport -or $payload.diagnostics.integrationBoundaries.heldViewport.Count -ne 4) { throw 'Integration boundaries were not exercised.' }
+          ''')
+          edit('scripts/verify-windows.ps1','''    $saved = Get-Content -LiteralPath (Join-Path $userData 'config.json') -Raw | ConvertFrom-Json''','''    if ((Get-Content -LiteralPath (Join-Path $userData 'quit-publication.txt') -Raw) -ne 'complete') { throw "$Label did not complete its pending publication before quit." }
+              $saved = Get-Content -LiteralPath (Join-Path $userData 'config.json') -Raw | ConvertFrom-Json''')
+          p=Path('scripts/verify-diagnostics.ps1')
+          with p.open('a',encoding='utf-8',newline='\n') as f:
+              f.write('''\nforeach ($file in @('unpacked-interaction-sentinel.json', 'unpacked-software-interaction-sentinel.json')) {
+            $result = Get-Content -LiteralPath (Join-Path 'verification-logs' $file) -Raw | ConvertFrom-Json
+            $boundary = $result.diagnostics.integrationBoundaries
+            if (-not $boundary.failedWriteCancelsQuit -or -not $boundary.trayAndShortcutsSurvive -or -not $boundary.hiddenExport -or -not $boundary.minimizedExport -or -not $boundary.lateReplyIgnored -or -not $boundary.redundantResize -or $boundary.heldViewport.Count -ne 4) { throw 'Packaged integration boundary coverage missing.' }
+          }
+          ''')
+          for name in ('package.json','package-lock.json'):
+              p=Path(name); data=json.loads(p.read_text(encoding='utf-8')); assert data['version']=='0.14.0'
+              data['version']='0.14.1'
+              if name=='package-lock.json': data['packages']['']['version']='0.14.1'
+              p.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8',newline='\n')
+          p=Path('.github/workflows/verify.yml'); s=p.read_text(encoding='utf-8')
+          old='      - name: Windows 산출물 업로드'
+          assert s.count(old)==1
+          s=s.replace(old,'      - name: 배포 출처 실패 경계 검사\n        shell: pwsh\n        run: ./tests/windows/bundle-provenance.test.ps1\n'+old)
+          p.write_text(s,encoding='utf-8',newline='\n')
+          p=Path('docs/ANNOTATION-TOOLS.md'); s=p.read_text(encoding='utf-8').replace('현재 문서 기준은 0.14.0','현재 문서 기준은 0.14.1')
+          s+='''\n\n## 통합 경계 처리 (0.14.1)\n\n파일·PNG·클립보드의 승인된 쓰기가 진행 중이면 정상 종료를 보류합니다. 성공 뒤에만 트레이·입력 훅·단축키를 정리하며, 쓰기 실패는 종료를 취소하고 현재 판서를 유지해 다시 저장할 수 있게 합니다. 자동 저장이나 운영체제 강제 종료 복구 기능은 아닙니다.\n\n준비 단계의 저장·열기·내보내기 요청은 컨트롤러 숨김·최소화·재로딩으로 무효화합니다. 숨겼다 다시 표시해도 이전 요청을 재사용하지 않습니다. 이미 승인된 쓰기는 중간에 끊지 않습니다.\n\n일반 판서의 CSS 크기 또는 DPR이 바뀌면 진행 중 획·도형·지우개와 pointer capture를 취소한 뒤 확정 문서를 다시 그립니다. 크기가 같은 중복 이벤트는 입력을 취소하지 않습니다.\n'''
+          p.write_text(s,encoding='utf-8',newline='\n')
+          p=Path('docs/DEVELOPMENT.md')
+          with p.open('a',encoding='utf-8',newline='\n') as f:
+              f.write('''\n\n## 고정 소스 배포 검증\n\n`package-bundle.ps1`은 깨끗한 Git HEAD와 tree를 기록하며, `MINICAST_SOURCE_SHA`가 지정되면 실제 HEAD와 같아야 합니다. MSI·포터블 EXE·BUILD-METADATA.json·SHA256SUMS.txt를 같은 ZIP에 포함합니다. 내부 해시는 설치 파일과 메타데이터 모두를 포함하며 ZIP 자체의 해시는 바깥 BUNDLE-SHA256.txt에 기록합니다. 메타데이터의 `commit`은 제품 소스이고 `workflow_commit`은 실행을 시작한 워크플로 커밋입니다. 두 값은 같다고 가정하지 않습니다.\n''')
+          p=Path('docs/CHANGELOG.md')
+          with p.open('a',encoding='utf-8',newline='\n') as f:
+              f.write('''\n\n## 0.14.1\n\n- 승인된 I/O를 기다리는 중앙 종료 제어와 실패 후 앱 유지.\n- 숨김·최소화·재로딩에 대한 파일/PNG 요청 수명 통합.\n- CSS/DPR 변경 시 일반 판서 제스처의 완전 취소.\n- 실제 HEAD·tree와 메타데이터를 포함하는 자체 검증 ZIP.\n- 종료 보류·실제 쓰기 실패·숨김 후 늦은 응답·누른 채 확대율 변경 회귀 검사.\n''')
+          print('INTEGRATION_PATCH_APPLIED version=0.14.1')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Commit candidate locally, without temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/integration-hardening.yml
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: harden annotation lifecycle, viewport cancellation and release provenance'
+      - run: npm ci
+      - run: npm run check
+      - run: npm audit --audit-level=low
+      - name: Publish checked commit directly to main
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)"
+          git push origin HEAD:main
+          echo "source=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  validate:
+    needs: prepare
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      MINICAST_SOURCE_SHA: ${{ needs.prepare.outputs.source }}
+    steps:
+      - name: Fresh checkout of immutable product commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.prepare.outputs.source }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - name: Assert source identity and no preparation paths
+        shell: pwsh
+        run: |
+          $head = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $head -ne $env:MINICAST_SOURCE_SHA) { throw 'Wrong source revision.' }
+          if (Test-Path .github/reorganize.py) { throw 'Unexpected preparation script.' }
+          if (Test-Path .github/workflows/integration-hardening.yml) { throw 'Temporary workflow was not removed.' }
+      - run: npm ci
+      - run: npm run check
+      - run: npm audit --audit-level=low
+      - name: Compile source
+        run: npx vite build && npm run build:electron
+      - name: Native source boundaries and all regression scenarios
+        timeout-minutes: 4
+        run: ./scripts/verify-source.ps1
+      - name: Build MSI and portable from identical committed source
+        run: npm run build
+      - name: Native packaged boundaries and full install lifecycle
+        timeout-minutes: 10
+        run: ./scripts/verify-windows.ps1
+      - run: ./scripts/verify-diagnostics.ps1
+      - name: Self-contained source metadata and internal hashes
+        run: ./scripts/package-bundle.ps1
+      - name: Reject dirty sources and mismatched source identity
+        run: ./tests/windows/bundle-provenance.test.ps1
+      - name: Upload immutable Windows bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mini-cast-windows
+          path: |
+            output/MiniCast-*-windows.zip
+            output/BUNDLE-SHA256.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: integration-hardening-evidence
+          path: verification-logs/**/*
+          if-no-files-found: ignore
+          retention-days: 14
