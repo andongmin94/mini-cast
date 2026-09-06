@@ -1,3 +1,5 @@
+import { QuitCoordinator } from "./quit-coordinator.js";
+import { writeFile } from "node:fs/promises";
 import { AnnotationBoards, readAnnotationBoardRequest, type AnnotationBoardResult } from "../annotation/board.js";
 import { AnnotationIoGate } from "./annotation-io-gate.js";
 import { registerAnnotationFiles } from "./annotation-files.js";
@@ -133,6 +135,24 @@ let displayRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let displayRefreshExecutor: CoalescingSerialExecutor | null = null;
 let displayRebuildInProgress = false;
 let shuttingDown = false;
+const quitCoordinator = new QuitCoordinator({
+  publication: () => annotationIo.publication,
+  cleanup: () => runCleanupSteps([
+    stopDisplayRefresh, prepareWindowsForQuit, () => { persistSettingsNow(); },
+    () => globalShortcut.unregisterAll(), stopInputCapture, destroyTray,
+  ]),
+  resume: () => app.quit(),
+  failed: (error) => {
+    console.error("Quit cancelled because annotation publication failed:", error);
+    showMainWindow();
+    void dialog.showMessageBox({
+      type: "error", title: "저장 실패로 종료 취소",
+      message: "판서를 저장하지 못해 종료를 취소했습니다.",
+      detail: "현재 판서는 유지됩니다. 저장 경로나 권한을 확인하고 다시 저장한 뒤 종료하세요.",
+      buttons: ["확인"], defaultId: 0, cancelId: 0, noLink: true,
+    }).catch(notificationError => console.error("Cannot show cancelled-quit notice:", notificationError));
+  },
+});
 
 function connectedDisplayIds(
   displays: readonly OverlayDisplayMeta[] = overlayDisplays,
@@ -898,6 +918,8 @@ async function runSmokeTest() {
     publishDocument: sendAnnotationDocument,
     settingsPath,
     settingsState: () => settingsWriter?.state ?? "failed",
+    gate: annotationIo,
+    quitWaiting: () => quitCoordinator.waiting,
   });
   const test =
     mode === "interaction"
@@ -935,6 +957,16 @@ async function runSmokeTest() {
   // the debounce elapses. The parent process checks the persisted value.
   currentSettings = { ...currentSettings, cursorSize: 37 };
   scheduleSettingsPersist();
+  const release = annotationIo.acquire();
+  if (!release) throw new Error("Smoke quit found an occupied I/O gate");
+  const publication = annotationIo.publish(async () => {
+    if (!quitCoordinator.waiting || !isTrayReady() || shuttingDown)
+      throw new Error("Success-path quit cleaned resources before publication");
+    await new Promise(resolve => setTimeout(resolve, 150));
+    if (!isTrayReady() || shuttingDown) throw new Error("Resources vanished during quit deferral");
+    await writeFile(path.join(app.getPath("userData"), "quit-publication.txt"), "complete", "utf8");
+  });
+  void publication.then(release, release);
   app.quit();
 }
 
@@ -991,18 +1023,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on("second-instance", showMainWindow);
   app.on("activate", showMainWindow);
-  app.on("before-quit", () => {
-    runCleanupSteps([
-      stopDisplayRefresh,
-      prepareWindowsForQuit,
-      () => {
-        persistSettingsNow();
-      },
-      () => globalShortcut.unregisterAll(),
-      stopInputCapture,
-      destroyTray,
-    ]);
-  });
+  app.on("before-quit", event => quitCoordinator.beforeQuit(event));
 
   void initializeApp().catch(async (error) => {
     closeSplash();

@@ -1,3 +1,5 @@
+import { verifyIntegrationBoundaries } from "./integration-boundary-smoke.js";
+import type { AnnotationIoGate } from "../annotation-io-gate.js";
 import { verifyAnnotationBoards } from "./board-smoke.js";
 import { verifyAnnotationFiles } from "./document-file-smoke.js";
 import { verifyAnnotationExports } from "./export-smoke.js";
@@ -51,6 +53,8 @@ import {
 } from "../window.js";
 
 export interface SmokeContext {
+  gate: AnnotationIoGate;
+  quitWaiting(): boolean;
   history: AnnotationHistory;
   state(): AnnotationState;
   refreshDisplays(): Promise<void>;
@@ -1345,6 +1349,13 @@ export function createSmokeChecks(context: SmokeContext) {
             }));
             throw error;
           }
+        },
+      }, primary.id);
+      diagnostics.integrationBoundaries = await verifyIntegrationBoundaries({
+        history: annotationHistory, gate: context.gate, quitWaiting: context.quitWaiting, state: context.state,
+        click: async (selector, label) => {
+          if (!mainWindow) throw new Error("Missing boundary controller");
+          await clickControllerElement(mainWindow, selector, label);
         },
       }, primary.id);
     } finally {

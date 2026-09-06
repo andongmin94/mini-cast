@@ -119,6 +119,7 @@ function Invoke-MiniCastSmoke {
     if ([bool]$payload.settingsRecovered -ne [bool]$CorruptSettings) {
       throw "$Label did not handle its settings fixture as expected."
     }
+    if ((Get-Content -LiteralPath (Join-Path $userData 'quit-publication.txt') -Raw) -ne 'complete') { throw "$Label did not complete its pending publication before quit." }
     $saved = Get-Content -LiteralPath (Join-Path $userData 'config.json') -Raw | ConvertFrom-Json
     if ($saved.settings.cursorSize -ne $payload.expectedQuitCursorSize) {
       throw "$Label did not flush the final preference on normal quit."

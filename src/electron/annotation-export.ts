@@ -1,4 +1,5 @@
 import type { AnnotationIoGate } from "./annotation-io-gate.js";
+import { AnnotationIoLifetime } from "./annotation-io-lifetime.js";
 import { app, clipboard, ClipboardItem, dialog, ipcMain, nativeImage, screen, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -20,14 +21,12 @@ export function registerAnnotationExports(options: Options) {
   const renders = new ExportRenderSession();
   const topLevel = (event: IpcMainEvent | IpcMainInvokeEvent) =>
     !event.sender.isDestroyed() && event.senderFrame === event.sender.mainFrame;
-
   ipcMain.on("annotation-export-rendered", (event, id: unknown, bytes: unknown) => {
     if (topLevel(event)) renders.reply(event.sender.id, id, bytes);
   });
-
   ipcMain.handle("annotation-export", async (event, value: unknown): Promise<AnnotationExportResult> => {
     const controller = mainWindow;
-    if (!topLevel(event) || !controller || controller.isDestroyed() ||
+    if (!topLevel(event) || !controller || controller.isDestroyed() || controller.isMinimized() ||
         controller.webContents !== event.sender || !controller.isVisible())
       return { status: "error", reason: "invalid-request" };
     const request = readAnnotationExportRequest(value);
@@ -39,39 +38,20 @@ export function registerAnnotationExports(options: Options) {
     const physical = screen.getAllDisplays().find(display => display.id === request.displayId);
     if (!target || target.isDestroyed() || target.webContents.isDestroyed() || !physical)
       return { status: "error", reason: "unavailable" };
-
     const release = options.gate.acquire();
     if (!release) return { status: "error", reason: "busy" };
-    let cancelled = false;
-    let publishing = false;
-    let publication: Promise<void> | null = null;
-    let quitRequested = false;
-    const beforeQuit = (event: Electron.Event) => {
-      if (!publication) { invalidate(); return; }
-      event.preventDefault();
-      if (quitRequested) return;
-      quitRequested = true;
-      void publication.then(() => app.quit(), () => app.quit());
-    };
-    const invalidate = () => {
-      // A user-authorized atomic write already in progress is allowed to finish.
-      if (publishing) return;
-      cancelled = true;
-      renders.cancel("unavailable");
-    };
     const contents = target.webContents;
     const owner = controller.webContents;
+    const lifetime = new AnnotationIoLifetime(() => renders.cancel("unavailable"));
+    lifetime.watch(controller, ["hide", "minimize", "closed"]);
+    lifetime.watch(owner, ["did-start-loading", "destroyed"]);
+    lifetime.watch(contents, ["did-start-loading", "destroyed"]);
     const valid = () => {
-      if (cancelled || options.unavailable() || target.isDestroyed() || contents.isDestroyed() ||
-          controller.isDestroyed() || owner.isDestroyed() || !overlayWindows.includes(target) ||
-          !screen.getAllDisplays().some(display => display.id === request.displayId))
+      if (lifetime.invalidated || options.unavailable() || target.isDestroyed() || contents.isDestroyed() ||
+          controller.isDestroyed() || owner.isDestroyed() || !controller.isVisible() || controller.isMinimized() ||
+          !overlayWindows.includes(target) || !screen.getAllDisplays().some(display => display.id === request.displayId))
         throw new AnnotationExportError("unavailable");
     };
-    contents.on("did-start-loading", invalidate);
-    contents.once("destroyed", invalidate);
-    owner.on("did-start-loading", invalidate);
-    owner.once("destroyed", invalidate);
-    app.on("before-quit", beforeQuit);
     try {
       const snapshot = options.history.getSnapshot(request.displayId);
       const scale = physical.scaleFactor;
@@ -89,11 +69,9 @@ export function registerAnnotationExports(options: Options) {
       const png = image.toPNG();
       if (request.destination === "clipboard") {
         valid();
-        publishing = true;
-        publication = clipboard.write([
+        await lifetime.publish(options.gate, () => clipboard.write([
           new ClipboardItem({ "image/png": new Blob([new Uint8Array(png)], { type: "image/png" }) }),
-        ]);
-        await publication;
+        ]));
         return { status: "copied", revision: snapshot.revision, ...size };
       }
       options.prepareFileDialog();
@@ -106,22 +84,16 @@ export function registerAnnotationExports(options: Options) {
       });
       if (result.canceled || !result.filePath) return { status: "cancelled" };
       valid();
-      publishing = true;
-      publication = writePngFile(result.filePath, png);
-      await publication;
+      await lifetime.publish(options.gate, () => writePngFile(result.filePath!, png));
       return { status: "saved", fileName: path.basename(result.filePath), revision: snapshot.revision, ...size };
     } catch (error) {
       if (!(error instanceof AnnotationExportError)) console.error("Annotation export failed:", error);
       const reason = error instanceof AnnotationExportError ? error.reason : "write-failed";
       return reason === "cancelled" ? { status: "cancelled" } : { status: "error", reason };
     } finally {
+      lifetime.dispose();
       renders.cancel();
       release();
-      contents.removeListener("did-start-loading", invalidate);
-      contents.removeListener("destroyed", invalidate);
-      owner.removeListener("did-start-loading", invalidate);
-      owner.removeListener("destroyed", invalidate);
-      app.removeListener("before-quit", beforeQuit);
     }
   });
 }

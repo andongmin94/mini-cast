@@ -124,7 +124,6 @@ export function hideMainWindow() {
 }
 
 export function quitApplication() {
-  prepareWindowsForQuit();
   app.quit();
 }
 

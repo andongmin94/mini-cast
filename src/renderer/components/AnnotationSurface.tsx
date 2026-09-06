@@ -1,3 +1,4 @@
+import { observeAnnotationViewport } from "@/renderer/lib/annotation-viewport";
 import { shapeControlPoints, framePoint } from "@/annotation/primitive-frame";
 import { constrainedShapeEnd, hasShapeExtent } from "@/annotation/shape-geometry";
 import { isShapeTool, type StrokeElement, type ShapeElement, type TextElement } from "@/annotation/history";
@@ -325,18 +326,13 @@ function AnnotationSurface({
     const gesture = gestureCanvasRef.current;
     if (!committed || !gesture) return;
 
-    const resize = () => {
+    return observeAnnotationViewport(committed, () => {
+      finishGestureState(true);
       resizeCanvas(committed);
       resizeCanvas(gesture);
-      clearGesture();
       renderCommitted(true);
-    };
-    resize();
-
-    const observer = new ResizeObserver(resize);
-    observer.observe(committed);
-    return () => observer.disconnect();
-  }, [clearGesture, renderCommitted]);
+    });
+  }, [finishGestureState, renderCommitted]);
 
   useEffect(() => {
     documentRef.current = null;

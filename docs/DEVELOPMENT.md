@@ -53,3 +53,8 @@ main process가 문서와 전역 Undo/Redo를 소유합니다. 일반 편집은 
 ## 알림
 
 저장소는 자동 검증을 실행하지 않습니다. GitHub 자체의 Actions 이메일은 계정 설정이며, 완전히 끄려면 Settings → Notifications → System → Actions에서 Email을 끄거나 Don't notify를 선택합니다. 수동 검증 실패 여부와 이메일 설정은 별개입니다.
+
+
+## 고정 소스 배포 검증
+
+`package-bundle.ps1`은 깨끗한 Git HEAD와 tree를 기록하며, `MINICAST_SOURCE_SHA`가 지정되면 실제 HEAD와 같아야 합니다. MSI·포터블 EXE·BUILD-METADATA.json·SHA256SUMS.txt를 같은 ZIP에 포함합니다. 내부 해시는 설치 파일과 메타데이터 모두를 포함하며 ZIP 자체의 해시는 바깥 BUNDLE-SHA256.txt에 기록합니다. 메타데이터의 `commit`은 제품 소스이고 `workflow_commit`은 실행을 시작한 워크플로 커밋입니다. 두 값은 같다고 가정하지 않습니다.

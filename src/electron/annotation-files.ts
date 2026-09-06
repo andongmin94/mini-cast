@@ -6,7 +6,8 @@ import {
 } from "../annotation/document-file.js";
 import { AnnotationError } from "../annotation/errors.js";
 import type { AnnotationHistory } from "../annotation/history.js";
-import { AnnotationIoGate } from "./annotation-io-gate.js";
+import type { AnnotationIoGate } from "./annotation-io-gate.js";
+import { AnnotationIoLifetime } from "./annotation-io-lifetime.js";
 import { loadAnnotationFile, saveAnnotationFile } from "./annotation-file-store.js";
 import { mainWindow, overlayDisplays, overlayWindows } from "./window.js";
 
@@ -21,7 +22,7 @@ interface Options {
 export function registerAnnotationFiles(options: Options) {
   ipcMain.handle("annotation-file", async (event, value: unknown): Promise<AnnotationFileResult> => {
     const controller = mainWindow;
-    if (!controller || controller.isDestroyed() || !controller.isVisible() || event.sender.isDestroyed() ||
+    if (!controller || controller.isDestroyed() || !controller.isVisible() || controller.isMinimized() || event.sender.isDestroyed() ||
         event.sender !== controller.webContents || event.senderFrame !== event.sender.mainFrame)
       return { status: "error", reason: "invalid-request" };
     const request = readAnnotationFileRequest(value);
@@ -36,28 +37,16 @@ export function registerAnnotationFiles(options: Options) {
     if (!release) return { status: "error", reason: "busy" };
     const owner = controller.webContents;
     const contents = target.webContents;
-    let invalidated = false;
-    let publication: Promise<void> | null = null;
-    let quitRequested = false;
-    const invalidate = () => { if (!publication) invalidated = true; };
-    const beforeQuit = (event: Electron.Event) => {
-      if (!publication) { invalidate(); return; }
-      event.preventDefault();
-      if (quitRequested) return;
-      quitRequested = true;
-      void publication.then(() => app.quit(), () => app.quit());
-    };
+    const lifetime = new AnnotationIoLifetime();
+    lifetime.watch(controller, ["hide", "minimize", "closed"]);
+    lifetime.watch(owner, ["did-start-loading", "destroyed"]);
+    lifetime.watch(contents, ["did-start-loading", "destroyed"]);
     const valid = () => {
-      if (invalidated || options.unavailable() || controller.isDestroyed() || owner.isDestroyed() ||
-          !controller.isVisible() || target.isDestroyed() || contents.isDestroyed() || !overlayWindows.includes(target) ||
+      if (lifetime.invalidated || options.unavailable() || controller.isDestroyed() || owner.isDestroyed() ||
+          !controller.isVisible() || controller.isMinimized() || target.isDestroyed() || contents.isDestroyed() || !overlayWindows.includes(target) ||
           !overlayDisplays.some(display => display.id === request.displayId))
         throw new AnnotationFileError("unavailable");
     };
-    owner.on("did-start-loading", invalidate);
-    owner.once("destroyed", invalidate);
-    contents.on("did-start-loading", invalidate);
-    contents.once("destroyed", invalidate);
-    app.on("before-quit", beforeQuit);
     try {
       options.prepareDialog();
       valid();
@@ -73,8 +62,7 @@ export function registerAnnotationFiles(options: Options) {
         });
         if (result.canceled || !result.filePath) return { status: "cancelled" };
         valid();
-        publication = saveAnnotationFile(result.filePath, serialized);
-        await publication;
+        await lifetime.publish(options.gate, () => saveAnnotationFile(result.filePath!, serialized));
         return { status: "saved", fileName: path.basename(result.filePath), elements: original.elements.length,
           revision: original.revision, changed: false };
       }
@@ -82,7 +70,7 @@ export function registerAnnotationFiles(options: Options) {
       if (opened.canceled || !opened.filePaths.length) return { status: "cancelled" };
       if (opened.filePaths.length !== 1) throw new AnnotationFileError("invalid-request");
       valid();
-      const file = await loadAnnotationFile(opened.filePaths[0], () => invalidated);
+      const file = await loadAnnotationFile(opened.filePaths[0], () => lifetime.invalidated);
       valid();
       const unchanged = () => {
         valid();
@@ -111,11 +99,7 @@ export function registerAnnotationFiles(options: Options) {
       console.error("Annotation file operation failed:", error);
       return { status: "error", reason: request.action === "save" ? "write-failed" : "read-failed" };
     } finally {
-      owner.removeListener("did-start-loading", invalidate);
-      owner.removeListener("destroyed", invalidate);
-      contents.removeListener("did-start-loading", invalidate);
-      contents.removeListener("destroyed", invalidate);
-      app.removeListener("before-quit", beforeQuit);
+      lifetime.dispose();
       release();
     }
   });

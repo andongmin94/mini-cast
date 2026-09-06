@@ -15,7 +15,7 @@ interface Context {
   click(selector: string, label: string): Promise<void>;
   command(command: AnnotationCommand): Promise<void>;
 }
-async function nativeDialog(title: string) {
+export async function nativeDialog(title: string) {
   // Titles below are fixed test constants, never a path or renderer-provided value.
   await promisify(execFile)("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `
 Add-Type @'

@@ -32,3 +32,6 @@ if (-not $payload.diagnostics.exportTools.pngFile -or -not $payload.diagnostics.
 if (-not $payload.diagnostics.documentFiles.nativeOpen -or -not $payload.diagnostics.documentFiles.undoRedo -or -not $payload.diagnostics.documentFiles.staleOpen) { throw 'Editable file lifecycle was not verified.' }
 
 if (-not $payload.diagnostics.boardTools.composedPixels -or -not $payload.diagnostics.boardTools.pngTransparent -or -not $payload.diagnostics.boardTools.escapeRouting) { throw 'Board presentation/input isolation was not verified.' }
+
+if ((Get-Content -LiteralPath (Join-Path $userData 'quit-publication.txt') -Raw) -ne 'complete') { throw 'Successful publication was not completed before normal exit.' }
+if (-not $payload.diagnostics.integrationBoundaries.failedWriteCancelsQuit -or -not $payload.diagnostics.integrationBoundaries.hiddenExport -or $payload.diagnostics.integrationBoundaries.heldViewport.Count -ne 4) { throw 'Integration boundaries were not exercised.' }

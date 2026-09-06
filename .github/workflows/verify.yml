@@ -54,6 +54,9 @@ jobs:
       - name: 최종 ZIP 무결성 및 내부 해시 대조
         shell: pwsh
         run: ./scripts/package-bundle.ps1
+      - name: 배포 출처 실패 경계 검사
+        shell: pwsh
+        run: ./tests/windows/bundle-provenance.test.ps1
       - name: Windows 산출물 업로드
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
