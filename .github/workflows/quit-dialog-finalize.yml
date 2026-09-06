@@ -1,0 +1,145 @@
+name: Finalize quit dialog boundaries
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/quit-dialog-finalize.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+jobs:
+  finalize:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - name: Refine native prompt suspension without discarding documents or drafts
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          import subprocess
+          subprocess.run(['git','fetch','--depth=1','origin','50399bd2b9fc340d7d8b737b49bec31a7b6bca06'],check=True)
+          subprocess.run(['git','diff','--exit-code','50399bd2b9fc340d7d8b737b49bec31a7b6bca06','HEAD','--','.',':!.github/workflows/quit-dialog-finalize.yml'],check=True)
+          p=Path('src/electron/main.ts'); s=p.read_text(encoding='utf-8')
+          start=s.index('async function confirmUnsavedAnnotations(): Promise<boolean> {')
+          end=s.index('\nfunction connectedDisplayIds(',start)
+          replacement='''async function confirmUnsavedAnnotations(): Promise<boolean> {
+            const controller = mainWindow;
+            if (!controller || controller.isDestroyed() || annotationIo.busy || displayRebuildInProgress) return false;
+            const owner = controller.webContents;
+            const count = overlayDisplays.filter(display => annotationSaveState.isDirty(annotationHistory.getSnapshot(display.id))).length;
+            const abort = new AbortController();
+            const lifetime = new AnnotationIoLifetime(() => abort.abort());
+            quitDialogOpen = true;
+            try {
+              cancelActiveAnnotationGestures();
+              refreshTransientAnnotationShortcuts();
+              setOverlayInteractive(false);
+              setAnnotationInputMode(false);
+              sendAnnotationState(); // Hide opaque board backgrounds while the native prompt owns input.
+              showMainWindow();
+              lifetime.watch(controller, ["hide", "minimize", "closed"]);
+              lifetime.watch(owner, ["did-start-loading", "destroyed"]);
+              const result = await dialog.showMessageBox(controller, {
+                type: "warning", title: "저장하지 않은 판서",
+                message: `${count}개 화면에 저장하지 않은 판서가 있습니다.`,
+                detail: "종료하면 현재 판서를 잃습니다. 보관하려면 돌아가서 각 화면을 .minicast 파일로 저장하세요. PNG·이미지 복사는 편집 가능한 파일 저장을 대신하지 않습니다.",
+                buttons: ["돌아가기", "저장하지 않고 종료"], defaultId: 0, cancelId: 0, noLink: true, signal: abort.signal,
+              });
+              return result.response === 1 && !lifetime.invalidated;
+            } finally {
+              lifetime.dispose();
+              quitDialogOpen = false;
+              if (!shuttingDown) {
+                if (lifetime.invalidated || controller.isDestroyed() || !controller.isVisible() || controller.isMinimized()) {
+                  setAnnotationTool("pass-through");
+                } else {
+                  const interactive = annotationTool !== "pass-through";
+                  setOverlayInteractive(interactive);
+                  setAnnotationInputMode(interactive);
+                  refreshTransientAnnotationShortcuts();
+                  sendAnnotationState();
+                }
+              }
+            }
+          }
+          '''
+          s=s[:start]+replacement+s[end:]
+          s='import { AnnotationIoLifetime } from "./annotation-io-lifetime.js";\n'+s
+          old='  if (quitDialogOpen) { sendAnnotationState(); return; }'
+          assert s.count(old)==1
+          s=s.replace(old,'  if (quitDialogOpen && tool !== "pass-through") { sendAnnotationState(); return; }')
+          old='    tool: annotationTool,'
+          assert s.count(old)==1
+          s=s.replace(old,'    tool: quitDialogOpen ? "pass-through" : annotationTool,')
+          old='    canUndo: gestureLeases.size > 0 || (!isTransientAnnotationTool(annotationTool) && annotationHistory.canUndo),'
+          assert s.count(old)==1
+          s=s.replace(old,'    canUndo: !quitDialogOpen && (gestureLeases.size > 0 || (!isTransientAnnotationTool(annotationTool) && annotationHistory.canUndo)),')
+          old='    canRedo: !isTransientAnnotationTool(annotationTool) && annotationHistory.canRedo,'
+          assert s.count(old)==1
+          s=s.replace(old,'    canRedo: !quitDialogOpen && !isTransientAnnotationTool(annotationTool) && annotationHistory.canRedo,')
+          p.write_text(s,encoding='utf-8',newline='\n')
+          p=Path('src/electron/testing/unsaved-quit-smoke.ts'); s=p.read_text(encoding='utf-8')
+          s=s.replace('import { mainWindow, quitApplication }','import { mainWindow, quitApplication, showMainWindow, hideMainWindow, isOverlayInteractive }')
+          old='  await injectWindowsShortcut("Alt+Shift+3");\n  await injectWindowsShortcut("Alt+Shift+1");'
+          assert s.count(old)==1
+          s=s.replace(old,'''  for (const transition of ["hide", "minimize"]) {
+              await injectWindowsShortcut("Alt+Shift+3");
+              await waitFor(() => isOverlayInteractive(), 5000, "pen active before quit visibility boundary");
+              quitApplication(); await nativeDialog("저장하지 않은 판서");
+              const effectiveTool = await controller.webContents.executeJavaScript("miniCast.getAnnotationState().then(state => state.tool)");
+              if (isOverlayInteractive() || effectiveTool !== "pass-through") throw new Error("Quit prompt did not suspend board and pointer input");
+              if (transition === "hide") hideMainWindow(); else controller.minimize();
+              await waitFor(() => !context.quitWaiting(), 5000, "hidden or minimized quit prompt is cancelled");
+              if (isOverlayInteractive() || context.history.getSnapshot(displayId) !== original) throw new Error("Hidden controller restored blocking input or lost unsaved work");
+              showMainWindow();
+              if (isOverlayInteractive()) throw new Error("Showing controller resurrected blocked annotation input");
+            }
+            await injectWindowsShortcut("Alt+Shift+3");
+            await injectWindowsShortcut("Alt+Shift+1");''')
+          s=s.replace('return { pngNotSaved: true,','return { hiddenCancel: true, minimizedCancel: true, presentationSuspended: true, pngNotSaved: true,')
+          p.write_text(s,encoding='utf-8',newline='\n')
+          p=Path('scripts/verify-diagnostics.ps1'); s=p.read_text(encoding='utf-8')
+          old='if (-not $quit.defaultCancel -or'
+          assert s.count(old)==1
+          s=s.replace(old,'if (-not $quit.hiddenCancel -or -not $quit.minimizedCancel -or -not $quit.presentationSuspended -or -not $quit.defaultCancel -or')
+          p.write_text(s,encoding='utf-8',newline='\n')
+          p=Path('tests/unit/electron/integration-wiring.test.mjs')
+          with p.open('a',encoding='utf-8',newline='\n') as f:
+              f.write('''\ntest("quit confirmation suspends board presentation and keeps emergency pass-through available", async () => {
+            const { readFile } = await import("node:fs/promises");
+            const main = await readFile(new URL("../../../src/electron/main.ts", import.meta.url), "utf8");
+            assert.ok(main.includes('tool: quitDialogOpen ? "pass-through" : annotationTool'));
+            assert.ok(main.includes('quitDialogOpen && tool !== "pass-through"'));
+            assert.ok(main.includes('lifetime.watch(controller, ["hide", "minimize", "closed"])'));
+          });\n''')
+          p=Path('docs/ANNOTATION-TOOLS.md')
+          with p.open('a',encoding='utf-8',newline='\n') as f:
+              f.write('\n종료 확인창이 열리면 보드 배경과 판서 입력을 잠시 숨겨 네이티브 창을 가리지 않습니다. 일반 취소는 기존 도구를 복원하되 확인 중 최소화·숨김·재로딩은 조작 모드로 안전하게 돌아갑니다. 비상 조작 모드 단축키는 확인 중에도 차단하지 않습니다.\n')
+          print('QUIT_DIALOG_BOUNDARIES_REFINED')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run: npm ci
+      - run: npm run check
+      - run: npm audit --audit-level=low
+      - name: Publish final source and request normal manual Verify
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/quit-dialog-finalize.yml
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: safely suspend presentation while confirming unsaved exit'
+          test -z "$(git status --porcelain)"
+          git push origin HEAD:main
+          echo "FINAL_SOURCE_SHA=$(git rev-parse HEAD)"
+          gh workflow run verify.yml --ref main
