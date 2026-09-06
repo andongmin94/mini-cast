@@ -59,5 +59,5 @@ foreach ($file in @('unpacked-interaction-sentinel.json', 'unpacked-software-int
 foreach ($file in @('unpacked-interaction-sentinel.json', 'unpacked-software-interaction-sentinel.json')) {
   $result = Get-Content -LiteralPath (Join-Path 'verification-logs' $file) -Raw | ConvertFrom-Json
   $quit = $result.diagnostics.unsavedQuit
-  if (-not $quit.hiddenCancel -or -not $quit.minimizedCancel -or -not $quit.presentationSuspended -or -not $quit.defaultCancel -or -not $quit.escapeCancel -or -not $quit.repeatedQuit -or -not $quit.documentPreserved -or -not $quit.pngNotSaved -or -not $result.diagnostics.documentFiles.savedState) { throw 'Packaged unsaved-document protection missing.' }
+  if (-not $quit.hiddenCancel -or -not $quit.reloadCancel -or -not $quit.blockedMinimize -or -not $quit.minimizedAfterCancel -or -not $quit.presentationSuspended -or -not $quit.defaultCancel -or -not $quit.escapeCancel -or -not $quit.repeatedQuit -or -not $quit.documentPreserved -or -not $quit.pngNotSaved -or -not $result.diagnostics.documentFiles.savedState) { throw 'Packaged unsaved-document protection missing.' }
 }
