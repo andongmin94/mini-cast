@@ -83,6 +83,8 @@ export async function verifyAnnotationExports(context: Context, displayId: numbe
   await waitForSaveDialog();
   const overlapping=await controller.webContents.executeJavaScript(`miniCast.exportAnnotation({displayId:${displayId},destination:'clipboard'})`);
   if(overlapping.reason!=="busy") throw new Error("A second export replaced an open native dialog");
+  const boardChange = await controller.webContents.executeJavaScript(`miniCast.setAnnotationBoard({displayId:${displayId},mode:"black"})`);
+  if (boardChange.accepted || boardChange.reason !== "busy") throw new Error("Board changed during native export");
   history.addElement(displayId,{id:"after-export-start",tool:"pen",color:"#000000",width:20,opacity:1,points:[{x:155,y:110}]});
   context.publishDocument(displayId);
   const output=path.join(directory,"annotation.png");

@@ -1,3 +1,4 @@
+import { verifyAnnotationBoards } from "./board-smoke.js";
 import { verifyAnnotationFiles } from "./document-file-smoke.js";
 import { verifyAnnotationExports } from "./export-smoke.js";
 import { framePoint } from "../../annotation/primitive-frame.js";
@@ -1309,6 +1310,41 @@ export function createSmokeChecks(context: SmokeContext) {
         click: async (selector, label) => {
           if (!mainWindow) throw new Error("Missing document-file controller");
           await clickControllerElement(mainWindow, selector, label);
+        },
+      }, primary.id);
+      diagnostics.boardTools = await verifyAnnotationBoards({
+        history: annotationHistory, state: context.state, publishDocument: context.publishDocument,
+        refreshDisplays: context.refreshDisplays,
+        click: async (selector, description) => {
+          if (!mainWindow) throw new Error("Missing board controller");
+          await clickControllerElement(mainWindow, selector, description);
+        },
+        checkPassThrough: async () => {
+          await waitForOverlayInput(primary.id, false);
+          // Native dialogs can change foreground order. Re-establish the witness
+          // window, but never alter production overlay input flags to make a test pass.
+          if (underlay.isDestroyed()) throw new Error("Board input witness was destroyed");
+          underlay.show();
+          underlay.focus();
+          const witness = underlay.getContentBounds();
+          const point = { x: witness.x + Math.round(witness.width / 2), y: witness.y + Math.round(witness.height / 2) };
+          const previousTitle = await underlay.webContents.executeJavaScript("document.title") as string;
+          const match = /^click-(\d+)$/.exec(previousTitle);
+          if (!match) throw new Error(`Invalid board witness counter: ${previousTitle}`);
+          const expectedTitle = `click-${Number(match[1]) + 1}`;
+          await injectWindowsClick(point.x, point.y);
+          try {
+            await waitFor(async () => await underlay.webContents.executeJavaScript("document.title") === expectedTitle,
+              5000, "board Escape restores native underlay clicks");
+          } catch (error) {
+            console.error("BOARD_CLICK_ROUTING", JSON.stringify({ point, expectedTitle,
+              observedTitle: await underlay.webContents.executeJavaScript("document.title"),
+              witness: { bounds: witness, visible: underlay.isVisible(), focused: underlay.isFocused() },
+              controller: mainWindow ? { bounds: mainWindow.getBounds(), topmost: mainWindow.isAlwaysOnTop(), visible: mainWindow.isVisible() } : null,
+              state: context.state(), cursor: screen.getCursorScreenPoint(),
+            }));
+            throw error;
+          }
         },
       }, primary.id);
     } finally {

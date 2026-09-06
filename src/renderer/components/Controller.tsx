@@ -1,3 +1,4 @@
+import AnnotationBoardControls from "./AnnotationBoardControls";
 import AnnotationFileControls from "./AnnotationFileControls";
 import AnnotationExportControls from "./AnnotationExportControls";
 import AnnotationExistingTextEditor from "./AnnotationExistingTextEditor";
@@ -501,6 +502,7 @@ export default function Controller() {
               canUndo={annotationState.canUndo}
               canRedo={annotationState.canRedo}
             />
+            <AnnotationBoardControls displays={displays} />
             <AnnotationFileControls displays={displays} />
             <AnnotationExportControls displays={displays} />
           </TabsContent>

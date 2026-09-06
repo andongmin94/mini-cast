@@ -1,3 +1,4 @@
+import { annotationBoardBackground, newerAnnotationBoards, type AnnotationBoardSnapshot } from "@/annotation/board";
 import { listenForAnnotationExports } from "@/renderer/lib/annotation-export";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -85,6 +86,7 @@ function toolCursor(tool: AnnotationTool, settings: OverlaySettings) {
 }
 
 export default function Overlay() {
+  const [boards, setBoards] = useState<AnnotationBoardSnapshot | null>(null);
   const [settings, setSettings] = useState<OverlaySettings>(
     DEFAULT_OVERLAY_SETTINGS,
   );
@@ -216,6 +218,7 @@ export default function Overlay() {
         setSettings(next);
       }),
       miniCast.onAnnotationStateUpdated(setAnnotationState),
+      miniCast.onAnnotationBoardsUpdated(next => setBoards(current => newerAnnotationBoards(current, next))),
       miniCast.onAnnotationDocumentUpdated((update) => {
         void applyAnnotationUpdate(update).catch(() => {
           /* The notice is already visible. */
@@ -238,6 +241,7 @@ export default function Overlay() {
   }, [applyAnnotationUpdate, replica]);
 
   const passive = annotationState.tool === "pass-through";
+  const boardMode = boards?.displays.find(display => display.displayId === displayId)?.mode ?? "transparent";
   const cursorPressed =
     mouseButtons.left || mouseButtons.middle || mouseButtons.right;
   const cursorRadius = settings.cursorSize / 2;
@@ -248,11 +252,11 @@ export default function Overlay() {
       className="pointer-events-none fixed inset-0"
       style={{
         zIndex: 9999,
-        // A zero-alpha layered window can miss native pointer input on Windows.
-        // One alpha step keeps blank areas hit-testable without painting the document.
-        backgroundColor: passive ? "transparent" : "rgba(0, 0, 0, 0.004)",
+        // Presentation backgrounds never enter the document Canvas or intercept passive clicks.
+        backgroundColor: annotationBoardBackground(boardMode, !passive),
       }}
       data-mini-cast-overlay=""
+      data-board-mode={boardMode}
       data-display-id={displayId ?? ""}
       data-annotation-revision={annotationDocument?.revision ?? -1}
       data-annotation-elements={annotationDocument?.elements.length ?? 0}

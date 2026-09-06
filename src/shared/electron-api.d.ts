@@ -1,3 +1,4 @@
+import type { AnnotationBoardRequest, AnnotationBoardSnapshot, AnnotationBoardResult } from "../annotation/board";
 import type { AnnotationFileRequest, AnnotationFileResult } from "../annotation/document-file";
 import type { AnnotationExportRequest, AnnotationExportResult, AnnotationExportRenderRequest } from "../annotation/export";
 import type { AnnotationTextEditSession, AnnotationTextEditResult } from "../annotation/text-edit";
@@ -28,6 +29,9 @@ import type {
 type Unsubscribe = () => void;
 
 interface MiniCastBridge {
+  getAnnotationBoards(): Promise<AnnotationBoardSnapshot>;
+  setAnnotationBoard(request: AnnotationBoardRequest): Promise<AnnotationBoardResult>;
+  onAnnotationBoardsUpdated(listener: (state: AnnotationBoardSnapshot) => void): Unsubscribe;
   annotationFile(request: AnnotationFileRequest): Promise<AnnotationFileResult>;
   exportAnnotation(request: AnnotationExportRequest): Promise<AnnotationExportResult>;
   onAnnotationExportRender(listener: (request: AnnotationExportRenderRequest) => void): Unsubscribe;

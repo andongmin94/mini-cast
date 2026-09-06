@@ -30,3 +30,5 @@ if (-not $payload.diagnostics.transientTools.viewportReset -or -not $payload.dia
 if (-not $payload.diagnostics.exportTools.pngFile -or -not $payload.diagnostics.exportTools.clipboard -or -not $payload.diagnostics.exportTools.pinnedRevision) { throw 'PNG/clipboard export was not verified.' }
 
 if (-not $payload.diagnostics.documentFiles.nativeOpen -or -not $payload.diagnostics.documentFiles.undoRedo -or -not $payload.diagnostics.documentFiles.staleOpen) { throw 'Editable file lifecycle was not verified.' }
+
+if (-not $payload.diagnostics.boardTools.composedPixels -or -not $payload.diagnostics.boardTools.pngTransparent -or -not $payload.diagnostics.boardTools.escapeRouting) { throw 'Board presentation/input isolation was not verified.' }

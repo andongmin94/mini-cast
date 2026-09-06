@@ -43,6 +43,9 @@ foreach ($file in $files) {
   foreach ($name in @('nativeSave','nativeOpen','pinnedSave','undoRedo','pixels','cancel','invalidFile','staleOpen','sharedGate','senderRejected','reload')) {
     if (-not $result.diagnostics.documentFiles.$name) { throw "Missing editable-file verification: $name" }
   }
+  foreach ($name in @('white','black','composedPixels','cancelledInput','historyIsolated','fileIsolated','pngTransparent','senderRejected','noOp','escapeRouting','reentry','controllerReload','overlayReload','displayRebuild')) {
+    if (-not $result.diagnostics.boardTools.$name) { throw "Missing presentation-board verification: $name" }
+  }
   Write-Host "ANNOTATION_CORE_DIAGNOSTICS $($file.Name)"
   Write-Host ($result | ConvertTo-Json -Depth 12 -Compress)
 }

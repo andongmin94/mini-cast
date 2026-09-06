@@ -1,3 +1,4 @@
+import { AnnotationBoards, readAnnotationBoardRequest, type AnnotationBoardResult } from "../annotation/board.js";
 import { AnnotationIoGate } from "./annotation-io-gate.js";
 import { registerAnnotationFiles } from "./annotation-files.js";
 import { registerAnnotationExports } from "./annotation-export.js";
@@ -113,6 +114,7 @@ if (smokeOptions.disableHardwareAcceleration) app.disableHardwareAcceleration();
 type SettingsStore = ReturnType<typeof openSettingsStore>["store"];
 
 const annotationHistory = new AnnotationHistory();
+const annotationBoards = new AnnotationBoards();
 const annotationIo = new AnnotationIoGate();
 const textEdits = new AnnotationTextEditSessions(annotationHistory);
 const publishedDocuments = new Map<number, AnnotationDocumentSnapshot>();
@@ -180,6 +182,12 @@ function sendSettingsToOverlays() {
 function sendSettingsToAll() {
   sendToWindow(mainWindow, "settings-updated", currentSettings);
   sendSettingsToOverlays();
+}
+
+function sendAnnotationBoards() {
+  const state = annotationBoards.snapshot;
+  sendToWindow(mainWindow, "annotation-boards-updated", state);
+  overlayWindows.forEach(window => sendToWindow(window, "annotation-boards-updated", state));
 }
 
 function getAnnotationState(): AnnotationState {
@@ -433,9 +441,33 @@ function initializeOverlay(event: IpcMainEvent) {
     kind: "snapshot",
     document: snapshot,
   });
+  sendToWebContents(event.sender, "annotation-boards-updated", annotationBoards.snapshot);
 }
 
 function registerIpc() {
+  ipcMain.handle("get-annotation-boards", event => {
+    if (!isControllerEvent(event)) throw new Error("Invalid board-state request");
+    return annotationBoards.snapshot;
+  });
+  ipcMain.handle("set-annotation-board", (event, value: unknown): AnnotationBoardResult => {
+    if (!isControllerEvent(event) || !mainWindow?.isVisible())
+      return { accepted: false, reason: "invalid-request" };
+    const request = readAnnotationBoardRequest(value);
+    if (!request) return { accepted: false, reason: "invalid-request" };
+    if (annotationIo.busy) return { accepted: false, reason: "busy" };
+    if (shuttingDown || displayRebuildInProgress || controllerTextEditing || textEdits.current ||
+        !annotationBoards.has(request.displayId)) return { accepted: false, reason: "unavailable" };
+    const changed = annotationBoards.set(request.displayId, request.mode);
+    if (changed) {
+      cancelActiveAnnotationGestures();
+      overlayWindows.forEach((window, index) => {
+        if (overlayDisplays[index]?.id === request.displayId) sendToWindow(window, "annotation-transient-clear");
+      });
+    }
+    if (annotationTool === "pass-through") setAnnotationTool("pen");
+    sendAnnotationBoards();
+    return { accepted: true, changed, state: annotationBoards.snapshot };
+  });
   registerAnnotationFiles({
     history: annotationHistory, gate: annotationIo,
     unavailable: () => shuttingDown || displayRebuildInProgress || controllerTextEditing || Boolean(textEdits.current),
@@ -770,6 +802,8 @@ async function rebuildDisplays() {
 
     const connectedIds = displays.map((display) => display.id);
     annotationHistory.retainDisplays(connectedIds);
+    annotationBoards.retainDisplays(connectedIds);
+    sendAnnotationBoards();
     for (const id of publishedDocuments.keys())
       if (!connectedIds.includes(id)) publishedDocuments.delete(id);
     if (
