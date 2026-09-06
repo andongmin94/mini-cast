@@ -1,3 +1,4 @@
+import { AnnotationIoLifetime } from "./annotation-io-lifetime.js";
 import { AnnotationSaveState } from "./annotation-save-state.js";
 import { acceptUnsavedSmokeQuit } from "./testing/unsaved-quit-smoke.js";
 import { QuitCoordinator } from "./quit-coordinator.js";
@@ -168,40 +169,40 @@ function getUnsavedAnnotationKey() {
 async function confirmUnsavedAnnotations(): Promise<boolean> {
   const controller = mainWindow;
   if (!controller || controller.isDestroyed() || annotationIo.busy || displayRebuildInProgress) return false;
+  const owner = controller.webContents;
   const count = overlayDisplays.filter(display => annotationSaveState.isDirty(annotationHistory.getSnapshot(display.id))).length;
   const abort = new AbortController();
-  const invalidate = () => abort.abort();
+  const lifetime = new AnnotationIoLifetime(() => abort.abort());
   quitDialogOpen = true;
-  cancelActiveAnnotationGestures();
-  refreshTransientAnnotationShortcuts();
-  setOverlayInteractive(false);
-  setAnnotationInputMode(false);
-  showMainWindow();
-  controller.on("hide", invalidate);
-  controller.on("minimize", invalidate);
-  controller.on("closed", invalidate);
-  controller.webContents.on("did-start-loading", invalidate);
-  controller.webContents.on("destroyed", invalidate);
   try {
+    cancelActiveAnnotationGestures();
+    refreshTransientAnnotationShortcuts();
+    setOverlayInteractive(false);
+    setAnnotationInputMode(false);
+    sendAnnotationState(); // Hide opaque board backgrounds while the native prompt owns input.
+    showMainWindow();
+    lifetime.watch(controller, ["hide", "minimize", "closed"]);
+    lifetime.watch(owner, ["did-start-loading", "destroyed"]);
     const result = await dialog.showMessageBox(controller, {
       type: "warning", title: "저장하지 않은 판서",
       message: `${count}개 화면에 저장하지 않은 판서가 있습니다.`,
       detail: "종료하면 현재 판서를 잃습니다. 보관하려면 돌아가서 각 화면을 .minicast 파일로 저장하세요. PNG·이미지 복사는 편집 가능한 파일 저장을 대신하지 않습니다.",
       buttons: ["돌아가기", "저장하지 않고 종료"], defaultId: 0, cancelId: 0, noLink: true, signal: abort.signal,
     });
-    return result.response === 1 && !abort.signal.aborted;
+    return result.response === 1 && !lifetime.invalidated;
   } finally {
-    controller.removeListener("hide", invalidate);
-    controller.removeListener("minimize", invalidate);
-    controller.removeListener("closed", invalidate);
-    controller.webContents.removeListener("did-start-loading", invalidate);
-    controller.webContents.removeListener("destroyed", invalidate);
+    lifetime.dispose();
     quitDialogOpen = false;
     if (!shuttingDown) {
-      const interactive = annotationTool !== "pass-through";
-      setOverlayInteractive(interactive);
-      setAnnotationInputMode(interactive);
-      refreshTransientAnnotationShortcuts();
+      if (lifetime.invalidated || controller.isDestroyed() || !controller.isVisible() || controller.isMinimized()) {
+        setAnnotationTool("pass-through");
+      } else {
+        const interactive = annotationTool !== "pass-through";
+        setOverlayInteractive(interactive);
+        setAnnotationInputMode(interactive);
+        refreshTransientAnnotationShortcuts();
+        sendAnnotationState();
+      }
     }
   }
 }
@@ -264,11 +265,11 @@ function sendAnnotationBoards() {
 
 function getAnnotationState(): AnnotationState {
   return {
-    tool: annotationTool,
+    tool: quitDialogOpen ? "pass-through" : annotationTool,
     textDraft,
     unavailableShortcuts: [...unavailableShortcuts].sort(),
-    canUndo: gestureLeases.size > 0 || (!isTransientAnnotationTool(annotationTool) && annotationHistory.canUndo),
-    canRedo: !isTransientAnnotationTool(annotationTool) && annotationHistory.canRedo,
+    canUndo: !quitDialogOpen && (gestureLeases.size > 0 || (!isTransientAnnotationTool(annotationTool) && annotationHistory.canUndo)),
+    canRedo: !quitDialogOpen && !isTransientAnnotationTool(annotationTool) && annotationHistory.canRedo,
   };
 }
 
@@ -429,7 +430,7 @@ function cancelTextEdit() {
 }
 
 function setAnnotationTool(tool: AnnotationTool) {
-  if (quitDialogOpen) { sendAnnotationState(); return; }
+  if (quitDialogOpen && tool !== "pass-through") { sendAnnotationState(); return; }
   if (annotationIo.busy && tool !== "pass-through") { sendAnnotationState(); return; }
   cancelTextEdit();
   if (tool !== "text") setControllerTextEditing(false);

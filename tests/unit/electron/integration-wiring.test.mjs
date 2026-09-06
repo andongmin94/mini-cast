@@ -20,3 +20,11 @@ test("viewport invalidation finishes native input before resizing either canvas"
   const source = await text("src/renderer/components/AnnotationSurface.tsx");
   assert.match(source, /observeAnnotationViewport\(committed, \(\) => \{\s*finishGestureState\(true\);\s*resizeCanvas\(committed\)/);
 });
+
+test("quit confirmation suspends board presentation and keeps emergency pass-through available", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const main = await readFile(new URL("../../../src/electron/main.ts", import.meta.url), "utf8");
+  assert.ok(main.includes('tool: quitDialogOpen ? "pass-through" : annotationTool'));
+  assert.ok(main.includes('quitDialogOpen && tool !== "pass-through"'));
+  assert.ok(main.includes('lifetime.watch(controller, ["hide", "minimize", "closed"])'));
+});

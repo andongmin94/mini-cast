@@ -4,7 +4,7 @@ import path from "node:path";
 import type { AnnotationHistory } from "../../annotation/history.js";
 import type { AnnotationSaveState } from "../annotation-save-state.js";
 import { isTrayReady } from "../tray.js";
-import { mainWindow, quitApplication } from "../window.js";
+import { mainWindow, quitApplication, showMainWindow, hideMainWindow, isOverlayInteractive } from "../window.js";
 import { nativeDialog } from "./document-file-smoke.js";
 import { injectWindowsShortcut, waitFor } from "./smoke.js";
 
@@ -37,9 +37,21 @@ export async function verifyUnsavedQuit(context: Context, displayId: number) {
     if (context.history.getSnapshot(displayId) !== original || !isTrayReady() || controller.isDestroyed())
       throw new Error("Cancelled quit changed the document or destroyed controls");
   }
+  for (const transition of ["hide", "minimize"]) {
+    await injectWindowsShortcut("Alt+Shift+3");
+    await waitFor(() => isOverlayInteractive(), 5000, "pen active before quit visibility boundary");
+    quitApplication(); await nativeDialog("저장하지 않은 판서");
+    const effectiveTool = await controller.webContents.executeJavaScript("miniCast.getAnnotationState().then(state => state.tool)");
+    if (isOverlayInteractive() || effectiveTool !== "pass-through") throw new Error("Quit prompt did not suspend board and pointer input");
+    if (transition === "hide") hideMainWindow(); else controller.minimize();
+    await waitFor(() => !context.quitWaiting(), 5000, "hidden or minimized quit prompt is cancelled");
+    if (isOverlayInteractive() || context.history.getSnapshot(displayId) !== original) throw new Error("Hidden controller restored blocking input or lost unsaved work");
+    showMainWindow();
+    if (isOverlayInteractive()) throw new Error("Showing controller resurrected blocked annotation input");
+  }
   await injectWindowsShortcut("Alt+Shift+3");
   await injectWindowsShortcut("Alt+Shift+1");
-  return { pngNotSaved: true, defaultCancel: true, escapeCancel: true, repeatedQuit: true, documentPreserved: true };
+  return { hiddenCancel: true, minimizedCancel: true, presentationSuspended: true, pngNotSaved: true, defaultCancel: true, escapeCancel: true, repeatedQuit: true, documentPreserved: true };
 }
 
 /** The parent verifies this marker AND normal process exit; no bypass of the product quit guard. */
