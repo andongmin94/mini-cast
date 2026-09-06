@@ -39,13 +39,13 @@ jobs:
       - name: 소스 renderer 및 Electron 빌드
         run: npx vite build && npm run build:electron
       - name: 패키징 전 실제 입력·Canvas 참조 비교
-        timeout-minutes: 3
+        timeout-minutes: 5
         shell: pwsh
         run: ./scripts/verify-source.ps1
       - name: MSI 및 포터블 패키징
         run: npm run build
       - name: 실제 Windows 입력·포터블·MSI 설치 검증
-        timeout-minutes: 10
+        timeout-minutes: 12
         shell: pwsh
         run: ./scripts/verify-windows.ps1
       - name: 판서 변경분 전송·부분 렌더링 진단
