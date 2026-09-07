@@ -1,5 +1,5 @@
 import { segmentToSegmentDistanceSquared } from "./geometry.js";
-import { pointInElementFill, elementInkPaths, textOutline, ELLIPSE_FLATTENING_ERROR } from "./shape-geometry.js";
+import { pointInElementFill, elementInkPaths, textOutline, ellipseFlatteningTolerance } from "./shape-geometry.js";
 import type { AnnotationPoint, AnnotationElement } from "./history.js";
 
 interface Bounds {
@@ -61,7 +61,13 @@ export function prepareEraserElement(stroke: AnnotationElement): PreparedEraserE
     }
     return { points, blocks };
   });
-  return { stroke, bounds, paths, filled, tolerance: stroke.tool === "text" ? 0 : stroke.width / 2 + (stroke.tool === "ellipse" ? ELLIPSE_FLATTENING_ERROR : 0) };
+  return {
+    stroke,
+    bounds,
+    paths,
+    filled,
+    tolerance: stroke.tool === "text" ? 0 : stroke.width / 2 + ellipseFlatteningTolerance(stroke),
+  };
 }
 
 function overlaps(left: Bounds, right: Bounds) {
