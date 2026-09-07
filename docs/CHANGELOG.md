@@ -1,3 +1,12 @@
+## Unreleased
+
+- 판서 gesture lease를 시작 도구에 결속해 다른 영구 도구의 add/remove/edit IPC를 거부하고 실제 Electron smoke에서 문서 불변성을 확인합니다.
+- 초대형 타원의 hit-test용 파생 선분을 512개로 제한하고, cap으로 늘어난 chord 오차를 지우개·선택 tolerance에 반영해 계산량과 보수적 판정을 함께 유지합니다.
+- PNG 내보내기에서 번들 글꼴이 실제로 준비되지 않으면 fallback 글꼴로 저장하지 않고 렌더 실패로 처리합니다.
+- 커서 위치는 8ms 상시 polling 대신 전역 mousemove를 최대 125Hz로 합쳐 게시하며, 실제 좌표는 기존 Electron screen API를 계속 사용합니다.
+- 사라지는 잉크는 2초 유지 구간에서 RAF를 중지하고 fade 구간에만 다시 실행합니다. 키 입력 표시는 화면에서 밀려난 항목의 만료 timer도 즉시 정리합니다.
+- 같은 설정값의 반복 저장 IPC는 overlay 재전송과 디스크 예약을 생략합니다.
+
 ## 0.7.0
 
 - 단일·그룹 회전, Shift 15도 고정, 원자적 Undo/Redo.
