@@ -362,6 +362,30 @@ function registerShortcut(accelerator: string, callback: () => void) {
   return registered;
 }
 
+function handleFallbackToolShortcut(combination: string) {
+  if (controllerTextEditing || shuttingDown) return;
+  const shortcut = TOOL_SHORTCUTS.find(
+    (candidate) => candidate.inputCombination === combination,
+  );
+  if (shortcut) setAnnotationTool(shortcut.tool);
+}
+
+function refreshToolShortcuts() {
+  const fallbackCombinations: string[] = [];
+  TOOL_SHORTCUTS.forEach(({ accelerator, inputCombination, tool }) => {
+    globalShortcut.unregister(accelerator);
+    unavailableShortcuts.delete(accelerator);
+    if (controllerTextEditing || shuttingDown) return;
+    if (!registerShortcut(accelerator, () => setAnnotationTool(tool))) {
+      fallbackCombinations.push(inputCombination);
+    }
+  });
+  configureToolShortcutFallbacks(
+    fallbackCombinations,
+    handleFallbackToolShortcut,
+  );
+}
+
 function cancelActiveAnnotationGestures() {
   const canceled = gestureLeases.cancelAll();
   canceled.forEach(({ ownerId, gestureId }) => {
@@ -386,7 +410,7 @@ function refreshTransientAnnotationShortcuts() {
     globalShortcut.unregister(accelerator);
     unavailableShortcuts.delete(accelerator);
   });
-  if (annotationTool === "pass-through" || controllerTextEditing || quitDialogOpen) return;
+  if (annotationTool === "pass-through" || controllerTextEditing || quitDialogOpen || shuttingDown) return;
 
   registerShortcut(ESCAPE_SHORTCUT, () => setAnnotationTool("pass-through"));
   ACTIVE_COMMAND_SHORTCUTS.forEach(({ accelerator, command }) => {
@@ -395,18 +419,7 @@ function refreshTransientAnnotationShortcuts() {
 }
 
 function registerAnnotationHotkeys() {
-  const fallbackCombinations: string[] = [];
-  TOOL_SHORTCUTS.forEach(({ accelerator, inputCombination, tool }) => {
-    if (!registerShortcut(accelerator, () => setAnnotationTool(tool))) {
-      fallbackCombinations.push(inputCombination);
-    }
-  });
-  configureToolShortcutFallbacks(fallbackCombinations, (combination) => {
-    const shortcut = TOOL_SHORTCUTS.find(
-      (candidate) => candidate.inputCombination === combination,
-    );
-    if (shortcut) setAnnotationTool(shortcut.tool);
-  });
+  refreshToolShortcuts();
   refreshTransientAnnotationShortcuts();
   sendAnnotationState();
 }
@@ -415,6 +428,7 @@ function setControllerTextEditing(editing: boolean) {
   if (controllerTextEditing === editing) return;
   controllerTextEditing = editing;
   setKeyboardInputSuppressed(editing);
+  refreshToolShortcuts();
   refreshTransientAnnotationShortcuts();
   sendAnnotationState();
 }
