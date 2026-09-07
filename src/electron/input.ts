@@ -21,7 +21,9 @@ import {
 } from "./keyboard-input.js";
 import { overlayDisplays, overlayWindows } from "./window.js";
 
-let cursorTimer: ReturnType<typeof setInterval> | undefined;
+const CURSOR_PUBLISH_INTERVAL_MS = 8;
+let cursorTimer: ReturnType<typeof setTimeout> | undefined;
+let lastCursorPublishAt = 0;
 let lastCursorPosition: Point | undefined;
 let inputStarted = false;
 let annotationInputActive = false;
@@ -98,9 +100,26 @@ function publishCursorPosition(force = false) {
   lastCursorPosition = position;
 }
 
+function flushCursorCapture() {
+  cursorTimer = undefined;
+  lastCursorPublishAt = Date.now();
+  publishCursorPosition();
+}
+
+function scheduleCursorCapture() {
+  if (cursorTimer) return;
+  const elapsed = Date.now() - lastCursorPublishAt;
+  cursorTimer = setTimeout(
+    flushCursorCapture,
+    Math.max(0, CURSOR_PUBLISH_INTERVAL_MS - elapsed),
+  );
+}
+
+const handleMouseMove = (_event: UiohookMouseEvent) => scheduleCursorCapture();
+
 function startCursorCapture() {
   publishCursorPosition(true);
-  cursorTimer = setInterval(() => publishCursorPosition(), 8);
+  lastCursorPublishAt = Date.now();
 }
 
 export function refreshCursorCapture() {
@@ -178,6 +197,7 @@ export function startInputCapture() {
   if (inputStarted) return;
 
   startCursorCapture();
+  uIOhook.on("mousemove", handleMouseMove);
   uIOhook.on("keydown", handleKeyDown);
   uIOhook.on("mousedown", handleMouseDown);
   uIOhook.on("mouseup", handleMouseUp);
@@ -192,13 +212,15 @@ export function startInputCapture() {
 }
 
 export function stopInputCapture() {
-  if (cursorTimer) clearInterval(cursorTimer);
+  if (cursorTimer) clearTimeout(cursorTimer);
   cursorTimer = undefined;
+  lastCursorPublishAt = 0;
   lastCursorPosition = undefined;
 
   if (inputStarted) uIOhook.stop();
   inputStarted = false;
 
+  uIOhook.off("mousemove", handleMouseMove);
   uIOhook.off("keydown", handleKeyDown);
   uIOhook.off("mousedown", handleMouseDown);
   uIOhook.off("mouseup", handleMouseUp);
