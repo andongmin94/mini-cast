@@ -38,6 +38,15 @@ test("only identical events within five milliseconds are deduplicated", () => {
   assert.equal(deduplicator.shouldEmit("B", 106), true);
 });
 
+test("a backward clock step never suppresses later identical input", () => {
+  const deduplicator = new CombinationDeduplicator();
+
+  assert.equal(deduplicator.shouldEmit("A", 1000), true);
+  assert.equal(deduplicator.shouldEmit("A", 900), true);
+  assert.equal(deduplicator.shouldEmit("A", 901), false);
+  assert.equal(deduplicator.shouldEmit("A", 906), true);
+});
+
 test("library key names normalize to compact Tauri-equivalent labels", () => {
   assert.equal(getKeyInfo(UiohookKey[1])?.label, "1");
   assert.equal(getKeyInfo(UiohookKey.Equal)?.label, "=");
