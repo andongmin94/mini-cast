@@ -53,7 +53,7 @@ foreach ($file in $files) {
 foreach ($file in @('unpacked-interaction-sentinel.json', 'unpacked-software-interaction-sentinel.json')) {
   $result = Get-Content -LiteralPath (Join-Path 'verification-logs' $file) -Raw | ConvertFrom-Json
   $boundary = $result.diagnostics.integrationBoundaries
-  if (-not $boundary.failedWriteCancelsQuit -or -not $boundary.trayAndShortcutsSurvive -or -not $boundary.hiddenExport -or -not $boundary.minimizedExport -or -not $boundary.lateReplyIgnored -or -not $boundary.redundantResize -or $boundary.heldViewport.Count -ne 4) { throw 'Packaged integration boundary coverage missing.' }
+  if (-not $boundary.failedWriteCancelsQuit -or -not $boundary.trayAndShortcutsSurvive -or -not $boundary.hiddenExport -or -not $boundary.minimizedExport -or -not $boundary.lateReplyIgnored -or -not $boundary.redundantResize -or -not $boundary.gestureAuthorization -or $boundary.heldViewport.Count -ne 4) { throw 'Packaged integration boundary coverage missing.' }
 }
 
 foreach ($file in @('unpacked-interaction-sentinel.json', 'unpacked-software-interaction-sentinel.json')) {
