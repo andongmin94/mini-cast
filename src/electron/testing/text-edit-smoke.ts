@@ -3,7 +3,7 @@ import { globalShortcut } from "electron";
 import type { AnnotationHistory, TextElement } from "../../annotation/history.js";
 import { textControlPoints, framePoint } from "../../annotation/primitive-frame.js";
 import type { AnnotationCommand } from "../../shared/contract.js";
-import { ACTIVE_COMMAND_SHORTCUTS } from "../annotation-shortcuts.js";
+import { ACTIVE_COMMAND_SHORTCUTS, ESCAPE_SHORTCUT, TOOL_SHORTCUTS } from "../annotation-shortcuts.js";
 import { mainWindow, overlayDisplays, overlayWindows } from "../window.js";
 import { injectWindowsClick, injectWindowsShortcut, waitFor } from "./smoke.js";
 
@@ -25,6 +25,11 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
   const state = () => history.getSnapshot(displayId);
   const query = (source: string) => controller.webContents.executeJavaScript(source);
   const overlayQuery = (source: string) => overlay.webContents.executeJavaScript(source);
+  const annotationAccelerators = [
+    ESCAPE_SHORTCUT,
+    ...TOOL_SHORTCUTS.map(shortcut => shortcut.accelerator),
+    ...ACTIVE_COMMAND_SHORTCUTS.map(shortcut => shortcut.accelerator),
+  ];
   const ready = async () => waitFor(async () => Number(await overlayQuery(
     `document.querySelector('[data-mini-cast-overlay]')?.dataset.annotationRevision`)) === state().revision,
     5000, "text revision reaches overlay");
@@ -60,8 +65,8 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
     await clickElement("[data-selection-text-edit]", false);
     await waitFor(async () => Boolean(await query(`document.querySelector('[data-annotation-existing-text-editor] textarea') === document.activeElement`)),
       5000, "controller re-edit autofocus");
-    await waitFor(() => ACTIVE_COMMAND_SHORTCUTS.every(shortcut => !globalShortcut.isRegistered(shortcut.accelerator)),
-      5000, "text editing releases document shortcuts");
+    await waitFor(() => annotationAccelerators.every(accelerator => !globalShortcut.isRegistered(accelerator)),
+      5000, "text editing releases all annotation shortcuts");
   }
   async function setText(value: string) {
     await query(`(() => { const field = document.querySelector('[data-annotation-existing-text-editor] textarea'); field.focus(); field.select(); })()`);
@@ -72,6 +77,8 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
   async function closed() {
     await waitFor(async () => !await query(`Boolean(document.querySelector('[data-annotation-existing-text-editor]'))`), 5000, "editor closes");
     await ready();
+    await waitFor(() => annotationAccelerators.every(accelerator => globalShortcut.isRegistered(accelerator)),
+      5000, "annotation shortcuts restore after text editing");
   }
   await openEditor();
   const oldValue = await query(`document.querySelector('[data-annotation-existing-text-editor] textarea').value`);
