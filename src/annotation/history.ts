@@ -54,9 +54,24 @@ export interface TextElement extends ElementStyle {
 export type InkElement = StrokeElement | ShapeElement;
 export type AnnotationElement = InkElement | TextElement;
 
-/** Text storage participates in the existing bounded document/history budget. */
+/**
+ * Text storage and derived ellipse geometry participate in the same bounded
+ * document/history budget. The renderer currently flattens an ellipse in
+ * O(sqrt(radius)) segments; factor 7 conservatively bounds that work without
+ * coupling validation to the renderer's exact tolerance constant.
+ */
 export function annotationElementCost(element: AnnotationElement) {
-  return element.points.length + (element.tool === "text" ? element.text.length : 0);
+  const stored = element.points.length + (element.tool === "text" ? element.text.length : 0);
+  if (element.tool !== "ellipse") return stored;
+  const [origin, xEnd, yEnd] = element.points;
+  const radiusBound = Math.hypot(
+    xEnd.x - origin.x,
+    xEnd.y - origin.y,
+    yEnd.x - origin.x,
+    yEnd.y - origin.y,
+  ) / 2;
+  const derived = Math.max(17, Math.ceil(7 * Math.sqrt(radiusBound)) + 1);
+  return Math.max(stored, derived);
 }
 
 export interface AnnotationViewport {
