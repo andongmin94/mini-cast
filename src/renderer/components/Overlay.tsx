@@ -148,10 +148,12 @@ export default function Overlay() {
   useEffect(() => {
     if (typeof miniCast === "undefined") return;
 
-    const keyPressTimers = new Set<number>();
+    const keyPressTimers = new Map<KeyPress, number>();
+    let visibleKeyPresses: KeyPress[] = [];
     const clearKeyPressTimers = () => {
       keyPressTimers.forEach((timer) => window.clearTimeout(timer));
       keyPressTimers.clear();
+      visibleKeyPresses = [];
     };
 
     const scalePosition = (position: MousePosition) => ({
@@ -174,15 +176,23 @@ export default function Overlay() {
         return;
       }
 
-      setKeyPresses((items) => [
-        ...items.slice(-(MAX_VISIBLE_KEY_PRESSES - 1)),
+      visibleKeyPresses = [
+        ...visibleKeyPresses.slice(-(MAX_VISIBLE_KEY_PRESSES - 1)),
         keyPress,
-      ]);
+      ];
+      const retained = new Set(visibleKeyPresses);
+      keyPressTimers.forEach((timer, item) => {
+        if (retained.has(item)) return;
+        window.clearTimeout(timer);
+        keyPressTimers.delete(item);
+      });
+      setKeyPresses(visibleKeyPresses);
       const timer = window.setTimeout(() => {
-        keyPressTimers.delete(timer);
-        setKeyPresses((items) => items.filter((item) => item !== keyPress));
+        keyPressTimers.delete(keyPress);
+        visibleKeyPresses = visibleKeyPresses.filter((item) => item !== keyPress);
+        setKeyPresses(visibleKeyPresses);
       }, current.keyDisplayDuration);
-      keyPressTimers.add(timer);
+      keyPressTimers.set(keyPress, timer);
     };
 
     const onMouseButton = ({ button, pressed }: MouseButtonEvent) => {
