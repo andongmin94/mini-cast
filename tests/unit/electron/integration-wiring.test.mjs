@@ -17,6 +17,15 @@ test("native save handlers normalize an omitted extension before strict writers"
     assert.match(source, /withDefaultExtension\(result\.filePath,/);
   }
 });
+test("controller push subscriptions are installed before bootstrap reads and win races", async () => {
+  const source = await text("src/renderer/components/Controller.tsx");
+  assert.ok(source.indexOf("const stopSettings = miniCast.onSettingsUpdated") < source.indexOf(".getSettings()"));
+  assert.ok(source.indexOf("const stopAnnotation = miniCast.onAnnotationStateUpdated") < source.indexOf(".getAnnotationState()"));
+  assert.ok(source.indexOf("const stopSaveStatus = miniCast.onSettingsSaveStatus") < source.indexOf(".getSettingsSaveStatus()"));
+  assert.match(source, /!active \|\| settingsPushed/);
+  assert.match(source, /!active \|\| annotationPushed/);
+  assert.match(source, /!active \|\| saveStatusPushed/);
+});
 test("normal exit uses the coordinator and the tray does not prepare windows before requesting quit", async () => {
   assert.match(await text("src/electron/main.ts"), /quitCoordinator\.beforeQuit\(event\)/);
   const window = await text("src/electron/window.ts");
