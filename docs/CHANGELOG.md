@@ -6,6 +6,7 @@
 - 커서 위치는 8ms 상시 polling 대신 전역 mousemove를 최대 125Hz로 합쳐 게시하고 monotonic clock으로 throttle합니다. 키 중복 제거는 시스템 시간이 뒤로 이동해도 새 입력을 차단하지 않습니다.
 - 사라지는 잉크는 2초 유지 구간에서 RAF를 중지하고 fade 구간에만 다시 실행합니다. 키 입력 표시는 화면에서 밀려난 항목의 만료 timer도 즉시 정리합니다.
 - 같은 설정값의 반복 저장 IPC는 overlay 재전송과 디스크 예약을 생략합니다. controller는 push listener를 먼저 설치하고 더 최신 push가 있으면 늦은 초기 settings/annotation/save-status 응답을 무시합니다.
+- 텍스트 입력 포커스에서는 Escape·Undo·Clear뿐 아니라 Alt+Shift 도구 전환 global shortcut과 uIOhook fallback도 해제하고, 편집 종료 뒤 전체 판서 단축키를 다시 등록합니다.
 - Verify는 workflow SHA를 정확한 checkout과 `MINICAST_SOURCE_SHA`에 고정하며 provenance 검사에서 실제 HEAD와 일치하는지 확인합니다.
 - 네이티브 저장 대화상자에서 확장자를 생략하면 `.minicast` 또는 `.png`를 붙입니다. 사용자가 다른 확장자를 명시한 경우에는 기존 strict writer 검증을 그대로 적용합니다.
 
