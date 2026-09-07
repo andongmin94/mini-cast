@@ -34,7 +34,7 @@ if (-not $payload.diagnostics.documentFiles.nativeOpen -or -not $payload.diagnos
 if (-not $payload.diagnostics.boardTools.composedPixels -or -not $payload.diagnostics.boardTools.pngTransparent -or -not $payload.diagnostics.boardTools.escapeRouting) { throw 'Board presentation/input isolation was not verified.' }
 
 if ((Get-Content -LiteralPath (Join-Path $userData 'quit-publication.txt') -Raw) -ne 'complete') { throw 'Successful publication was not completed before normal exit.' }
-if (-not $payload.diagnostics.integrationBoundaries.failedWriteCancelsQuit -or -not $payload.diagnostics.integrationBoundaries.hiddenExport -or $payload.diagnostics.integrationBoundaries.heldViewport.Count -ne 4) { throw 'Integration boundaries were not exercised.' }
+if (-not $payload.diagnostics.integrationBoundaries.failedWriteCancelsQuit -or -not $payload.diagnostics.integrationBoundaries.hiddenExport -or -not $payload.diagnostics.integrationBoundaries.gestureAuthorization -or $payload.diagnostics.integrationBoundaries.heldViewport.Count -ne 4) { throw 'Integration boundaries were not exercised.' }
 
 if ((Get-Content -LiteralPath (Join-Path $userData 'quit-discard.txt') -Raw) -ne 'confirmed') { throw 'Explicit discard was not exercised before exit.' }
 if (-not $payload.diagnostics.unsavedQuit.defaultCancel -or -not $payload.diagnostics.unsavedQuit.escapeCancel -or -not $payload.diagnostics.unsavedQuit.pngNotSaved -or -not $payload.diagnostics.documentFiles.savedState) { throw 'Unsaved-document boundaries were not verified.' }
