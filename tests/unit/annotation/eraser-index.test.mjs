@@ -5,6 +5,7 @@ import {
   prepareEraserElement,
   eraserSweepHitsPreparedElement,
 } from "../../../dist/annotation/eraser-index.js";
+import { MAX_ELLIPSE_FLATTENING_SEGMENTS } from "../../../dist/annotation/shape-geometry.js";
 
 const stroke = (points, width = 4, id = "s") => ({
   id,
@@ -13,6 +14,19 @@ const stroke = (points, width = 4, id = "s") => ({
   width,
   opacity: 1,
   points,
+});
+const ellipse = (filled = false) => ({
+  id: filled ? "filled-ellipse" : "ellipse",
+  tool: "ellipse",
+  color: "#000000",
+  width: 4,
+  opacity: 1,
+  ...(filled ? { fill: "#FFFFFF" } : {}),
+  points: [
+    { x: 0, y: 0 },
+    { x: 1_000_000, y: 0 },
+    { x: 0, y: 1_000_000 },
+  ],
 });
 const hits = (points, start, end, radius, width = 4) =>
   eraserSweepHitsPreparedElement(
@@ -81,6 +95,45 @@ test("wide-stroke and negative-coordinate queries agree with exact reference geo
       );
     }
   }
+});
+
+test("ellipse paths stay lazy until an outline candidate needs exact segment tests", () => {
+  const prepared = prepareEraserElement(ellipse());
+  assert.equal(prepared.paths, null);
+  assert.equal(
+    eraserSweepHitsPreparedElement(
+      { x: -1000, y: -1000 },
+      { x: -900, y: -900 },
+      prepared,
+      1,
+    ),
+    false,
+  );
+  assert.equal(prepared.paths, null);
+  assert.equal(
+    eraserSweepHitsPreparedElement(
+      { x: 0, y: 500_000 },
+      { x: 0, y: 500_000 },
+      prepared,
+      0,
+    ),
+    true,
+  );
+  assert.ok(prepared.paths);
+  assert.ok(prepared.paths[0].points.length <= MAX_ELLIPSE_FLATTENING_SEGMENTS + 1);
+
+  const filled = prepareEraserElement(ellipse(true));
+  assert.equal(filled.paths, null);
+  assert.equal(
+    eraserSweepHitsPreparedElement(
+      { x: 500_000, y: 500_000 },
+      { x: 500_000, y: 500_000 },
+      filled,
+      0,
+    ),
+    true,
+  );
+  assert.equal(filled.paths, null);
 });
 
 test("seeded randomized sweeps exactly match the original exhaustive kernel", () => {
