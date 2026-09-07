@@ -57,4 +57,4 @@ main process가 문서와 전역 Undo/Redo를 소유합니다. 일반 편집은 
 
 ## 고정 소스 배포 검증
 
-`package-bundle.ps1`은 깨끗한 Git HEAD와 tree를 기록하며, `MINICAST_SOURCE_SHA`가 지정되면 실제 HEAD와 같아야 합니다. MSI·포터블 EXE·BUILD-METADATA.json·SHA256SUMS.txt를 같은 ZIP에 포함합니다. 내부 해시는 설치 파일과 메타데이터 모두를 포함하며 ZIP 자체의 해시는 바깥 BUNDLE-SHA256.txt에 기록합니다. 메타데이터의 `commit`은 제품 소스이고 `workflow_commit`은 실행을 시작한 워크플로 커밋입니다. 두 값은 같다고 가정하지 않습니다.
+Verify workflow는 실행을 시작한 `github.sha`를 checkout ref와 `MINICAST_SOURCE_SHA`에 함께 고정합니다. `package-bundle.ps1`은 깨끗한 Git HEAD와 tree를 기록하고 실제 HEAD가 이 고정 SHA와 다르면 패키징을 거부합니다. MSI·포터블 EXE·BUILD-METADATA.json·SHA256SUMS.txt를 같은 ZIP에 포함합니다. 내부 해시는 설치 파일과 메타데이터 모두를 포함하며 ZIP 자체의 해시는 바깥 BUNDLE-SHA256.txt에 기록합니다. 메타데이터의 `commit`은 제품 소스이고 `workflow_commit`은 실행을 시작한 워크플로 커밋입니다. 정상 Verify에서는 두 값이 같은 소스를 가리켜야 하며, provenance 음성 테스트는 의도적으로 다른 SHA와 dirty tree를 주어 거부 경계를 검사합니다.
