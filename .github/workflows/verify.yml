@@ -16,6 +16,8 @@ jobs:
     name: Windows 검증 및 패키징
     runs-on: windows-2022
     timeout-minutes: 55
+    env:
+      MINICAST_SOURCE_SHA: ${{ github.sha }}
     steps:
       - name: 체크아웃
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
