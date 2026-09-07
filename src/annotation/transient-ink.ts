@@ -52,6 +52,20 @@ export class TransientInk {
     this.completed = this.completed.filter(trace => transientInkOpacity(trace.finishedAt, now) > 0);
   }
 
+  /** Null means idle, a positive delay means hold, and zero means animate the active fade with RAF. */
+  nextAnimationDelay(now: number): number | null {
+    validTime(now);
+    this.prune(now);
+    if (!this.completed.length) return null;
+    let delay = Number.POSITIVE_INFINITY;
+    for (const trace of this.completed) {
+      const fadeStartsAt = (trace.finishedAt ?? now) + TRANSIENT_HOLD_MS;
+      if (now >= fadeStartsAt) return 0;
+      delay = Math.min(delay, fadeStartsAt - now);
+    }
+    return Number.isFinite(delay) ? delay : null;
+  }
+
   begin(point: AnnotationPoint, color: string, width: number, now: number) {
     validTime(now);
     const copied = copyPoint(point);
