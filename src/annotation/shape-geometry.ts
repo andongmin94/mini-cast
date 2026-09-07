@@ -22,6 +22,31 @@ export function hasShapeExtent(tool: ShapeTool, start: AnnotationPoint, end: Ann
     : Math.abs(end.x - start.x) >= 1 && Math.abs(end.y - start.y) >= 1;
 }
 
+function ellipseRadiusBound(element: InkElement) {
+  if (element.tool !== "ellipse") return 0;
+  const [a, xEnd, yEnd] = element.points;
+  if (!a || !xEnd || !yEnd) return 0;
+  // The Frobenius norm bounds the ellipse frame's largest singular value.
+  return Math.hypot(xEnd.x - a.x, xEnd.y - a.y, yEnd.x - a.x, yEnd.y - a.y) / 2;
+}
+
+function ellipseFlatteningSegments(radiusBound: number) {
+  if (!radiusBound) return 1;
+  const requested = Math.max(16, Math.ceil(Math.PI * Math.sqrt(radiusBound / (2 * ELLIPSE_FLATTENING_ERROR))));
+  return Math.min(MAX_ELLIPSE_FLATTENING_SEGMENTS, requested);
+}
+
+/** Conservative world-space chord error after the pathological-work cap is applied. */
+export function ellipseFlatteningTolerance(element: InkElement) {
+  const radiusBound = ellipseRadiusBound(element);
+  if (!radiusBound) return 0;
+  const segments = ellipseFlatteningSegments(radiusBound);
+  return Math.max(
+    ELLIPSE_FLATTENING_ERROR,
+    radiusBound * (1 - Math.cos(Math.PI / segments)),
+  );
+}
+
 /** Exact linear paths and a bounded world-space flattening for ellipse hit tests.
  * Normal screen-sized ellipses retain the requested error tolerance. Pathological
  * off-screen frames are capped so a valid document cannot create unbounded
@@ -43,12 +68,9 @@ export function elementInkPaths(element: InkElement): readonly (readonly Annotat
     const corners = frameCorners(element.points);
     return [[...corners, corners[0]]];
   }
-  const [, xEnd, yEnd] = element.points;
-  // The Frobenius norm bounds the ellipse frame's largest singular value.
-  const radiusBound = Math.hypot(xEnd.x - a.x, xEnd.y - a.y, yEnd.x - a.x, yEnd.y - a.y) / 2;
+  const radiusBound = ellipseRadiusBound(element);
   if (!radiusBound) return [[a]];
-  const requested = Math.max(16, Math.ceil(Math.PI * Math.sqrt(radiusBound / (2 * ELLIPSE_FLATTENING_ERROR))));
-  const count = Math.min(MAX_ELLIPSE_FLATTENING_SEGMENTS, requested);
+  const count = ellipseFlatteningSegments(radiusBound);
   const points = Array.from({ length: count }, (_, i) => {
     const angle = 2 * Math.PI * i / count;
     return framePoint(element.points, (1 + Math.cos(angle)) / 2, (1 + Math.sin(angle)) / 2);
