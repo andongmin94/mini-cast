@@ -11,6 +11,12 @@ test("file and PNG handlers share publication and lifetime policies rather than 
     assert.doesNotMatch(source, /before-quit|app\.quit\(/);
   }
 });
+test("native save handlers normalize an omitted extension before strict writers", async () => {
+  for (const file of ["src/electron/annotation-files.ts", "src/electron/annotation-export.ts"]) {
+    const source = await text(file);
+    assert.match(source, /withDefaultExtension\(result\.filePath,/);
+  }
+});
 test("normal exit uses the coordinator and the tray does not prepare windows before requesting quit", async () => {
   assert.match(await text("src/electron/main.ts"), /quitCoordinator\.beforeQuit\(event\)/);
   const window = await text("src/electron/window.ts");
