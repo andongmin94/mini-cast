@@ -71,6 +71,28 @@ export async function verifyIntegrationBoundaries(context: Context, displayId: n
     await ready();
     if (JSON.stringify(context.history.getSnapshot(displayId).elements) !== JSON.stringify(original.elements)) throw new Error("Boundary fixture Undo lost the original document");
 
+    await waitFor(() => context.state().tool === "pen", 5000, "pen for gesture authorization");
+    const authorizationRevision = context.history.getSnapshot(displayId).revision;
+    const authorization = await query(`(async () => {
+      const wrongAddId = crypto.randomUUID();
+      miniCast.beginAnnotationGesture(wrongAddId);
+      const wrongAdd = await miniCast.commitAnnotationElement(wrongAddId, {
+        id: 'boundary-wrong-highlighter', tool: 'highlighter', color: '#FF0000', width: 18,
+        opacity: 0.35, points: [{x:40,y:40},{x:80,y:60}]
+      });
+      miniCast.endAnnotationGesture(wrongAddId);
+      const wrongRemoveId = crypto.randomUUID();
+      miniCast.beginAnnotationGesture(wrongRemoveId);
+      const wrongRemove = await miniCast.removeAnnotationElements(wrongRemoveId, ['boundary-missing']);
+      miniCast.endAnnotationGesture(wrongRemoveId);
+      return { wrongAdd, wrongRemove };
+    })()`);
+    if (authorization.wrongAdd?.accepted || authorization.wrongAdd?.reason !== "stale-gesture" ||
+        authorization.wrongRemove?.accepted || authorization.wrongRemove?.reason !== "stale-gesture")
+      throw new Error("Permanent gesture lease accepted a mutation from the wrong tool");
+    if (context.history.getSnapshot(displayId).revision !== authorizationRevision)
+      throw new Error("Rejected cross-tool mutation changed the authoritative document");
+
     await injectWindowsShortcut("Alt+Shift+1");
     await waitFor(() => context.state().tool === "pass-through", 5000, "passive export boundary");
     for (const transition of ["hide", "minimize"] as const) {
@@ -117,8 +139,9 @@ export async function verifyIntegrationBoundaries(context: Context, displayId: n
     await injectWindowsShortcut("Alt+Shift+3");
     await waitFor(() => context.state().tool === "pen", 5000, "real tool shortcut remains alive after failed quit");
     await injectWindowsShortcut("Alt+Shift+1");
-    return { heldViewport: checkedTools, redundantResize: true, hiddenExport: true, minimizedExport: true,
-      lateReplyIgnored: true, failedWriteCancelsQuit: true, trayAndShortcutsSurvive: true };
+    return { heldViewport: checkedTools, redundantResize: true, gestureAuthorization: true,
+      hiddenExport: true, minimizedExport: true, lateReplyIgnored: true,
+      failedWriteCancelsQuit: true, trayAndShortcutsSurvive: true };
   } finally {
     await injectWindowsMouseButton(x + 30, y + 20, false);
     target.webContents.setZoomFactor(zoom);
