@@ -23,6 +23,14 @@ test("fading starts at release and uses elapsed time rather than frame count", (
   assert.deepEqual(ink.frame(100000 + TRANSIENT_HOLD_MS + TRANSIENT_FADE_MS), []);
   assert.equal(ink.pointCount, 0); assert.equal(ink.animating, false);
 });
+test("completed ink sleeps through the hold period and requests RAF only while fading", () => {
+  const ink = new TransientInk(); begin(ink, 100); ink.finish(100);
+  assert.equal(ink.nextAnimationDelay(100), TRANSIENT_HOLD_MS);
+  assert.equal(ink.nextAnimationDelay(100 + TRANSIENT_HOLD_MS - 1), 1);
+  assert.equal(ink.nextAnimationDelay(100 + TRANSIENT_HOLD_MS), 0);
+  assert.equal(ink.nextAnimationDelay(100 + TRANSIENT_HOLD_MS + TRANSIENT_FADE_MS / 2), 0);
+  assert.equal(ink.nextAnimationDelay(100 + TRANSIENT_HOLD_MS + TRANSIENT_FADE_MS), null);
+});
 test("each completed stroke has its own lifetime and active input remains visible", () => {
   const ink = new TransientInk(); begin(ink); ink.finish(0); begin(ink, 500); ink.finish(500); begin(ink, 600);
   assert.deepEqual(ink.frame(2700).map(x => x.opacity), [5/7, 1]);
