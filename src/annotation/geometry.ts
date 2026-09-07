@@ -1,5 +1,5 @@
 import type { AnnotationPoint, AnnotationElement } from "./history.js";
-import { pointInElementFill, textOutline, elementInkPaths, ELLIPSE_FLATTENING_ERROR, type InkBounds } from "./shape-geometry.js";
+import { pointInElementFill, textOutline, elementInkPaths, ellipseFlatteningTolerance, type InkBounds } from "./shape-geometry.js";
 
 export function distanceSquared(left: AnnotationPoint, right: AnnotationPoint) {
   const dx = left.x - right.x;
@@ -122,7 +122,7 @@ export function eraserSweepHitsStroke(start: AnnotationPoint, end: AnnotationPoi
     paths = [textOutline(element)];
   } else {
     paths = elementInkPaths(element);
-    tolerance += element.width / 2 + (element.tool === "ellipse" ? ELLIPSE_FLATTENING_ERROR : 0);
+    tolerance += element.width / 2 + ellipseFlatteningTolerance(element);
   }
   for (const points of paths) {
     if (points.length === 1 && pointToSegmentDistanceSquared(points[0], start, end) <= tolerance * tolerance) return true;
