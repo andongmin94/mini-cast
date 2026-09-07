@@ -19,9 +19,15 @@ test("native save handlers normalize an omitted extension before strict writers"
 });
 test("controller push subscriptions are installed before bootstrap reads and win races", async () => {
   const source = await text("src/renderer/components/Controller.tsx");
-  assert.ok(source.indexOf("const stopSettings = miniCast.onSettingsUpdated") < source.indexOf(".getSettings()"));
-  assert.ok(source.indexOf("const stopAnnotation = miniCast.onAnnotationStateUpdated") < source.indexOf(".getAnnotationState()"));
-  assert.ok(source.indexOf("const stopSaveStatus = miniCast.onSettingsSaveStatus") < source.indexOf(".getSettingsSaveStatus()"));
+  const before = (subscription, request) => {
+    const subscriptionIndex = source.indexOf(subscription);
+    const requestIndex = source.indexOf(request);
+    assert.ok(subscriptionIndex >= 0 && requestIndex >= 0 && subscriptionIndex < requestIndex,
+      `${subscription} must be installed before ${request}`);
+  };
+  before("const stopSettings = miniCast.onSettingsUpdated", ".getSettings()");
+  before("const stopAnnotation = miniCast.onAnnotationStateUpdated", ".getAnnotationState()");
+  before("const stopSaveStatus = miniCast.onSettingsSaveStatus", ".getSettingsSaveStatus()");
   assert.match(source, /!active \|\| settingsPushed/);
   assert.match(source, /!active \|\| annotationPushed/);
   assert.match(source, /!active \|\| saveStatusPushed/);
