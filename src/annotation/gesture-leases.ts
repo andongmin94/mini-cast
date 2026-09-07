@@ -9,17 +9,24 @@ export interface GestureLease {
   gestureId: string;
 }
 
-export class GestureLeaseRegistry {
-  private readonly leases = new Map<number, string>();
+interface GestureLeaseState {
+  gestureId: string;
+  tool: string;
+}
 
-  begin(ownerId: number, gestureId: string) {
-    const previous = this.leases.get(ownerId) ?? null;
-    this.leases.set(ownerId, gestureId);
+export class GestureLeaseRegistry {
+  private readonly leases = new Map<number, GestureLeaseState>();
+
+  begin(ownerId: number, gestureId: string, tool: string) {
+    const previous = this.leases.get(ownerId)?.gestureId ?? null;
+    this.leases.set(ownerId, { gestureId, tool });
     return previous;
   }
 
-  matches(ownerId: number, gestureId: string) {
-    return this.leases.get(ownerId) === gestureId;
+  matches(ownerId: number, gestureId: string, tool?: string) {
+    const lease = this.leases.get(ownerId);
+    return lease?.gestureId === gestureId &&
+      (tool === undefined || lease.tool === tool);
   }
 
   end(ownerId: number, gestureId: string) {
@@ -33,9 +40,9 @@ export class GestureLeaseRegistry {
   }
 
   cancelAll() {
-    const canceled = [...this.leases].map(([ownerId, gestureId]) => ({
+    const canceled = [...this.leases].map(([ownerId, lease]) => ({
       ownerId,
-      gestureId,
+      gestureId: lease.gestureId,
     }));
     this.leases.clear();
     return canceled;
