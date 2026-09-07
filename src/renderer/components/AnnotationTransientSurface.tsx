@@ -18,16 +18,22 @@ function AnnotationTransientSurface({ tool, color, width }: Props) {
   const active = useRef<Gesture | null>(null);
   const cursor = useRef<AnnotationPoint | null>(null);
   const frame = useRef<number | null>(null);
+  const wakeTimer = useRef<number | null>(null);
   const alive = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const paint = useCallback(function draw(): void {
     frame.current = null;
+    if (wakeTimer.current !== null) {
+      window.clearTimeout(wakeTimer.current);
+      wakeTimer.current = null;
+    }
     const surface = canvas.current;
     if (!alive.current || !surface) return;
     const context = surface.getContext("2d");
     if (!context) return;
-    const traces = ink.current.frame(performance.now());
+    const now = performance.now();
+    const traces = ink.current.frame(now);
     context.save();
     try {
       context.setTransform(1, 0, 0, 1, 0, 0);
@@ -52,12 +58,25 @@ function AnnotationTransientSurface({ tool, color, width }: Props) {
     surface.dataset.transientPoints = String(ink.current.pointCount);
     surface.dataset.transientStrokes = String(ink.current.strokeCount);
     surface.dataset.transientAnimating = String(ink.current.animating);
-    // Static laser/held ink does not keep an idle RAF loop alive.
-    if (ink.current.animating) frame.current = requestAnimationFrame(draw);
+    const delay = ink.current.nextAnimationDelay(now);
+    if (delay === 0) {
+      frame.current = requestAnimationFrame(draw);
+    } else if (delay !== null) {
+      wakeTimer.current = window.setTimeout(() => {
+        wakeTimer.current = null;
+        if (alive.current && frame.current === null)
+          frame.current = requestAnimationFrame(draw);
+      }, delay);
+    }
   }, [tool]);
 
   const requestPaint = useCallback(() => {
-    if (alive.current && frame.current === null) frame.current = requestAnimationFrame(paint);
+    if (!alive.current) return;
+    if (wakeTimer.current !== null) {
+      window.clearTimeout(wakeTimer.current);
+      wakeTimer.current = null;
+    }
+    if (frame.current === null) frame.current = requestAnimationFrame(paint);
   }, [paint]);
 
   const detach = useCallback(() => {
@@ -84,6 +103,8 @@ function AnnotationTransientSurface({ tool, color, width }: Props) {
     cursor.current = null;
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
+    if (wakeTimer.current !== null) window.clearTimeout(wakeTimer.current);
+    wakeTimer.current = null;
     requestPaint();
   }, [detach, requestPaint]);
 
@@ -137,6 +158,8 @@ function AnnotationTransientSurface({ tool, color, width }: Props) {
       cursor.current = null;
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
+      if (wakeTimer.current !== null) window.clearTimeout(wakeTimer.current);
+      wakeTimer.current = null;
       observer.disconnect();
       window.removeEventListener("resize", resize);
       window.document.removeEventListener("visibilitychange", hidden);
