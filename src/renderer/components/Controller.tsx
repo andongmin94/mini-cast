@@ -149,10 +149,30 @@ export default function Controller() {
     if (!hasBridge) return;
 
     let active = true;
+    let settingsPushed = false;
+    let annotationPushed = false;
+    let saveStatusPushed = false;
+    const stopSettings = miniCast.onSettingsUpdated((saved) => {
+      if (!active) return;
+      settingsPushed = true;
+      setSettings(fromOverlaySettings(saved));
+      setSettingsLoaded(true);
+    });
+    const stopSaveStatus = miniCast.onSettingsSaveStatus((status) => {
+      if (!active) return;
+      saveStatusPushed = true;
+      setSaveStatus(status);
+    });
+    const stopAnnotation = miniCast.onAnnotationStateUpdated((state) => {
+      if (!active) return;
+      annotationPushed = true;
+      setAnnotationState(state);
+    });
+
     void miniCast
       .getSettings()
       .then((saved) => {
-        if (!active) return;
+        if (!active || settingsPushed) return;
         setSettings(fromOverlaySettings(saved));
         setSettingsLoaded(true);
       })
@@ -160,7 +180,8 @@ export default function Controller() {
     void miniCast
       .getAnnotationState()
       .then((state) => {
-        if (active) setAnnotationState(state);
+        if (!active || annotationPushed) return;
+        setAnnotationState(state);
       })
       .catch((error) =>
         console.error("Failed to load annotation state:", error),
@@ -169,16 +190,15 @@ export default function Controller() {
     void miniCast
       .getSettingsSaveStatus()
       .then((status) => {
-        if (active) setSaveStatus(status);
+        if (!active || saveStatusPushed) return;
+        setSaveStatus(status);
       })
       .catch((error) =>
         console.error("Failed to load settings status:", error),
       );
-    const stopSaveStatus = miniCast.onSettingsSaveStatus(setSaveStatus);
-    const stopAnnotation =
-      miniCast.onAnnotationStateUpdated(setAnnotationState);
     return () => {
       active = false;
+      stopSettings();
       stopAnnotation();
       stopSaveStatus();
     };
@@ -189,14 +209,6 @@ export default function Controller() {
     const unsubscribe = miniCast.onDisplaysUpdated(setDisplays);
     miniCast.requestDisplays();
     return unsubscribe;
-  }, [hasBridge]);
-
-  useEffect(() => {
-    if (!hasBridge) return;
-    return miniCast.onSettingsUpdated((saved) => {
-      setSettings(fromOverlaySettings(saved));
-      setSettingsLoaded(true);
-    });
   }, [hasBridge]);
 
   useEffect(() => {
