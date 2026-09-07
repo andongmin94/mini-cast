@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { screen, type Point, type Rectangle } from "electron";
 import {
   uIOhook,
@@ -102,13 +103,13 @@ function publishCursorPosition(force = false) {
 
 function flushCursorCapture() {
   cursorTimer = undefined;
-  lastCursorPublishAt = Date.now();
   publishCursorPosition();
+  lastCursorPublishAt = performance.now();
 }
 
 function scheduleCursorCapture() {
   if (cursorTimer) return;
-  const elapsed = Date.now() - lastCursorPublishAt;
+  const elapsed = performance.now() - lastCursorPublishAt;
   cursorTimer = setTimeout(
     flushCursorCapture,
     Math.max(0, CURSOR_PUBLISH_INTERVAL_MS - elapsed),
@@ -119,11 +120,12 @@ const handleMouseMove = (_event: UiohookMouseEvent) => scheduleCursorCapture();
 
 function startCursorCapture() {
   publishCursorPosition(true);
-  lastCursorPublishAt = Date.now();
+  lastCursorPublishAt = performance.now();
 }
 
 export function refreshCursorCapture() {
   publishCursorPosition(true);
+  lastCursorPublishAt = performance.now();
 }
 
 function handleKeyDown(event: UiohookKeyboardEvent) {
