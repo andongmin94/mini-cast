@@ -6,6 +6,7 @@ import path from "node:path";
 import { AnnotationExportError, planAnnotationExport, readAnnotationExportRequest, type AnnotationExportResult } from "../annotation/export.js";
 import type { AnnotationHistory } from "../annotation/history.js";
 import { ExportRenderSession } from "./export-render-session.js";
+import { withDefaultExtension } from "./native-save-path.js";
 import { writePngFile } from "./png-file.js";
 import { mainWindow, overlayDisplays, overlayWindows } from "./window.js";
 
@@ -83,9 +84,10 @@ export function registerAnnotationExports(options: Options) {
         properties: ["showOverwriteConfirmation", "dontAddToRecent"],
       });
       if (result.canceled || !result.filePath) return { status: "cancelled" };
+      const filePath = withDefaultExtension(result.filePath, "png");
       valid();
-      await lifetime.publish(options.gate, () => writePngFile(result.filePath!, png));
-      return { status: "saved", fileName: path.basename(result.filePath), revision: snapshot.revision, ...size };
+      await lifetime.publish(options.gate, () => writePngFile(filePath, png));
+      return { status: "saved", fileName: path.basename(filePath), revision: snapshot.revision, ...size };
     } catch (error) {
       if (!(error instanceof AnnotationExportError)) console.error("Annotation export failed:", error);
       const reason = error instanceof AnnotationExportError ? error.reason : "write-failed";
