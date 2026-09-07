@@ -110,9 +110,11 @@ export class CombinationDeduplicator {
   private lastTimestamp = Number.NEGATIVE_INFINITY;
 
   shouldEmit(combination: string, timestamp: number) {
+    const elapsed = timestamp - this.lastTimestamp;
     const duplicate =
       combination === this.lastCombination &&
-      timestamp - this.lastTimestamp <= COMBINATION_DEDUP_MS;
+      elapsed >= 0 &&
+      elapsed <= COMBINATION_DEDUP_MS;
 
     if (duplicate) return false;
     this.lastCombination = combination;
