@@ -3,6 +3,22 @@ import { AnnotationExportError, MAX_EXPORT_PNG_BYTES, planAnnotationExport } fro
 import type { AnnotationDocumentSnapshot } from "./history.js";
 import { annotationTextFont } from "./text.js";
 
+export async function loadAnnotationExportFonts(
+  ownerDocument: Pick<Document, "fonts">,
+  snapshot: AnnotationDocumentSnapshot,
+) {
+  const fonts = new Map<string, string>();
+  for (const element of snapshot.elements) if (element.tool === "text") {
+    const font = annotationTextFont(element.fontSize);
+    fonts.set(font, (fonts.get(font) ?? "") + element.text);
+  }
+  const loaded = await Promise.all(
+    [...fonts].map(([font, text]) => ownerDocument.fonts.load(font, text)),
+  );
+  if (loaded.some(faces => faces.length === 0))
+    throw new AnnotationExportError("render-failed");
+}
+
 /** Export the pinned document, not live DOM pixels, previews, handles or desktop content. */
 export async function renderAnnotationPng(
   ownerDocument: Document,
@@ -11,12 +27,7 @@ export async function renderAnnotationPng(
   cancelled: () => boolean = () => false,
 ): Promise<Uint8Array> {
   const { width, height } = planAnnotationExport(snapshot, scale);
-  const fonts = new Map<string, string>();
-  for (const element of snapshot.elements) if (element.tool === "text") {
-    const font = annotationTextFont(element.fontSize);
-    fonts.set(font, (fonts.get(font) ?? "") + element.text);
-  }
-  await Promise.all([...fonts].map(([font, text]) => ownerDocument.fonts.load(font, text)));
+  await loadAnnotationExportFonts(ownerDocument, snapshot);
   if (cancelled()) throw new AnnotationExportError("cancelled");
   const canvas = ownerDocument.createElement("canvas");
   try {
