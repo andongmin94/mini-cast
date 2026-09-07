@@ -3,6 +3,7 @@ import { frameCorners, framePoint, frameCoordinates, pointInFrame } from "./prim
 
 export interface InkBounds { minX: number; minY: number; maxX: number; maxY: number }
 export const ELLIPSE_FLATTENING_ERROR = 0.125;
+export const MAX_ELLIPSE_FLATTENING_SEGMENTS = 512;
 
 export function constrainedShapeEnd(tool: ShapeTool, start: AnnotationPoint, end: AnnotationPoint, shift: boolean): AnnotationPoint {
   if (!shift) return { ...end };
@@ -21,8 +22,10 @@ export function hasShapeExtent(tool: ShapeTool, start: AnnotationPoint, end: Ann
     : Math.abs(end.x - start.x) >= 1 && Math.abs(end.y - start.y) >= 1;
 }
 
-/** Exact linear paths and a conservative world-space flattening for ellipse hit tests.
- * Ellipse storage and rendering remain analytic, even after a shearing resize. */
+/** Exact linear paths and a bounded world-space flattening for ellipse hit tests.
+ * Normal screen-sized ellipses retain the requested error tolerance. Pathological
+ * off-screen frames are capped so a valid document cannot create unbounded
+ * derived arrays. Ellipse storage and Canvas rendering remain analytic. */
 export function elementInkPaths(element: InkElement): readonly (readonly AnnotationPoint[])[] {
   const [a, b] = element.points;
   if (!a) return [];
@@ -44,7 +47,8 @@ export function elementInkPaths(element: InkElement): readonly (readonly Annotat
   // The Frobenius norm bounds the ellipse frame's largest singular value.
   const radiusBound = Math.hypot(xEnd.x - a.x, xEnd.y - a.y, yEnd.x - a.x, yEnd.y - a.y) / 2;
   if (!radiusBound) return [[a]];
-  const count = Math.max(16, Math.ceil(Math.PI * Math.sqrt(radiusBound / (2 * ELLIPSE_FLATTENING_ERROR))));
+  const requested = Math.max(16, Math.ceil(Math.PI * Math.sqrt(radiusBound / (2 * ELLIPSE_FLATTENING_ERROR))));
+  const count = Math.min(MAX_ELLIPSE_FLATTENING_SEGMENTS, requested);
   const points = Array.from({ length: count }, (_, i) => {
     const angle = 2 * Math.PI * i / count;
     return framePoint(element.points, (1 + Math.cos(angle)) / 2, (1 + Math.sin(angle)) / 2);
