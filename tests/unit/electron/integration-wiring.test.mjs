@@ -32,6 +32,15 @@ test("controller push subscriptions are installed before bootstrap reads and win
   assert.match(source, /!active \|\| annotationPushed/);
   assert.match(source, /!active \|\| saveStatusPushed/);
 });
+test("text input suppression runs before native fallback tool shortcuts and refreshes registrations", async () => {
+  const input = await text("src/electron/input.ts");
+  const suppressed = input.indexOf("if (keyboardInputSuppressed) return;");
+  const fallback = input.indexOf("if (fallbackToolCombinations.has(combination))");
+  assert.ok(suppressed >= 0 && fallback >= 0 && suppressed < fallback);
+  const main = await text("src/electron/main.ts");
+  assert.match(main, /function setControllerTextEditing[\s\S]*refreshToolShortcuts\(\);[\s\S]*refreshTransientAnnotationShortcuts\(\);/);
+  assert.match(main, /function refreshToolShortcuts[\s\S]*controllerTextEditing \|\| shuttingDown/);
+});
 test("normal exit uses the coordinator and the tray does not prepare windows before requesting quit", async () => {
   assert.match(await text("src/electron/main.ts"), /quitCoordinator\.beforeQuit\(event\)/);
   const window = await text("src/electron/window.ts");
