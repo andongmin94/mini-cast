@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   ELLIPSE_FLATTENING_ERROR,
   MAX_ELLIPSE_FLATTENING_SEGMENTS,
+  ellipseFlatteningTolerance,
   elementInkPaths,
 } from "../../../dist/annotation/shape-geometry.js";
 
@@ -32,10 +33,18 @@ test("normal ellipses retain the existing flattening tolerance", () => {
   );
   assert.ok(requested < MAX_ELLIPSE_FLATTENING_SEGMENTS);
   assert.equal(elementInkPaths(element)[0].length, requested + 1);
+  assert.equal(ellipseFlatteningTolerance(element), ELLIPSE_FLATTENING_ERROR);
 });
 
-test("pathological ellipse frames cannot allocate unbounded derived paths", () => {
-  const points = elementInkPaths(ellipse(1_000_000))[0];
+test("pathological ellipse frames have bounded paths and a conservative cap error", () => {
+  const element = ellipse(1_000_000);
+  const points = elementInkPaths(element)[0];
   assert.equal(points.length, MAX_ELLIPSE_FLATTENING_SEGMENTS + 1);
   assert.deepEqual(points[0], points.at(-1));
+
+  const [a, b, c] = element.points;
+  const radiusBound = Math.hypot(b.x - a.x, b.y - a.y, c.x - a.x, c.y - a.y) / 2;
+  const capError = radiusBound * (1 - Math.cos(Math.PI / MAX_ELLIPSE_FLATTENING_SEGMENTS));
+  assert.ok(capError > ELLIPSE_FLATTENING_ERROR);
+  assert.equal(ellipseFlatteningTolerance(element), capError);
 });
