@@ -142,6 +142,7 @@ function handleKeyDown(event: UiohookKeyboardEvent) {
   };
   const combination = buildCombination(key.label, modifiers);
 
+  if (keyboardInputSuppressed) return;
   if (fallbackToolCombinations.has(combination)) {
     fallbackToolHandler?.(combination);
   }
@@ -152,7 +153,6 @@ function handleKeyDown(event: UiohookKeyboardEvent) {
     return;
   }
 
-  if (keyboardInputSuppressed) return;
   const timestamp = Date.now();
   if (!keyDeduplicator.shouldEmit(combination, timestamp)) return;
 
