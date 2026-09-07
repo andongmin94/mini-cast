@@ -587,7 +587,9 @@ function registerIpc() {
   ipcMain.on("save-settings", (event, settings: unknown) => {
     if (!isControllerEvent(event) || !controllerSettingsRead) return;
 
-    currentSettings = normalizeOverlaySettings(settings, connectedDisplayIds());
+    const nextSettings = normalizeOverlaySettings(settings, connectedDisplayIds());
+    if (overlaySettingsEqual(currentSettings, nextSettings)) return;
+    currentSettings = nextSettings;
     sendSettingsToOverlays();
     scheduleSettingsPersist();
   });
@@ -677,7 +679,7 @@ function registerIpc() {
     }
 
     if (!isTransientAnnotationTool(annotationTool)) lastAnnotationDisplayId = displayId;
-    const previous = gestureLeases.begin(event.sender.id, gestureId);
+    const previous = gestureLeases.begin(event.sender.id, gestureId, annotationTool);
     if (previous && previous !== gestureId) {
       sendToWebContents(event.sender, "annotation-gesture-cancel", previous);
     }
@@ -692,14 +694,13 @@ function registerIpc() {
         : null;
       if (displayId === null || displayRebuildInProgress || isTransientAnnotationTool(annotationTool))
         return annotationMutationResult(displayId, "unavailable");
-      if (
-        !isGestureId(gestureId) ||
-        !gestureLeases.matches(event.sender.id, gestureId)
-      )
+      if (!isGestureId(gestureId))
+        return annotationMutationResult(displayId, "stale-gesture");
+      if (!isAnnotationElement(stroke))
+        return annotationMutationResult(displayId, "invalid-element");
+      if (!gestureLeases.matches(event.sender.id, gestureId, stroke.tool))
         return annotationMutationResult(displayId, "stale-gesture");
       try {
-        if (!isAnnotationElement(stroke))
-          return annotationMutationResult(displayId, "invalid-element");
         annotationHistory.addElement(displayId, stroke);
         const update = sendAnnotationDocument(
           displayId,
@@ -731,7 +732,7 @@ function registerIpc() {
         return annotationMutationResult(displayId, "unavailable");
       if (
         !isGestureId(gestureId) ||
-        !gestureLeases.matches(event.sender.id, gestureId)
+        !gestureLeases.matches(event.sender.id, gestureId, "eraser")
       )
         return annotationMutationResult(displayId, "stale-gesture");
       try {
@@ -763,7 +764,7 @@ function registerIpc() {
   ipcMain.handle("annotation-edit-selection", (event, gestureId: unknown, value: unknown): AnnotationMutationResult => {
     const displayId = isTopLevelSender(event) ? displayIdForSender(event.sender) : null;
     if (displayId === null || displayRebuildInProgress) return annotationMutationResult(displayId, "unavailable");
-    if (annotationTool !== "select" || !isGestureId(gestureId) || !gestureLeases.matches(event.sender.id, gestureId))
+    if (annotationTool !== "select" || !isGestureId(gestureId) || !gestureLeases.matches(event.sender.id, gestureId, "select"))
       return annotationMutationResult(displayId, "stale-gesture");
     try {
       const changed = applyAnnotationSelectionEdit(annotationHistory, displayId, value);
