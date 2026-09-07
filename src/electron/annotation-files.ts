@@ -9,6 +9,7 @@ import type { AnnotationHistory, AnnotationDocumentSnapshot } from "../annotatio
 import type { AnnotationIoGate } from "./annotation-io-gate.js";
 import { AnnotationIoLifetime } from "./annotation-io-lifetime.js";
 import { loadAnnotationFile, saveAnnotationFile } from "./annotation-file-store.js";
+import { withDefaultExtension } from "./native-save-path.js";
 import { mainWindow, overlayDisplays, overlayWindows } from "./window.js";
 
 interface Options {
@@ -62,12 +63,13 @@ export function registerAnnotationFiles(options: Options) {
           properties: ["showOverwriteConfirmation", "dontAddToRecent"],
         });
         if (result.canceled || !result.filePath) return { status: "cancelled" };
+        const filePath = withDefaultExtension(result.filePath, ANNOTATION_FILE_EXTENSION);
         valid();
         await lifetime.publish(options.gate, async () => {
-          await saveAnnotationFile(result.filePath!, serialized);
+          await saveAnnotationFile(filePath, serialized);
           options.saved(original);
         });
-        return { status: "saved", fileName: path.basename(result.filePath), elements: original.elements.length,
+        return { status: "saved", fileName: path.basename(filePath), elements: original.elements.length,
           revision: original.revision, changed: false };
       }
       const opened = await dialog.showOpenDialog(controller, { title: "판서 파일 열기", filters, properties: ["openFile", "dontAddToRecent"] });
