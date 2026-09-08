@@ -264,12 +264,13 @@ function sendAnnotationBoards() {
 }
 
 function getAnnotationState(): AnnotationState {
+  const editingText = controllerTextEditing || Boolean(textEdits.current);
   return {
     tool: quitDialogOpen ? "pass-through" : annotationTool,
     textDraft,
     unavailableShortcuts: [...unavailableShortcuts].sort(),
-    canUndo: !quitDialogOpen && (gestureLeases.size > 0 || (!isTransientAnnotationTool(annotationTool) && annotationHistory.canUndo)),
-    canRedo: !quitDialogOpen && !isTransientAnnotationTool(annotationTool) && annotationHistory.canRedo,
+    canUndo: !quitDialogOpen && !editingText && (gestureLeases.size > 0 || (!isTransientAnnotationTool(annotationTool) && annotationHistory.canUndo)),
+    canRedo: !quitDialogOpen && !editingText && !isTransientAnnotationTool(annotationTool) && annotationHistory.canRedo,
   };
 }
 
@@ -465,7 +466,7 @@ function sendAnnotationCommand(
   command: AnnotationCommand,
   origin: AnnotationCommandOrigin = "shortcut",
 ) {
-  if (displayRebuildInProgress || quitDialogOpen) return;
+  if (displayRebuildInProgress || quitDialogOpen || controllerTextEditing || textEdits.current) return;
 
   if (isTransientAnnotationTool(annotationTool)) {
     // Temporary tools cannot accidentally consume the permanent Undo/Redo history.
@@ -686,6 +687,7 @@ function registerIpc() {
     if (
       displayId === null ||
       displayRebuildInProgress ||
+      controllerTextEditing || textEdits.current ||
       annotationTool === "pass-through" || quitDialogOpen ||
       !isGestureId(gestureId)
     ) {
