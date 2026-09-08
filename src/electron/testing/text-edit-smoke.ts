@@ -68,6 +68,8 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
       5000, "controller re-edit autofocus");
     await waitFor(() => annotationAccelerators.every(accelerator => !globalShortcut.isRegistered(accelerator)),
       5000, "text editing releases all annotation shortcuts");
+    await waitFor(() => !controller.isClosable() && !controller.isMinimizable(),
+      5000, "text editing locks close and minimize controls");
   }
   async function setText(value: string) {
     await query(`(() => { const field = document.querySelector('[data-annotation-existing-text-editor] textarea'); field.focus(); field.select(); })()`);
@@ -80,6 +82,8 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
     await ready();
     await waitFor(() => annotationAccelerators.every(accelerator => globalShortcut.isRegistered(accelerator)),
       5000, "annotation shortcuts restore after text editing");
+    await waitFor(() => controller.isClosable() && controller.isMinimizable(),
+      5000, "window controls restore after text editing");
   }
   await openEditor();
   const isolated = state();
@@ -93,6 +97,13 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
   assert.deepEqual(state(), isolated, "Cancelled quit changed the edited document");
   assert.ok(annotationAccelerators.every(accelerator => !globalShortcut.isRegistered(accelerator)),
     "Cancelled quit restored annotation shortcuts while text editing");
+
+  await query(`miniCast.minimizeWindow(); miniCast.hideWindow();`);
+  await waitFor(() => controller.isVisible() && !controller.isMinimized(), 5000, "text editing rejects hide and minimize");
+  assert.ok(await query(`miniCast.getAnnotationTextEdit()`), "Window controls lost the active text edit session");
+  assert.deepEqual(state(), isolated, "Window controls changed the edited document");
+  assert.equal(controller.isClosable(), false);
+  assert.equal(controller.isMinimizable(), false);
 
   await query(`miniCast.sendAnnotationCommand('clear')`);
   await new Promise(resolve => setTimeout(resolve, 50));
@@ -161,5 +172,6 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
   const unauthorized = await overlayQuery(`miniCast.saveAnnotationTextEdit('not-a-controller', {})`);
   assert.equal(unauthorized.accepted, false); assert.deepEqual(state(), external);
   return { open: true, save: true, affinePreserved: true, undoRedo: true, editorUndo: true,
-    documentIsolation: true, quitProtected: true, noOp: true, cancel: true, staleRevision: true, controllerReload: true, senderRejected: true };
+    documentIsolation: true, quitProtected: true, windowControlsProtected: true, noOp: true, cancel: true,
+    staleRevision: true, controllerReload: true, senderRejected: true };
 }
