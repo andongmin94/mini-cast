@@ -63,15 +63,26 @@ test("text editing locks every annotation document mutation boundary", async () 
       `${handler} must reject commits while text editing`);
   }
 });
-test("normal quit treats an active existing-text edit as unsaved work", async () => {
+test("normal quit treats active text editing and authoring as unsaved work", async () => {
   const main = await text("src/electron/main.ts");
   assert.match(main, /function getUnsavedAnnotationKey\(\)[\s\S]*const documentKey = annotationSaveState\.key/);
   assert.match(main, /const edit = textEdits\.current;/);
-  assert.match(main, /if \(documentKey === null && !edit\) return null;/);
+  assert.match(main, /const textWorkflow = annotationTool === "text"/);
+  assert.match(main, /textDraft \? \[textDraft\.text, textDraft\.fontSize\] : \["active"\]/);
+  assert.match(main, /if \(documentKey === null && !edit && !textWorkflow\) return null;/);
   assert.match(main, /edit \? \[edit\.id, edit\.displayId, edit\.revision, edit\.element\.id\] : null/);
   assert.match(main, /const editingText = Boolean\(textEdits\.current\);/);
+  assert.match(main, /const authoringText = annotationTool === "text";/);
   assert.match(main, /적용하지 않은 텍스트 수정이 있습니다/);
-  assert.match(main, /텍스트 수정을 적용하거나 취소한 뒤/);
+  assert.match(main, /완료하지 않은 텍스트 입력·배치 작업이 있습니다/);
+});
+test("text authoring blocks file and PNG operations that would discard local input", async () => {
+  const main = await text("src/electron/main.ts");
+  const fileRegistration = main.indexOf("registerAnnotationFiles({");
+  const exportRegistration = main.indexOf("registerAnnotationExports({");
+  assert.ok(fileRegistration >= 0 && exportRegistration >= 0);
+  assert.match(main.slice(fileRegistration, fileRegistration + 1400), /unavailable: \(\) =>[\s\S]*annotationTool === "text"/);
+  assert.match(main.slice(exportRegistration, exportRegistration + 1000), /unavailable: \(\) =>[\s\S]*annotationTool === "text"/);
 });
 test("text input locks native and custom controller window controls", async () => {
   const main = await text("src/electron/main.ts");
