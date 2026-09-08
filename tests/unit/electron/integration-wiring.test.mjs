@@ -97,6 +97,12 @@ test("text input locks native and custom controller window controls", async () =
   }
   assert.match(main, /function setAnnotationTool[\s\S]*annotationTool = tool;\s*refreshControllerWindowActions\(\);/);
 });
+test("Windows session end is blocked while unsaved work or critical publication state exists", async () => {
+  const window = await text("src/electron/window.ts");
+  assert.match(window, /mainWindow\.on\("query-session-end", \(event\) => \{[\s\S]*shouldBlockSessionEnd\?\.\(\)[\s\S]*event\.preventDefault\(\);[\s\S]*showMainWindow\(\);[\s\S]*prepareWindowsForQuit\(\);/);
+  const main = await text("src/electron/main.ts");
+  assert.match(main, /await createWindow\([\s\S]*getUnsavedAnnotationKey\(\) !== null \|\| annotationIo\.busy \|\| displayRebuildInProgress/);
+});
 test("normal exit uses the coordinator and the tray does not prepare windows before requesting quit", async () => {
   assert.match(await text("src/electron/main.ts"), /quitCoordinator\.beforeQuit\(event\)/);
   const window = await text("src/electron/window.ts");
