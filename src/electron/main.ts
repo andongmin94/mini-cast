@@ -427,6 +427,7 @@ function registerAnnotationHotkeys() {
 
 function setControllerTextEditing(editing: boolean) {
   if (controllerTextEditing === editing) return;
+  if (editing) cancelActiveAnnotationGestures();
   controllerTextEditing = editing;
   setKeyboardInputSuppressed(editing);
   refreshToolShortcuts();
@@ -708,7 +709,7 @@ function registerIpc() {
       const displayId = isTopLevelSender(event)
         ? displayIdForSender(event.sender)
         : null;
-      if (displayId === null || displayRebuildInProgress || isTransientAnnotationTool(annotationTool))
+      if (displayId === null || displayRebuildInProgress || controllerTextEditing || textEdits.current || isTransientAnnotationTool(annotationTool))
         return annotationMutationResult(displayId, "unavailable");
       if (!isGestureId(gestureId))
         return annotationMutationResult(displayId, "stale-gesture");
@@ -744,7 +745,7 @@ function registerIpc() {
       const displayId = isTopLevelSender(event)
         ? displayIdForSender(event.sender)
         : null;
-      if (displayId === null || displayRebuildInProgress || isTransientAnnotationTool(annotationTool))
+      if (displayId === null || displayRebuildInProgress || controllerTextEditing || textEdits.current || isTransientAnnotationTool(annotationTool))
         return annotationMutationResult(displayId, "unavailable");
       if (
         !isGestureId(gestureId) ||
@@ -779,7 +780,8 @@ function registerIpc() {
 
   ipcMain.handle("annotation-edit-selection", (event, gestureId: unknown, value: unknown): AnnotationMutationResult => {
     const displayId = isTopLevelSender(event) ? displayIdForSender(event.sender) : null;
-    if (displayId === null || displayRebuildInProgress) return annotationMutationResult(displayId, "unavailable");
+    if (displayId === null || displayRebuildInProgress || controllerTextEditing || textEdits.current)
+      return annotationMutationResult(displayId, "unavailable");
     if (annotationTool !== "select" || !isGestureId(gestureId) || !gestureLeases.matches(event.sender.id, gestureId, "select"))
       return annotationMutationResult(displayId, "stale-gesture");
     try {
