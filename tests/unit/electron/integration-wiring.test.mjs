@@ -73,6 +73,19 @@ test("normal quit treats an active existing-text edit as unsaved work", async ()
   assert.match(main, /적용하지 않은 텍스트 수정이 있습니다/);
   assert.match(main, /텍스트 수정을 적용하거나 취소한 뒤/);
 });
+test("text input locks native and custom controller window controls", async () => {
+  const main = await text("src/electron/main.ts");
+  assert.match(main, /function blocksControllerWindowActions\(\) \{\s*return annotationTool === "text" \|\| controllerTextEditing \|\| Boolean\(textEdits\.current\);/);
+  assert.match(main, /controller\.setClosable\(enabled\);\s*controller\.setMinimizable\(enabled\);/);
+  for (const channel of ["minimize-window", "hide-window"]) {
+    const index = main.indexOf(`"${channel}"`);
+    assert.ok(index >= 0, `Missing ${channel} handler`);
+    const boundary = main.slice(index, index + 700);
+    assert.match(boundary, /blocksControllerWindowActions\(\)/,
+      `${channel} must preserve text input`);
+  }
+  assert.match(main, /function setAnnotationTool[\s\S]*annotationTool = tool;\s*refreshControllerWindowActions\(\);/);
+});
 test("normal exit uses the coordinator and the tray does not prepare windows before requesting quit", async () => {
   assert.match(await text("src/electron/main.ts"), /quitCoordinator\.beforeQuit\(event\)/);
   const window = await text("src/electron/window.ts");
