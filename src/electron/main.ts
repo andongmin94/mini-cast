@@ -1113,7 +1113,11 @@ async function initializeApp() {
   registerOverlayLifecycle();
   createSplash();
 
-  await createWindow(rendererUrl, () => setAnnotationTool("pass-through"));
+  await createWindow(
+    rendererUrl,
+    () => setAnnotationTool("pass-through"),
+    () => getUnsavedAnnotationKey() !== null || annotationIo.busy || displayRebuildInProgress,
+  );
   refreshControllerWindowActions();
   mainWindow?.on("blur", () => {
     if (!textEdits.current) setControllerTextEditing(false);
