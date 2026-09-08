@@ -165,10 +165,14 @@ const quitCoordinator = new QuitCoordinator({
 function getUnsavedAnnotationKey() {
   const documentKey = annotationSaveState.key(overlayDisplays.map(display => annotationHistory.getSnapshot(display.id)));
   const edit = textEdits.current;
-  if (documentKey === null && !edit) return null;
+  const textWorkflow = annotationTool === "text"
+    ? textDraft ? [textDraft.text, textDraft.fontSize] : ["active"]
+    : null;
+  if (documentKey === null && !edit && !textWorkflow) return null;
   return JSON.stringify([
     documentKey,
     edit ? [edit.id, edit.displayId, edit.revision, edit.element.id] : null,
+    textWorkflow,
   ]);
 }
 
@@ -178,6 +182,7 @@ async function confirmUnsavedAnnotations(): Promise<boolean> {
   const owner = controller.webContents;
   const count = overlayDisplays.filter(display => annotationSaveState.isDirty(annotationHistory.getSnapshot(display.id))).length;
   const editingText = Boolean(textEdits.current);
+  const authoringText = annotationTool === "text";
   const abort = new AbortController();
   const lifetime = new AnnotationIoLifetime(() => abort.abort());
   quitDialogOpen = true;
@@ -193,10 +198,12 @@ async function confirmUnsavedAnnotations(): Promise<boolean> {
     const result = await dialog.showMessageBox(controller, {
       type: "warning", title: "저장하지 않은 판서",
       message: count > 0
-        ? `${count}개 화면에 저장하지 않은 판서가 있습니다.${editingText ? " 편집 중인 텍스트 수정도 있습니다." : ""}`
-        : "적용하지 않은 텍스트 수정이 있습니다.",
-      detail: editingText
-        ? "종료하면 편집 중인 텍스트 내용과 저장하지 않은 판서를 잃습니다. 돌아가서 텍스트 수정을 적용하거나 취소한 뒤, 보관할 판서는 각 화면을 .minicast 파일로 저장하세요. PNG·이미지 복사는 편집 가능한 파일 저장을 대신하지 않습니다."
+        ? `${count}개 화면에 저장하지 않은 판서가 있습니다.${editingText ? " 편집 중인 텍스트 수정도 있습니다." : authoringText ? " 완료하지 않은 텍스트 입력·배치 작업도 있습니다." : ""}`
+        : editingText
+          ? "적용하지 않은 텍스트 수정이 있습니다."
+          : "완료하지 않은 텍스트 입력·배치 작업이 있습니다.",
+      detail: editingText || authoringText
+        ? "종료하면 진행 중인 텍스트 작업과 저장하지 않은 판서를 잃습니다. 돌아가서 텍스트 작업을 적용·배치하거나 다른 도구로 전환해 취소한 뒤, 보관할 판서는 각 화면을 .minicast 파일로 저장하세요. PNG·이미지 복사는 편집 가능한 파일 저장을 대신하지 않습니다."
         : "종료하면 현재 판서를 잃습니다. 보관하려면 돌아가서 각 화면을 .minicast 파일로 저장하세요. PNG·이미지 복사는 편집 가능한 파일 저장을 대신하지 않습니다.",
       buttons: ["돌아가기", "저장하지 않고 종료"], defaultId: 0, cancelId: 0, noLink: true, signal: abort.signal,
     });
@@ -591,7 +598,7 @@ function registerIpc() {
     saved: snapshot => {
       if (connectedDisplayIds().includes(snapshot.displayId)) annotationSaveState.markSaved(snapshot);
     },
-    unavailable: () => shuttingDown || displayRebuildInProgress || quitDialogOpen || controllerTextEditing || Boolean(textEdits.current),
+    unavailable: () => shuttingDown || displayRebuildInProgress || quitDialogOpen || annotationTool === "text" || controllerTextEditing || Boolean(textEdits.current),
     prepareDialog: () => setAnnotationTool("pass-through"),
     documentChanged: displayId => {
       lastAnnotationDisplayId = displayId;
@@ -602,7 +609,7 @@ function registerIpc() {
   registerAnnotationExports({
     gate: annotationIo,
     history: annotationHistory,
-    unavailable: () => shuttingDown || displayRebuildInProgress || quitDialogOpen || controllerTextEditing || Boolean(textEdits.current),
+    unavailable: () => shuttingDown || displayRebuildInProgress || quitDialogOpen || annotationTool === "text" || controllerTextEditing || Boolean(textEdits.current),
     prepareFileDialog: () => setAnnotationTool("pass-through"),
   });
   ipcMain.on("minimize-window", (event) => {
