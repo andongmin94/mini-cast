@@ -81,6 +81,26 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
       5000, "annotation shortcuts restore after text editing");
   }
   await openEditor();
+  const isolated = state();
+  await query(`miniCast.sendAnnotationCommand('clear')`);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(state(), isolated, "Controller Clear changed the document during text editing");
+  await waitFor(async () => Boolean(await query(`document.querySelector('[data-annotation-command="undo"]')?.disabled`)),
+    5000, "text editing disables Undo UI");
+  const blockedGesture = await overlayQuery(`(async () => {
+    const id = crypto.randomUUID();
+    miniCast.beginAnnotationGesture(id);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const result = await miniCast.editAnnotationSelection(id, {
+      kind: 'delete', revision: ${isolated.revision}, ids: ['edit-text']
+    });
+    miniCast.endAnnotationGesture(id);
+    return result;
+  })()`);
+  assert.equal(blockedGesture.accepted, false);
+  assert.equal(blockedGesture.reason, "stale-gesture");
+  assert.deepEqual(state(), isolated, "Overlay gesture changed the document during text editing");
+
   const oldValue = await query(`document.querySelector('[data-annotation-existing-text-editor] textarea').value`);
   assert.equal(oldValue, "기존 제목");
   await setText("임시 문자열");
@@ -129,5 +149,5 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
   const unauthorized = await overlayQuery(`miniCast.saveAnnotationTextEdit('not-a-controller', {})`);
   assert.equal(unauthorized.accepted, false); assert.deepEqual(state(), external);
   return { open: true, save: true, affinePreserved: true, undoRedo: true, editorUndo: true,
-    noOp: true, cancel: true, staleRevision: true, controllerReload: true, senderRejected: true };
+    documentIsolation: true, noOp: true, cancel: true, staleRevision: true, controllerReload: true, senderRejected: true };
 }
