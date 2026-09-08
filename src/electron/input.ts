@@ -116,7 +116,7 @@ function scheduleCursorCapture() {
   );
 }
 
-const handleMouseMove = (_event: UiohookMouseEvent) => scheduleCursorCapture();
+const handleMouseMove = () => scheduleCursorCapture();
 
 function startCursorCapture() {
   publishCursorPosition(true);
