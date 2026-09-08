@@ -18,7 +18,7 @@ test("build uses a pinned patched Electron and never publishes implicitly", asyn
   assert.match(packageJson.scripts.build, /electron-builder --publish never$/);
 });
 
-test("verification workflow pins actions and validates the distributable ZIP", async () => {
+test("verification workflow pins actions, verifies every main push, and validates the distributable ZIP", async () => {
   const workflow = await readFile(
     new URL("../../../.github/workflows/verify.yml", import.meta.url),
     "utf8",
@@ -32,7 +32,9 @@ test("verification workflow pins actions and validates the distributable ZIP", a
   assert.match(workflow, /node-version: 24\.19\.0/);
   assert.match(workflow, /npm audit --audit-level=low/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.doesNotMatch(workflow, /^ {2}(?:push|pull_request|schedule):/m);
+  assert.match(workflow, /^ {2}push:\r?$/m);
+  assert.match(workflow, /^ {4}branches:\r?\n {6}- main\r?$/m);
+  assert.doesNotMatch(workflow, /^ {2}(?:pull_request|schedule):/m);
   assert.match(workflow, /최종 ZIP 무결성 및 내부 해시 대조/);
   assert.match(workflow, /BUNDLE-SHA256\.txt/);
   assert.match(workflow, /MiniCast-\*-windows\.zip/);
