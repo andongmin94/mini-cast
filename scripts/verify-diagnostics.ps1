@@ -24,7 +24,7 @@ foreach ($file in $files) {
   foreach ($name in @('handle','noOp','rotate','groupShift','undoRedo','pixels','heldUndo','staleRevision','activeReload','heldEscape')) {
     if (-not $result.diagnostics.rotationTools.$name) { throw "Missing rotation verification: $name" }
   }
-  foreach ($name in @('open','save','affinePreserved','undoRedo','editorUndo','documentIsolation','noOp','cancel','staleRevision','controllerReload','senderRejected')) {
+  foreach ($name in @('open','save','affinePreserved','undoRedo','editorUndo','documentIsolation','quitProtected','noOp','cancel','staleRevision','controllerReload','senderRejected')) {
     if (-not $result.diagnostics.textEditingTools.$name) { throw "Missing existing-text editing verification: $name" }
   }
   foreach ($name in @('horizontal','vertical','groupShift','undoRedo','pixels','mirroredText','delete','reload','staleRevision','emptyDisabled')) {
