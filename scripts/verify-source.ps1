@@ -13,7 +13,7 @@ $payload = Get-Content -LiteralPath $sentinel -Raw | ConvertFrom-Json
 Copy-Item -LiteralPath $sentinel -Destination 'verification-logs/source-canvas.json'
 Write-Host ($payload | ConvertTo-Json -Depth 12 -Compress)
 if ($exitCode -ne 0 -or -not $payload.success) { throw "Source interaction failed: $($payload.error)" }
-if (-not $payload.diagnostics.textEditingTools.save -or -not $payload.diagnostics.textEditingTools.documentIsolation -or -not $payload.diagnostics.textEditingTools.quitProtected) { throw 'Existing-text editing isolation and quit protection were not verified.' }
+if (-not $payload.diagnostics.textEditingTools.save -or -not $payload.diagnostics.textEditingTools.documentIsolation -or -not $payload.diagnostics.textEditingTools.quitProtected -or -not $payload.diagnostics.textEditingTools.windowControlsProtected) { throw 'Existing-text editing isolation, quit protection and window-control protection were not verified.' }
 if (-not $payload.diagnostics.fillTools.interiorErase) { throw 'Shape-fill authoring/editing was not verified.' }
 if (-not $payload.diagnostics.dirtyCanvasReference.success -or -not $payload.diagnostics.deltaTransport.gapRecovered) {
   throw 'Source Canvas/delta coverage was not executed.'
