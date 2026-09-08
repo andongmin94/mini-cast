@@ -1,7 +1,10 @@
 name: Verify
 
-# Opt-in verification only. Normal main commits do not trigger Actions.
+# Every main commit must pass the same Windows package verification used for releases.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
