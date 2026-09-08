@@ -47,6 +47,14 @@ test("existing text edit sessions stay isolated when the controller loses focus"
   assert.match(main, /annotation-text-edit-open[\s\S]*showMainWindow\(\);\s*setControllerTextEditing\(true\);/);
   assert.match(main, /mainWindow\?\.on\("blur", \(\) => \{\s*if \(!textEdits\.current\) setControllerTextEditing\(false\);\s*\}\);/);
 });
+test("text editing locks document commands and new overlay gestures", async () => {
+  const main = await text("src/electron/main.ts");
+  assert.match(main, /const editingText = controllerTextEditing \|\| Boolean\(textEdits\.current\);/);
+  assert.match(main, /canUndo: !quitDialogOpen && !editingText/);
+  assert.match(main, /canRedo: !quitDialogOpen && !editingText/);
+  assert.match(main, /function sendAnnotationCommand[\s\S]*displayRebuildInProgress \|\| quitDialogOpen \|\| controllerTextEditing \|\| textEdits\.current/);
+  assert.match(main, /annotation-gesture-begin[\s\S]*displayRebuildInProgress \|\|\s*controllerTextEditing \|\| textEdits\.current/);
+});
 test("normal exit uses the coordinator and the tray does not prepare windows before requesting quit", async () => {
   assert.match(await text("src/electron/main.ts"), /quitCoordinator\.beforeQuit\(event\)/);
   const window = await text("src/electron/window.ts");
