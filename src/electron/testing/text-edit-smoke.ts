@@ -121,7 +121,7 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
     return result;
   })()`);
   assert.equal(blockedGesture.accepted, false);
-  assert.equal(blockedGesture.reason, "stale-gesture");
+  assert.equal(blockedGesture.reason, "unavailable");
   assert.deepEqual(state(), isolated, "Overlay gesture changed the document during text editing");
 
   const oldValue = await query(`document.querySelector('[data-annotation-existing-text-editor] textarea').value`);
