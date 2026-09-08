@@ -4,7 +4,8 @@ import type { AnnotationHistory, TextElement } from "../../annotation/history.js
 import { textControlPoints, framePoint } from "../../annotation/primitive-frame.js";
 import type { AnnotationCommand } from "../../shared/contract.js";
 import { ACTIVE_COMMAND_SHORTCUTS, ESCAPE_SHORTCUT, TOOL_SHORTCUTS } from "../annotation-shortcuts.js";
-import { mainWindow, overlayDisplays, overlayWindows } from "../window.js";
+import { mainWindow, overlayDisplays, overlayWindows, quitApplication } from "../window.js";
+import { nativeDialog } from "./document-file-smoke.js";
 import { injectWindowsClick, injectWindowsShortcut, waitFor } from "./smoke.js";
 
 interface Context {
@@ -82,6 +83,17 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
   }
   await openEditor();
   const isolated = state();
+  quitApplication();
+  await nativeDialog("저장하지 않은 판서");
+  await injectWindowsShortcut("Escape");
+  await waitFor(() => controller.isEnabled(), 5000, "cancelled quit re-enables text editor");
+  await waitFor(async () => Boolean(await query(`document.querySelector('[data-annotation-existing-text-editor]')`)),
+    5000, "cancelled quit preserves text editor");
+  assert.ok(await query(`miniCast.getAnnotationTextEdit()`), "Cancelled quit lost the active text edit session");
+  assert.deepEqual(state(), isolated, "Cancelled quit changed the edited document");
+  assert.ok(annotationAccelerators.every(accelerator => !globalShortcut.isRegistered(accelerator)),
+    "Cancelled quit restored annotation shortcuts while text editing");
+
   await query(`miniCast.sendAnnotationCommand('clear')`);
   await new Promise(resolve => setTimeout(resolve, 50));
   assert.deepEqual(state(), isolated, "Controller Clear changed the document during text editing");
@@ -149,5 +161,5 @@ export async function verifyExistingTextEditing(context: Context, displayId: num
   const unauthorized = await overlayQuery(`miniCast.saveAnnotationTextEdit('not-a-controller', {})`);
   assert.equal(unauthorized.accepted, false); assert.deepEqual(state(), external);
   return { open: true, save: true, affinePreserved: true, undoRedo: true, editorUndo: true,
-    documentIsolation: true, noOp: true, cancel: true, staleRevision: true, controllerReload: true, senderRejected: true };
+    documentIsolation: true, quitProtected: true, noOp: true, cancel: true, staleRevision: true, controllerReload: true, senderRejected: true };
 }
