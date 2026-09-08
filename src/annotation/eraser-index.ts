@@ -88,6 +88,7 @@ function ellipseOutlineBounds(stroke: AnnotationElement): Bounds {
 
 function pathsFor(prepared: PreparedEraserElement) {
   if (prepared.paths) return prepared.paths;
+  if (prepared.stroke.tool !== "ellipse") return [];
   const paths = preparePaths(elementInkPaths(prepared.stroke));
   prepared.paths = paths;
   return paths;
