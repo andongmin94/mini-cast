@@ -63,6 +63,16 @@ test("text editing locks every annotation document mutation boundary", async () 
       `${handler} must reject commits while text editing`);
   }
 });
+test("normal quit treats an active existing-text edit as unsaved work", async () => {
+  const main = await text("src/electron/main.ts");
+  assert.match(main, /function getUnsavedAnnotationKey\(\)[\s\S]*const documentKey = annotationSaveState\.key/);
+  assert.match(main, /const edit = textEdits\.current;/);
+  assert.match(main, /if \(documentKey === null && !edit\) return null;/);
+  assert.match(main, /edit \? \[edit\.id, edit\.displayId, edit\.revision, edit\.element\.id\] : null/);
+  assert.match(main, /const editingText = Boolean\(textEdits\.current\);/);
+  assert.match(main, /적용하지 않은 텍스트 수정이 있습니다/);
+  assert.match(main, /텍스트 수정을 적용하거나 취소한 뒤/);
+});
 test("normal exit uses the coordinator and the tray does not prepare windows before requesting quit", async () => {
   assert.match(await text("src/electron/main.ts"), /quitCoordinator\.beforeQuit\(event\)/);
   const window = await text("src/electron/window.ts");
