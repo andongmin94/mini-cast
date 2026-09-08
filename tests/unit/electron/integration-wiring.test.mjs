@@ -41,6 +41,12 @@ test("text input suppression runs before native fallback tool shortcuts and refr
   assert.match(main, /function setControllerTextEditing[\s\S]*refreshToolShortcuts\(\);[\s\S]*refreshTransientAnnotationShortcuts\(\);/);
   assert.match(main, /function refreshToolShortcuts[\s\S]*controllerTextEditing \|\| shuttingDown/);
 });
+test("existing text edit sessions stay isolated when the controller loses focus", async () => {
+  const main = await text("src/electron/main.ts");
+  assert.match(main, /setControllerTextEditing\(value \|\| Boolean\(textEdits\.current\)\)/);
+  assert.match(main, /annotation-text-edit-open[\s\S]*showMainWindow\(\);\s*setControllerTextEditing\(true\);/);
+  assert.match(main, /mainWindow\?\.on\("blur", \(\) => \{\s*if \(!textEdits\.current\) setControllerTextEditing\(false\);\s*\}\);/);
+});
 test("normal exit uses the coordinator and the tray does not prepare windows before requesting quit", async () => {
   assert.match(await text("src/electron/main.ts"), /quitCoordinator\.beforeQuit\(event\)/);
   const window = await text("src/electron/window.ts");
