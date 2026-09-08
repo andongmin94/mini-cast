@@ -363,6 +363,18 @@ function isMainWindow(sender: WebContents) {
   );
 }
 
+function blocksControllerWindowActions() {
+  return annotationTool === "text" || controllerTextEditing || Boolean(textEdits.current);
+}
+
+function refreshControllerWindowActions() {
+  const controller = mainWindow;
+  if (!controller || controller.isDestroyed()) return;
+  const enabled = !blocksControllerWindowActions();
+  controller.setClosable(enabled);
+  controller.setMinimizable(enabled);
+}
+
 function registerShortcut(accelerator: string, callback: () => void) {
   globalShortcut.unregister(accelerator);
   const registered = globalShortcut.register(accelerator, callback);
@@ -437,10 +449,14 @@ function registerAnnotationHotkeys() {
 }
 
 function setControllerTextEditing(editing: boolean) {
-  if (controllerTextEditing === editing) return;
+  if (controllerTextEditing === editing) {
+    refreshControllerWindowActions();
+    return;
+  }
   if (editing) cancelActiveAnnotationGestures();
   controllerTextEditing = editing;
   setKeyboardInputSuppressed(editing);
+  refreshControllerWindowActions();
   refreshToolShortcuts();
   refreshTransientAnnotationShortcuts();
   sendAnnotationState();
@@ -463,6 +479,7 @@ function setAnnotationTool(tool: AnnotationTool) {
   if (tool !== "text") setControllerTextEditing(false);
   if (tool !== annotationTool) cancelActiveAnnotationGestures();
   annotationTool = tool;
+  refreshControllerWindowActions();
   const interactive = tool !== "pass-through";
   setOverlayInteractive(interactive);
   setAnnotationInputMode(interactive);
@@ -590,15 +607,22 @@ function registerIpc() {
   });
   ipcMain.on("minimize-window", (event) => {
     if (!isControllerEvent(event)) return;
+    if (blocksControllerWindowActions()) {
+      showMainWindow();
+      return;
+    }
     setAnnotationTool("pass-through");
     mainWindow?.minimize();
   });
 
   ipcMain.on("hide-window", (event) => {
-    if (isControllerEvent(event)) {
-      cancelTextEdit();
-      hideMainWindow();
+    if (!isControllerEvent(event)) return;
+    if (blocksControllerWindowActions()) {
+      showMainWindow();
+      return;
     }
+    cancelTextEdit();
+    hideMainWindow();
   });
 
   ipcMain.on("request-displays", (event) => {
@@ -1083,6 +1107,7 @@ async function initializeApp() {
   createSplash();
 
   await createWindow(rendererUrl, () => setAnnotationTool("pass-through"));
+  refreshControllerWindowActions();
   mainWindow?.on("blur", () => {
     if (!textEdits.current) setControllerTextEditing(false);
   });
