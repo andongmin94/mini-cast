@@ -97,7 +97,9 @@ function pathsFor(prepared: PreparedEraserElement) {
 export function prepareEraserElement(stroke: AnnotationElement): PreparedEraserElement {
   if (!stroke.points.length) return { stroke, bounds: null, paths: [], tolerance: 0, filled: false };
   const filled = stroke.tool === "text" || ((stroke.tool === "rectangle" || stroke.tool === "ellipse") && stroke.fill !== undefined);
-  const tolerance = stroke.tool === "text" ? 0 : stroke.width / 2 + ellipseFlatteningTolerance(stroke);
+  const tolerance = stroke.tool === "text"
+    ? 0
+    : stroke.width / 2 + (stroke.tool === "ellipse" ? ellipseFlatteningTolerance(stroke) : 0);
   if (stroke.tool === "ellipse") {
     return { stroke, bounds: ellipseOutlineBounds(stroke), paths: null, filled, tolerance };
   }
