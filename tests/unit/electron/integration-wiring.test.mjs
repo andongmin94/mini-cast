@@ -56,7 +56,7 @@ test("text editing locks every annotation document mutation boundary", async () 
   assert.match(main, /function sendAnnotationCommand[\s\S]*displayRebuildInProgress \|\| quitDialogOpen \|\| controllerTextEditing \|\| textEdits\.current/);
   assert.match(main, /annotation-gesture-begin[\s\S]*displayRebuildInProgress \|\|\s*controllerTextEditing \|\| textEdits\.current/);
   for (const handler of ["annotation-add-element", "annotation-remove-elements", "annotation-edit-selection"]) {
-    const index = main.indexOf(`\"${handler}\"`);
+    const index = main.indexOf(`"${handler}"`);
     assert.ok(index >= 0, `Missing ${handler} handler`);
     const boundary = main.slice(index, index + 2200);
     assert.match(boundary, /controllerTextEditing \|\| textEdits\.current/,
