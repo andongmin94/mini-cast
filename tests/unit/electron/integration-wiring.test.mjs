@@ -47,13 +47,21 @@ test("existing text edit sessions stay isolated when the controller loses focus"
   assert.match(main, /annotation-text-edit-open[\s\S]*showMainWindow\(\);\s*setControllerTextEditing\(true\);/);
   assert.match(main, /mainWindow\?\.on\("blur", \(\) => \{\s*if \(!textEdits\.current\) setControllerTextEditing\(false\);\s*\}\);/);
 });
-test("text editing locks document commands and new overlay gestures", async () => {
+test("text editing locks every annotation document mutation boundary", async () => {
   const main = await text("src/electron/main.ts");
   assert.match(main, /const editingText = controllerTextEditing \|\| Boolean\(textEdits\.current\);/);
   assert.match(main, /canUndo: !quitDialogOpen && !editingText/);
   assert.match(main, /canRedo: !quitDialogOpen && !editingText/);
+  assert.match(main, /function setControllerTextEditing[\s\S]*if \(editing\) cancelActiveAnnotationGestures\(\);/);
   assert.match(main, /function sendAnnotationCommand[\s\S]*displayRebuildInProgress \|\| quitDialogOpen \|\| controllerTextEditing \|\| textEdits\.current/);
   assert.match(main, /annotation-gesture-begin[\s\S]*displayRebuildInProgress \|\|\s*controllerTextEditing \|\| textEdits\.current/);
+  for (const handler of ["annotation-add-element", "annotation-remove-elements", "annotation-edit-selection"]) {
+    const index = main.indexOf(`\"${handler}\"`);
+    assert.ok(index >= 0, `Missing ${handler} handler`);
+    const boundary = main.slice(index, index + 2200);
+    assert.match(boundary, /controllerTextEditing \|\| textEdits\.current/,
+      `${handler} must reject commits while text editing`);
+  }
 });
 test("normal exit uses the coordinator and the tray does not prepare windows before requesting quit", async () => {
   assert.match(await text("src/electron/main.ts"), /quitCoordinator\.beforeQuit\(event\)/);
