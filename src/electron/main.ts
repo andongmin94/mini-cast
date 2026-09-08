@@ -626,8 +626,8 @@ function registerIpc() {
   ipcMain.on("annotation-text-editing", (event, value: unknown) => {
     if (!isControllerEvent(event) || typeof value !== "boolean") return;
     if (value && (!mainWindow?.isFocused() || (annotationTool !== "text" && !textEdits.current))) return;
-    // Disabling a submit button must not re-enable global Undo while a text save is pending.
-    setControllerTextEditing(value || Boolean(textEdits.current && mainWindow?.isFocused()));
+    // An existing edit session remains isolated even while its controller loses focus.
+    setControllerTextEditing(value || Boolean(textEdits.current));
   });
 
   ipcMain.handle("annotation-text-edit-open", (event, revision: unknown, elementId: unknown) => {
@@ -638,7 +638,7 @@ function registerIpc() {
       cancelActiveAnnotationGestures();
       lastAnnotationDisplayId = displayId;
       showMainWindow();
-      setControllerTextEditing(mainWindow.isFocused());
+      setControllerTextEditing(true);
       sendTextEditSession();
       return true;
     } catch (error) {
@@ -1068,7 +1068,9 @@ async function initializeApp() {
   createSplash();
 
   await createWindow(rendererUrl, () => setAnnotationTool("pass-through"));
-  mainWindow?.on("blur", () => setControllerTextEditing(false));
+  mainWindow?.on("blur", () => {
+    if (!textEdits.current) setControllerTextEditing(false);
+  });
   mainWindow?.on("focus", () => {
     if (textEdits.current) setControllerTextEditing(true);
   });
