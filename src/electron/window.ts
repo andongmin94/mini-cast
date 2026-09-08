@@ -146,6 +146,7 @@ function loadRenderer(
 export async function createWindow(
   rendererUrl: string | null,
   onBeforeHide?: () => void,
+  shouldBlockSessionEnd?: () => boolean,
 ) {
   beforeMainWindowHide = onBeforeHide;
   mainWindow = new BrowserWindow({
@@ -185,7 +186,20 @@ export async function createWindow(
     event.preventDefault();
     hideMainWindow();
   });
-  mainWindow.on("query-session-end", prepareWindowsForQuit);
+  mainWindow.on("query-session-end", (event) => {
+    let blocked = false;
+    try {
+      blocked = shouldBlockSessionEnd?.() ?? false;
+    } catch {
+      blocked = true;
+    }
+    if (blocked) {
+      event.preventDefault();
+      showMainWindow();
+      return;
+    }
+    prepareWindowsForQuit();
+  });
   mainWindow.on("closed", () => {
     mainWindow = null;
     beforeMainWindowHide = undefined;
