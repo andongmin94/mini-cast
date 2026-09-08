@@ -1,6 +1,6 @@
 import type { AnnotationIoGate } from "./annotation-io-gate.js";
 import { AnnotationIoLifetime } from "./annotation-io-lifetime.js";
-import { app, clipboard, ClipboardItem, dialog, ipcMain, nativeImage, screen, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
+import { app, clipboard, ClipboardItem, dialog, ipcMain, nativeImage, screen, type Display, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { AnnotationExportError, planAnnotationExport, readAnnotationExportRequest, type AnnotationExportResult } from "../annotation/export.js";
@@ -15,6 +15,16 @@ interface Options {
   history: AnnotationHistory;
   unavailable(): boolean;
   prepareFileDialog(): void;
+}
+
+function sameExportMetrics(current: Display | undefined, expected: Display) {
+  return Boolean(
+    current &&
+    current.id === expected.id &&
+    current.scaleFactor === expected.scaleFactor &&
+    current.bounds.width === expected.bounds.width &&
+    current.bounds.height === expected.bounds.height
+  );
 }
 
 /** Native clipboard/filesystem access is not exposed as a general renderer API. */
@@ -48,9 +58,10 @@ export function registerAnnotationExports(options: Options) {
     lifetime.watch(owner, ["did-start-loading", "destroyed"]);
     lifetime.watch(contents, ["did-start-loading", "destroyed"]);
     const valid = () => {
+      const currentDisplay = screen.getAllDisplays().find(display => display.id === request.displayId);
       if (lifetime.invalidated || options.unavailable() || target.isDestroyed() || contents.isDestroyed() ||
           controller.isDestroyed() || owner.isDestroyed() || !controller.isVisible() || controller.isMinimized() ||
-          !overlayWindows.includes(target) || !screen.getAllDisplays().some(display => display.id === request.displayId))
+          !overlayWindows.includes(target) || !sameExportMetrics(currentDisplay, physical))
         throw new AnnotationExportError("unavailable");
     };
     try {
