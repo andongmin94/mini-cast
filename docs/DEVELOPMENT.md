@@ -25,8 +25,8 @@ docs/                  개발 가이드와 변경 이력
 
 - 브랜치는 `main`만 유지합니다. 요청 없이 새 브랜치·PR·임시 감사 디렉터리를 만들지 않습니다.
 - 수정은 작게 묶고 `npm run check` 후 커밋합니다. 기존 경로를 재노출하는 호환 래퍼는 두지 않습니다.
-- 일반 push와 문서 수정은 Actions를 실행하지 않습니다. Windows 검증은 Actions → Verify → Run workflow로 필요할 때만 실행합니다.
-- 테스트 실패를 성공으로 바꾸거나 보안 감사를 생략하지 않습니다. 수동 실행이 실패하면 결과는 실패입니다.
+- `main`의 모든 push는 Windows Verify를 자동 실행합니다. 새 push가 오면 같은 ref의 이전 실행은 취소하고 최신 커밋만 끝까지 검증합니다. 필요하면 Actions → Verify → Run workflow로 같은 검증을 수동 실행할 수도 있습니다.
+- 테스트 실패를 성공으로 바꾸거나 보안 감사를 생략하지 않습니다. 자동·수동 실행이 실패하면 결과는 실패입니다.
 
 ## 실행 및 검증
 
@@ -52,7 +52,7 @@ main process가 문서와 전역 Undo/Redo를 소유합니다. 일반 편집은 
 
 ## 알림
 
-저장소는 자동 검증을 실행하지 않습니다. GitHub 자체의 Actions 이메일은 계정 설정이며, 완전히 끄려면 Settings → Notifications → System → Actions에서 Email을 끄거나 Don't notify를 선택합니다. 수동 검증 실패 여부와 이메일 설정은 별개입니다.
+저장소는 `main` push마다 자동 Verify를 실행합니다. GitHub 자체의 Actions 이메일은 계정 설정이며, 끄려면 Settings → Notifications → System → Actions에서 Email을 끄거나 Don't notify를 선택합니다. 검증 결과와 이메일 설정은 별개입니다.
 
 
 ## 고정 소스 배포 검증
