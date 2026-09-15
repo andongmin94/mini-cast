@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
@@ -63,24 +64,35 @@ jobs:
       - name: 배포 출처 실패 경계 검사
         shell: pwsh
         run: ./tests/windows/bundle-provenance.test.ps1
+      - name: 이전 수동 패키지 아티팩트 정리
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ids = gh api --paginate "/repos/$env:GITHUB_REPOSITORY/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name == "mini-cast-windows") | .id'
+          foreach ($id in $ids) {
+            if ($id) {
+              gh api --method DELETE "/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$id"
+            }
+          }
       - name: Windows 산출물 업로드
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mini-cast-windows
           path: |
-            output/*.msi
-            output/MiniCast.exe
-            output/SHA256SUMS.txt
             output/MiniCast-*-windows.zip
             output/BUNDLE-SHA256.txt
             output/BUILD-METADATA.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
       - name: 검증 진단 로그 업로드
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mini-cast-verification-logs
           path: verification-logs/**/*
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 1
