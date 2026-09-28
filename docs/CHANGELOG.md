@@ -1,15 +1,3 @@
-## Unreleased
-
-- 판서 gesture lease를 시작 도구에 결속해 다른 영구 도구의 add/remove/edit IPC를 거부하고 실제 Electron smoke에서 문서 불변성을 확인합니다.
-- 초대형 타원의 hit-test용 파생 선분을 512개로 제한하고 cap의 chord 오차를 tolerance에 반영합니다. 지우개는 타원의 analytic bounds를 먼저 검사하고 실제 후보가 될 때만 파생 경로를 한 번 생성합니다.
-- PNG 내보내기에서 번들 글꼴이 실제로 준비되지 않으면 fallback 글꼴로 저장하지 않고 렌더 실패로 처리합니다.
-- 커서 위치는 8ms 상시 polling 대신 전역 mousemove를 최대 125Hz로 합쳐 게시하고 monotonic clock으로 throttle합니다. 키 중복 제거는 시스템 시간이 뒤로 이동해도 새 입력을 차단하지 않습니다.
-- 사라지는 잉크는 2초 유지 구간에서 RAF를 중지하고 fade 구간에만 다시 실행합니다. 키 입력 표시는 화면에서 밀려난 항목의 만료 timer도 즉시 정리합니다.
-- 같은 설정값의 반복 저장 IPC는 overlay 재전송과 디스크 예약을 생략합니다. controller는 push listener를 먼저 설치하고 더 최신 push가 있으면 늦은 초기 settings/annotation/save-status 응답을 무시합니다.
-- 텍스트 입력 포커스에서는 Escape·Undo·Clear뿐 아니라 Alt+Shift 도구 전환 global shortcut과 uIOhook fallback도 해제합니다. 기존 텍스트 편집 세션은 controller focus를 잃어도 격리를 유지하고, 편집 중 Undo/Redo/Clear와 새 overlay gesture 및 늦은 기존 gesture commit으로 문서를 바꾸지 못하게 합니다. 활성 기존 텍스트 편집은 정상 종료의 미저장 작업으로 취급하여 취소된 종료 뒤 세션을 보존하고, 세션 종료 뒤 판서 단축키를 복원합니다.
-- Verify는 workflow SHA를 정확한 checkout과 `MINICAST_SOURCE_SHA`에 고정하며 provenance 검사에서 실제 HEAD와 일치하는지 확인합니다.
-- 네이티브 저장 대화상자에서 확장자를 생략하면 `.minicast` 또는 `.png`를 붙입니다. 사용자가 다른 확장자를 명시한 경우에는 기존 strict writer 검증을 그대로 적용합니다.
-
 ## 0.7.0
 
 - 단일·그룹 회전, Shift 15도 고정, 원자적 Undo/Redo.
@@ -127,7 +115,19 @@ Windows 검증은 정상 실행과 같은 트레이·전역 단축키를 등록�
 
 ## 0.14.2
 
+이번 배포 범위에는 정상 종료 보호와 아래 안정화 변경을 포함합니다.
+
 - 내용 기반 저장 상태와 다중 화면 정상 종료 확인.
 - 기본 취소·명시적 폐기·중복 종료 요청 병합·오래된 폐기 승인 재확인.
 - 실제 저장/열기·Undo/Redo·PNG 격리와 Windows 종료 대화상자 회귀 검사.
 - 입력별 대기 제한은 유지하고 추가 종료 시나리오를 포함한 전체 테스트 시간 상한 정리.
+- 판서 gesture lease를 시작 도구에 결속해 다른 영구 도구의 add/remove/edit IPC를 거부하고 실제 Electron smoke에서 문서 불변성을 확인합니다.
+- 초대형 타원의 hit-test용 파생 선분을 512개로 제한하고 cap의 chord 오차를 tolerance에 반영합니다. 지우개는 타원의 analytic bounds를 먼저 검사하고 실제 후보가 될 때만 파생 경로를 한 번 생성합니다.
+- PNG 내보내기에서 번들 글꼴이 실제로 준비되지 않으면 fallback 글꼴로 저장하지 않고 렌더 실패로 처리합니다.
+- 커서 위치는 8ms 상시 polling 대신 전역 mousemove를 최대 125Hz로 합쳐 게시하고 monotonic clock으로 throttle합니다. 키 중복 제거는 시스템 시간이 뒤로 이동해도 새 입력을 차단하지 않습니다.
+- 사라지는 잉크는 2초 유지 구간에서 RAF를 중지하고 fade 구간에만 다시 실행합니다. 키 입력 표시는 화면에서 밀려난 항목의 만료 timer도 즉시 정리합니다.
+- 같은 설정값의 반복 저장 IPC는 overlay 재전송과 디스크 예약을 생략합니다. controller는 push listener를 먼저 설치하고 더 최신 push가 있으면 늦은 초기 settings/annotation/save-status 응답을 무시합니다.
+- 텍스트 입력 포커스에서는 Escape·Undo·Clear뿐 아니라 Alt+Shift 도구 전환 global shortcut과 uIOhook fallback도 해제합니다. 기존 텍스트 편집 세션은 controller focus를 잃어도 격리를 유지하고, 편집 중 Undo/Redo/Clear와 새 overlay gesture 및 늦은 기존 gesture commit으로 문서를 바꾸지 못하게 합니다. 활성 기존 텍스트 편집은 정상 종료의 미저장 작업으로 취급하여 취소된 종료 뒤 세션을 보존하고, 세션 종료 뒤 판서 단축키를 복원합니다.
+- Verify는 workflow SHA를 정확한 checkout과 `MINICAST_SOURCE_SHA`에 고정하며 provenance 검사에서 실제 HEAD와 일치하는지 확인합니다.
+- 네이티브 저장 대화상자에서 확장자를 생략하면 `.minicast` 또는 `.png`를 붙입니다. 사용자가 다른 확장자를 명시한 경우에는 기존 strict writer 검증을 그대로 적용합니다.
+- 개발·패키징 도구의 간접 의존성 `js-yaml`을 4.3.2로 고정해 보안 감사에서 발견한 병합 키 처리 취약점(GHSA-2883-xcg3-v3hh)을 수정합니다.

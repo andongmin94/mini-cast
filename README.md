@@ -92,4 +92,4 @@ Windows 결과물은 `output/`에 생성됩니다. 현재 배포 대상은 Windo
 
 [판서 도구 가이드](docs/ANNOTATION-TOOLS.md) · [구조·개발·검증 가이드](docs/DEVELOPMENT.md) · [개발 변경 이력](docs/CHANGELOG.md)
 
-작업 브랜치는 `main` 하나만 사용합니다. Actions 검증은 자동 실행하지 않으며, 필요한 시점에 `Verify`를 직접 실행합니다.
+작업 브랜치는 `main` 하나만 사용합니다. `main` push마다 `Verify`가 Windows 전체 검증을 자동 실행합니다. 배포 파일은 수동 `workflow_dispatch` 실행에서만 업로드하며 아티팩트는 1일 보관합니다.
