@@ -11,7 +11,7 @@ export function createTray() {
   if (tray || !mainWindow) return;
 
   const icon = nativeImage.createFromPath(
-    path.join(electronDirectory, "../../public/icon.ico"),
+    path.join(electronDirectory, "../../public/icon.png"),
   );
   if (icon.isEmpty()) return;
 

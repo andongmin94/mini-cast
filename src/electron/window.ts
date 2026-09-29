@@ -156,7 +156,7 @@ export async function createWindow(
     frame: false,
     resizable: !app.isPackaged,
     maximizable: !app.isPackaged,
-    icon: path.join(electronDirectory, "../../public/icon.ico"),
+    icon: path.join(electronDirectory, "../../public/icon.png"),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

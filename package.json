@@ -59,13 +59,14 @@
     "appId": "MiniCast",
     "productName": "MiniCast",
     "copyright": "Copyright © andongmin",
-    "icon": "public/icon.ico",
+    "icon": "public/icon.png",
     "mac": {
       "target": [
         "dir"
       ]
     },
     "win": {
+      "icon": "public/icon.ico",
       "target": [
         "msi",
         "portable"
