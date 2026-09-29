@@ -1,7 +1,7 @@
 <div align="center">
 
 <a href="https://bio.andongmin.com/mini-cast">
-<img src="https://bio.andongmin.com/mini-cast/logo.svg" alt="logo" height="200" />
+<img src="public/logo.svg" alt="MiniCast logo" height="200" />
 </a>
 
 </div>
