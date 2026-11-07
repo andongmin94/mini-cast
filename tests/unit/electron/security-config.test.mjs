@@ -14,7 +14,7 @@ test("build uses a pinned patched Electron and never publishes implicitly", asyn
   const packageJson = JSON.parse(
     await readFile(new URL("../../../package.json", import.meta.url), "utf8"),
   );
-  assert.equal(packageJson.devDependencies.electron, "44.1.0");
+  assert.equal(packageJson.devDependencies.electron, "44.10.2");
   assert.match(packageJson.scripts.build, /electron-builder --publish never$/);
 });
 

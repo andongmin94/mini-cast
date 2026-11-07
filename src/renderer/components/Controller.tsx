@@ -3,7 +3,7 @@ import AnnotationFileControls from "./AnnotationFileControls";
 import AnnotationExportControls from "./AnnotationExportControls";
 import AnnotationExistingTextEditor from "./AnnotationExistingTextEditor";
 import type { AnnotationTextDraft } from "@/annotation/text";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { Keyboard, MousePointer2, PenLine } from "lucide-react";
 
@@ -513,10 +513,11 @@ export default function Controller() {
               unavailableShortcuts={annotationState.unavailableShortcuts}
               canUndo={annotationState.canUndo}
               canRedo={annotationState.canRedo}
-            />
-            <AnnotationBoardControls displays={displays} />
-            <AnnotationFileControls displays={displays} />
-            <AnnotationExportControls displays={displays} />
+            >
+              <AnnotationBoardControls displays={displays} />
+              <AnnotationFileControls displays={displays} />
+              <AnnotationExportControls displays={displays} />
+            </AnnotationControls>
           </TabsContent>
         </Tabs>
       </div>
@@ -550,10 +551,15 @@ function SettingSlider({
   text,
   onChange,
 }: SettingSliderProps) {
+  const labelId = useId();
   return (
     <div className="flex items-center space-x-2 pb-2">
-      <Label className="whitespace-nowrap">{label}</Label>
+      <Label id={labelId} className="whitespace-nowrap">
+        {label}
+      </Label>
       <Slider
+        aria-labelledby={labelId}
+        aria-valuetext={text}
         min={min}
         max={max}
         step={step}

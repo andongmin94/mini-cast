@@ -6,6 +6,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "검증한 Windows 패키지를 현재 버전의 릴리스로 게시"
+        type: boolean
+        default: false
 
 permissions:
   actions: write
@@ -96,3 +101,52 @@ jobs:
           path: verification-logs/**/*
           if-no-files-found: ignore
           retention-days: 1
+
+  publish-release:
+    name: 검증된 릴리스 게시
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    needs: windows-package
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: 검증한 소스 체크아웃
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: 검증한 Windows 산출물 다운로드
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mini-cast-windows
+          path: release-artifacts
+      - name: 버전 태그와 릴리스 생성
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(python -c 'import json; print(json.load(open("package.json"))["version"])')
+          unzip -q "release-artifacts/MiniCast-$version-windows.zip" -d release-payload
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = json.loads(Path("package.json").read_text())["version"]
+          changelog = Path("docs/CHANGELOG.md").read_text()
+          section = changelog.split(f"## {version}", 1)[1].split("\n## ", 1)[0]
+          section = section.split("\n", 1)[1].strip()
+          run = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          notes = f"# MiniCast {version}\n\n{section}\n\n## 검증\n\nWindows 전체 검증과 MSI·포터블 검사를 통과한 산출물입니다. [검증 실행]({run})\n\n소스: `{os.environ['GITHUB_SHA']}`\n"
+          Path(os.environ["RUNNER_TEMP"], "mini-cast-release-notes.md").write_text(notes)
+          PY
+          gh release create "v$version" \
+            --target "$GITHUB_SHA" --title "v$version" --latest \
+            --notes-file "$RUNNER_TEMP/mini-cast-release-notes.md" \
+            "release-artifacts/MiniCast-$version-windows.zip" \
+            release-artifacts/BUNDLE-SHA256.txt \
+            release-payload/BUILD-METADATA.json \
+            release-payload/SHA256SUMS.txt \
+            "release-payload/MiniCast-$version-x64.msi" \
+            release-payload/MiniCast.exe

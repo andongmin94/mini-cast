@@ -192,13 +192,12 @@ function scaleElement(element: AnnotationElement, scaleX: number, scaleY: number
   const points = Object.freeze(element.points.map(point => Object.freeze({
     x: point.x * scaleX, y: point.y * scaleY,
   })));
-  if (element.tool === "text") return Object.freeze({
-    ...element, points,
-  });
   const widthScale = Math.sqrt(Math.abs(scaleX * scaleY));
-  return Object.freeze({
-    ...element, points, width: Math.min(128, Math.max(0.5, element.width * widthScale)),
-  });
+  const scaled: AnnotationElement = element.tool === "text"
+    ? { ...element, points }
+    : { ...element, points, width: Math.min(128, Math.max(0.5, element.width * widthScale)) };
+  if (!isAnnotationElement(scaled)) throw new AnnotationError("invalid-element");
+  return Object.freeze(scaled);
 }
 
 function validResizeTransform(anchor: AnnotationPoint, scaleX: number, scaleY: number) {
@@ -290,16 +289,14 @@ export function fillAnnotationElement(element: AnnotationElement, fill: string |
 /** Translation preserves IDs and styles; invalid coordinates are rejected before publication. */
 export function translateAnnotationElement(element: AnnotationElement, dx: number, dy: number): AnnotationElement {
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new AnnotationError("invalid-element");
-  const points = Object.freeze(element.points.map(point => {
-    const x = point.x + dx;
-    const y = point.y + dy;
-    if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > MAX_ANNOTATION_COORDINATE || Math.abs(y) > MAX_ANNOTATION_COORDINATE)
-      throw new AnnotationError("invalid-element");
-    return Object.freeze({ x, y });
-  }));
-  return element.tool === "text"
+  const points = Object.freeze(element.points.map(point => Object.freeze({
+    x: point.x + dx, y: point.y + dy,
+  })));
+  const translated = element.tool === "text"
     ? Object.freeze({ ...element, points, box: Object.isFrozen(element.box) ? element.box : Object.freeze({ ...element.box }) })
     : Object.freeze({ ...element, points });
+  if (!isAnnotationElement(translated)) throw new AnnotationError("invalid-element");
+  return translated;
 }
 
 function cloneHistoryEntry(entry: HistoryEntry): HistoryEntry {
@@ -503,16 +500,19 @@ export class AnnotationHistory {
 
     const scaleX = width / previous.width;
     const scaleY = height / previous.height;
-    document.elements = document.elements.map((stroke) =>
+    const elements = document.elements.map((stroke) =>
       scaleElement(stroke, scaleX, scaleY),
     );
+    const undoStack = this.undoStack.map((entry) =>
+      scaleHistoryEntry(entry, displayId, scaleX, scaleY),
+    );
+    const redoStack = this.redoStack.map((entry) =>
+      scaleHistoryEntry(entry, displayId, scaleX, scaleY),
+    );
+    document.elements = elements;
     document.viewport = { width, height };
-    this.undoStack = this.undoStack.map((entry) =>
-      scaleHistoryEntry(entry, displayId, scaleX, scaleY),
-    );
-    this.redoStack = this.redoStack.map((entry) =>
-      scaleHistoryEntry(entry, displayId, scaleX, scaleY),
-    );
+    this.undoStack = undoStack;
+    this.redoStack = redoStack;
     this.touch(displayId);
     return true;
   }

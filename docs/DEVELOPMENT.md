@@ -19,7 +19,7 @@ docs/                  개발 가이드와 변경 이력
 
 `@/`는 `src/`를 가리킵니다. renderer는 `electron/` 구현을 직접 가져오지 않습니다. 공용 타입과 순수 변환은 `shared/`에서 가져오며 실제 OS 기능은 preload API를 통해 요청합니다.
 
-`electron/testing/`은 현재 앱의 `--smoke-test`와 `--interaction-smoke-test`를 구현합니다. 이 모듈들은 검증용으로 분리되어 있지만 현재 패키지에 포함되므로, 패키지에서 테스트 코드까지 제외했다고 해석하면 안 됩니다.
+`electron/testing/`은 현재 앱의 `--smoke-test`와 `--interaction-smoke-test`를 구현합니다. 통합 검증 모듈은 검사 모드에서만 불러오며, 패키징한 앱 자체를 검사할 수 있도록 배포 파일에도 포함합니다.
 
 ## 작업 방식
 
@@ -59,8 +59,8 @@ main process가 문서와 전역 Undo/Redo를 소유합니다. 일반 편집은 
 
 Verify workflow는 실행을 시작한 `github.sha`를 checkout ref와 `MINICAST_SOURCE_SHA`에 함께 고정합니다. `package-bundle.ps1`은 깨끗한 Git HEAD와 tree를 기록하고 실제 HEAD가 이 고정 SHA와 다르면 패키징을 거부합니다. 메타데이터의 `commit`은 제품 소스이고 `workflow_commit`은 실행을 시작한 워크플로 커밋입니다. 정상 Verify에서는 두 값이 같은 소스를 가리켜야 하며, provenance 음성 테스트는 의도적으로 다른 SHA와 dirty tree를 주어 거부 경계를 검사합니다.
 
-배포 파일을 확보하려면 Actions → Verify → Run workflow에서 `main`을 선택해 수동 실행합니다. 완료된 실행의 commit이 배포 대상 SHA와 같고 전체 검증이 성공했는지 확인한 뒤 `mini-cast-windows` 아티팩트를 내려받습니다. `main` push도 같은 검증과 ZIP 생성을 수행하지만 아티팩트는 수동 `workflow_dispatch` 실행에서만 업로드합니다. 패키지·진단 로그 아티팩트의 보관 기간은 1일이며, 새 패키지를 업로드하기 전에 기존 `mini-cast-windows` 아티팩트를 삭제합니다. 수동 실행의 진단 로그는 검증 실패 시에도 생성된 파일이 있으면 업로드합니다.
+배포 파일을 확보하려면 Actions → Verify → Run workflow에서 `main`을 선택해 수동 실행합니다. 릴리스까지 게시하려면 `publish_release`를 선택합니다. 이 옵션은 기본으로 꺼져 있으며 Windows 전체 검증과 배포 출처 검사가 성공한 뒤에만 현재 `package.json` 버전의 태그·릴리스를 생성합니다. 완료된 실행의 commit이 배포 대상 SHA와 같고 전체 검증이 성공했는지 확인한 뒤 `mini-cast-windows` 아티팩트를 내려받습니다. `main` push도 같은 검증과 ZIP 생성을 수행하지만 아티팩트는 수동 `workflow_dispatch` 실행에서만 업로드합니다. 패키지·진단 로그 아티팩트의 보관 기간은 1일이며, 새 패키지를 업로드하기 전에 기존 `mini-cast-windows` 아티팩트를 삭제합니다. 수동 실행의 진단 로그는 검증 실패 시에도 생성된 파일이 있으면 업로드합니다.
 
-다운로드한 아티팩트 압축에는 `MiniCast-0.14.2-windows.zip`, `BUNDLE-SHA256.txt`, `BUILD-METADATA.json` 세 파일이 있습니다. 배포 ZIP 내부에는 `MiniCast-0.14.2-x64.msi`, `MiniCast.exe`, `BUILD-METADATA.json`, `SHA256SUMS.txt` 네 파일만 있어야 합니다.
+다운로드한 아티팩트 압축에는 `MiniCast-0.2.5-windows.zip`, `BUNDLE-SHA256.txt`, `BUILD-METADATA.json` 세 파일이 있습니다. 배포 ZIP 내부에는 `MiniCast-0.2.5-x64.msi`, `MiniCast.exe`, `BUILD-METADATA.json`, `SHA256SUMS.txt` 네 파일만 있어야 합니다.
 
-ZIP을 풀기 전에 `Get-FileHash -Algorithm SHA256`으로 ZIP의 해시를 `BUNDLE-SHA256.txt`와 대조합니다. 압축을 푼 뒤 `SHA256SUMS.txt`의 세 항목을 각각 확인하며, MSI·포터블 EXE뿐 아니라 내부 메타데이터도 검사합니다. 바깥·안쪽 `BUILD-METADATA.json`은 같아야 하며 `commit`·`workflow_commit`·`tree`·`run_id`·`run_attempt`가 해당 소스와 실행을 가리키는지 확인합니다. 현재 배포의 `version`은 `0.14.2`, `platform`은 `windows-x64`여야 합니다.
+ZIP을 풀기 전에 `Get-FileHash -Algorithm SHA256`으로 ZIP의 해시를 `BUNDLE-SHA256.txt`와 대조합니다. 압축을 푼 뒤 `SHA256SUMS.txt`의 세 항목을 각각 확인하며, MSI·포터블 EXE뿐 아니라 내부 메타데이터도 검사합니다. 바깥·안쪽 `BUILD-METADATA.json`은 같아야 하며 `commit`·`workflow_commit`·`tree`·`run_id`·`run_attempt`가 해당 소스와 실행을 가리키는지 확인합니다. 현재 배포의 `version`은 `0.2.5`, `platform`은 `windows-x64`여야 합니다.

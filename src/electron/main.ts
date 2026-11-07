@@ -1,6 +1,5 @@
 import { AnnotationIoLifetime } from "./annotation-io-lifetime.js";
 import { AnnotationSaveState } from "./annotation-save-state.js";
-import { acceptUnsavedSmokeQuit } from "./testing/unsaved-quit-smoke.js";
 import { QuitCoordinator } from "./quit-coordinator.js";
 import { writeFile } from "node:fs/promises";
 import { AnnotationBoards, readAnnotationBoardRequest, type AnnotationBoardResult } from "../annotation/board.js";
@@ -86,7 +85,6 @@ import { CoalescingSerialExecutor } from "./serial-executor.js";
 import { readSmokeOptions, writeSmokeSentinel } from "./testing/smoke.js";
 import { normalizeOverlaySettings, overlaySettingsEqual } from "../shared/settings.js";
 import { closeSplash, createSplash } from "./splash.js";
-import { createSmokeChecks } from "./testing/interaction-smoke.js";
 import { createTray, destroyTray, isTrayReady } from "./tray.js";
 import {
   createOverlayWindows,
@@ -1020,6 +1018,11 @@ function registerDisplayEvents() {
 async function runSmokeTest() {
   const mode = smokeOptions.mode;
   if (!mode) return;
+
+  const [{ createSmokeChecks }, { acceptUnsavedSmokeQuit }] = await Promise.all([
+    import("./testing/interaction-smoke.js"),
+    import("./testing/unsaved-quit-smoke.js"),
+  ]);
 
   if (!isTrayReady()) throw new Error("Production tray was not created");
   if (unavailableShortcuts.size)

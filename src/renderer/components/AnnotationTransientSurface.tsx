@@ -2,17 +2,18 @@ import { memo, useCallback, useLayoutEffect, useRef, useState, type PointerEvent
 import { drawAnnotationElement } from "@/annotation/canvas-renderer";
 import type { AnnotationPoint } from "@/annotation/history";
 import { TransientInk } from "@/annotation/transient-ink";
-import type { TransientAnnotationTool } from "@/shared/contract";
+import type { MousePosition, TransientAnnotationTool } from "@/shared/contract";
 
 interface Props {
   tool: TransientAnnotationTool;
   color: string;
   width: number;
+  toOverlayPosition(position: MousePosition): MousePosition;
 }
 interface Gesture { id: string; pointerId: number }
 
 /** A disposable input/paint layer over the read-only permanent document. */
-function AnnotationTransientSurface({ tool, color, width }: Props) {
+function AnnotationTransientSurface({ tool, color, width, toOverlayPosition }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const ink = useRef(new TransientInk());
   const active = useRef<Gesture | null>(null);
@@ -144,8 +145,9 @@ function AnnotationTransientSurface({ tool, color, width }: Props) {
         }
         if (tool === "laser") {
           const previous = cursor.current;
-          cursor.current = point;
-          if (!previous || previous.x !== point.x || previous.y !== point.y) requestPaint();
+          const position = toOverlayPosition(point);
+          cursor.current = position;
+          if (!previous || previous.x !== position.x || previous.y !== position.y) requestPaint();
         }
       }),
     ];
@@ -165,7 +167,7 @@ function AnnotationTransientSurface({ tool, color, width }: Props) {
       window.document.removeEventListener("visibilitychange", hidden);
       stops.forEach(stop => stop());
     };
-  }, [cancel, clear, detach, requestPaint, tool]);
+  }, [cancel, clear, detach, requestPaint, tool, toOverlayPosition]);
 
   function points(event: ReactPointerEvent<HTMLCanvasElement>): AnnotationPoint[] {
     const bounds = event.currentTarget.getBoundingClientRect();

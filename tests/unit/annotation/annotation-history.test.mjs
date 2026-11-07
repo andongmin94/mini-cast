@@ -104,6 +104,61 @@ test("viewport changes rescale documents and both history stacks", () => {
   assert.deepEqual(ids(history, 10), ["a"]);
 });
 
+test("viewport rescaling rejects overflowing points and complete text frames", () => {
+  const sources = [
+    stroke("far", 600000, 100),
+    { id: "text", tool: "text", color: "#000000", opacity: 1, text: "A", fontSize: 20,
+      points: [{ x: 499950, y: 10 }, { x: 499951, y: 10 }, { x: 499950, y: 11 }],
+      box: { minX: 0, minY: 0, maxX: 100, maxY: 20 } },
+  ];
+  for (const source of sources) {
+    const history = new AnnotationHistory();
+    history.setDisplayViewport(10, 1920, 1080);
+    history.addElement(10, stroke("a", 25, 50));
+    history.addElement(10, source);
+    const before = history.getSnapshot(10);
+
+    assert.throws(() => history.setDisplayViewport(10, 3840, 2160),
+      error => error.reason === "invalid-element");
+    assert.strictEqual(history.getSnapshot(10), before);
+    assert.equal(history.undo(), 10);
+    assert.deepEqual(history.getSnapshot(10).elements, [stroke("a", 25, 50)]);
+    assert.deepEqual(history.getSnapshot(10).viewport, before.viewport);
+    assert.equal(history.redo(), 10);
+    assert.deepEqual(history.getSnapshot(10).elements, before.elements);
+  }
+});
+
+for (const stack of ["Undo", "Redo"]) {
+  test(`viewport rescaling rejects invalid ${stack} geometry without partial changes`, () => {
+    const history = new AnnotationHistory();
+    history.setDisplayViewport(10, 1920, 1080);
+    const near = stroke("near", 25, 50);
+    const far = stroke("far", 600000, 100);
+    history.addElement(10, near);
+    history.addElement(10, far);
+    if (stack === "Undo") history.removeElements(10, ["far"]);
+    else history.undo();
+    const before = history.getSnapshot(10);
+    const canUndo = history.canUndo, canRedo = history.canRedo;
+
+    assert.throws(() => history.setDisplayViewport(10, 3840, 2160),
+      error => error.reason === "invalid-element");
+    assert.strictEqual(history.getSnapshot(10), before);
+    assert.equal(history.canUndo, canUndo);
+    assert.equal(history.canRedo, canRedo);
+    assert.equal(stack === "Undo" ? history.undo() : history.redo(), 10);
+    assert.deepEqual(history.getSnapshot(10).elements, [near, far]);
+    assert.deepEqual(history.getSnapshot(10).viewport, before.viewport);
+    assert.equal(history.undo(), 10);
+    assert.deepEqual(history.getSnapshot(10).elements, [near]);
+    assert.equal(history.undo(), 10);
+    assert.deepEqual(history.getSnapshot(10).elements, []);
+    assert.equal(history.redo(), 10);
+    assert.deepEqual(history.getSnapshot(10).elements, [near]);
+  });
+}
+
 test("snapshots and input objects cannot mutate stored history", () => {
   const history = new AnnotationHistory();
   const source = stroke("a", 10, 20);

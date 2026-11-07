@@ -125,6 +125,17 @@ export default function Overlay() {
     height: window.innerHeight,
   });
 
+  const scalePosition = useCallback((position: MousePosition) => ({
+    x: Math.round(
+      position.x *
+      (window.innerWidth / Math.max(sourceSize.current.width, 1)),
+    ),
+    y: Math.round(
+      position.y *
+      (window.innerHeight / Math.max(sourceSize.current.height, 1)),
+    ),
+  }), []);
+
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
@@ -155,17 +166,6 @@ export default function Overlay() {
       keyPressTimers.clear();
       visibleKeyPresses = [];
     };
-
-    const scalePosition = (position: MousePosition) => ({
-      x: Math.round(
-        position.x *
-        (window.innerWidth / Math.max(sourceSize.current.width, 1)),
-      ),
-      y: Math.round(
-        position.y *
-        (window.innerHeight / Math.max(sourceSize.current.height, 1)),
-      ),
-    });
 
     const onKeyPress = (keyPress: KeyPress) => {
       const current = settingsRef.current;
@@ -248,7 +248,7 @@ export default function Overlay() {
       unsubscribe.forEach((stop) => stop());
       replica.reset(null);
     };
-  }, [applyAnnotationUpdate, replica]);
+  }, [applyAnnotationUpdate, replica, scalePosition]);
 
   const passive = annotationState.tool === "pass-through";
   const boardMode = boards?.displays.find(display => display.displayId === displayId)?.mode ?? "transparent";
@@ -285,7 +285,7 @@ export default function Overlay() {
 
       {displayId !== null && isTransientAnnotationTool(annotationState.tool) && (
         <AnnotationTransientSurface key={`${displayId}:${annotationState.tool}`} tool={annotationState.tool}
-          color={settings.annotationPenColor} width={settings.annotationPenWidth} />
+          color={settings.annotationPenColor} width={settings.annotationPenWidth} toOverlayPosition={scalePosition} />
       )}
 
       {syncNotice && (

@@ -114,6 +114,34 @@ export async function verifyTransientTools(context: Context, displayId: number) 
   await waitFor(async()=> (await sample(325,240))?.[3]===0 && (await sample(435,300))?.[3]===255,3000,"laser leaves no trail");
   await injectWindowsClick(q.x,q.y); await leaseEnded(); unchanged();
 
+  const laserZoom = overlay.webContents.getZoomFactor();
+  const laserCssWidth = await query(`document.querySelector('[data-annotation-transient]').clientWidth`);
+  try {
+    overlay.webContents.setZoomFactor(2);
+    await waitFor(async () => await query(
+      `document.querySelector('[data-annotation-transient]').clientWidth`) !== laserCssWidth,
+      2000,"Chromium zoom changes laser CSS coordinates");
+    await injectWindowsMouseMove(p.x,p.y);
+    await waitFor(async () => {
+      // The native point (320, 240) becomes (160, 120) CSS pixels at 2x zoom.
+      const scaled = await sample(165,120);
+      const unscaled = await sample(325,240);
+      return scaled?.[0]===255 && scaled?.[3]===255 && unscaled?.[3]===0;
+    },3000,"laser tracks native pointer in zoomed CSS coordinates");
+    await injectWindowsMouseMove(q.x,q.y);
+    await waitFor(async () => {
+      const previous = await sample(165,120);
+      const current = await sample(220,150);
+      return previous?.[3]===0 && current?.[0]===255 && current?.[3]===255;
+    },3000,"zoomed laser moves without leaving a trail");
+    unchanged();
+  } finally {
+    overlay.webContents.setZoomFactor(laserZoom);
+    await waitFor(async () => await query(
+      `document.querySelector('[data-annotation-transient]').clientWidth`) === laserCssWidth,
+      2000,"restore original laser zoom");
+  }
+
   // Even a valid, leased pen payload must be rejected while a temporary tool owns input.
   const blocked=await query(`(async()=>{
     const id=crypto.randomUUID(); miniCast.beginAnnotationGesture(id);
@@ -133,6 +161,6 @@ export async function verifyTransientTools(context: Context, displayId: number) 
   await choose("pen"); assert.equal(context.state().canRedo,true);
   await context.command("redo"); await waitFor(()=>state().elements.some(item=>item.id==="transient-redo"),3000,"permanent Redo remains usable");
   await context.command("undo"); await ready(); assert.deepEqual(state().elements,before.elements);
-  return { laser:true, fadingPixels:true, expiry:true, idleStopped:true, historyIsolated:true, clear:true,
+  return { laser:true, laserZoom:true, fadingPixels:true, expiry:true, idleStopped:true, historyIsolated:true, clear:true,
     heldUndo:true, heldEscape:true, reload:true, permanentWritesRejected:true, redoPreserved:true, viewportReset:true, clickRouting:true };
 }

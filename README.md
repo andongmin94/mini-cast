@@ -10,6 +10,8 @@
 
 강의, 발표, 스트리밍 화면 위에 마우스·키보드 입력을 표시하고 직접 판서하는 Electron 앱입니다.
 
+현재 버전은 **0.2.5**입니다. Windows 실행 파일은 [릴리스](https://github.com/andongmin94/mini-cast/releases)에서 받을 수 있습니다.
+
 ## 기능
 
 - 커서 위치·마우스 클릭·조합키·일반 키 표시
@@ -92,4 +94,4 @@ Windows 결과물은 `output/`에 생성됩니다. 현재 배포 대상은 Windo
 
 [판서 도구 가이드](docs/ANNOTATION-TOOLS.md) · [구조·개발·검증 가이드](docs/DEVELOPMENT.md) · [개발 변경 이력](docs/CHANGELOG.md)
 
-작업 브랜치는 `main` 하나만 사용합니다. `main` push마다 `Verify`가 Windows 전체 검증을 자동 실행합니다. 배포 파일은 수동 `workflow_dispatch` 실행에서만 업로드하며 아티팩트는 1일 보관합니다.
+작업 브랜치는 `main` 하나만 사용합니다. `main` push마다 `Verify`가 Windows 전체 검증을 자동 실행합니다. 배포 파일은 수동 `workflow_dispatch` 실행에서만 업로드하며 아티팩트는 1일 보관합니다. 수동 실행에서 `publish_release`를 선택하면 전체 검증이 성공한 패키지로 현재 버전의 릴리스를 게시합니다.

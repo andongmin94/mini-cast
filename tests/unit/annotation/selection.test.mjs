@@ -201,6 +201,31 @@ test("retained snapshots never change across 1000 group translations and Undo/Re
   assert.deepEqual(original.elements, [line("a"), line("b", 90), text]);
 });
 
+test("text translation checks the complete frame and rejects a group atomically", () => {
+  const boundaryText = { ...text, text: "A", fontSize: 20,
+    points: textControlPoints({ x: MAX_ANNOTATION_COORDINATE - 200, y: 10 }),
+    box: { minX: 0, minY: 0, maxX: 100, maxY: 20 } };
+  assert.doesNotThrow(() => translateAnnotationElement(boundaryText, 100, 0));
+  assert.throws(() => translateAnnotationElement(boundaryText, 150, 0),
+    error => error.reason === "invalid-element");
+
+  const history = new AnnotationHistory();
+  history.setDisplayViewport(1, 1920, 1080);
+  history.addElement(1, line("a"));
+  history.addElement(1, boundaryText);
+  history.addElement(1, line("pending", 200));
+  history.undo();
+  const before = history.getSnapshot(1);
+  rejectsWithoutMutation(history, () => edit(history, "move", ["a", "text"], 150, 0), "invalid-element");
+  assert.equal(history.redo(), 1);
+  assert.deepEqual(history.getSnapshot(1).elements, [...before.elements, line("pending", 200)]);
+  history.undo();
+  history.undo();
+  assert.deepEqual(history.getSnapshot(1).elements, [line("a")]);
+  history.undo();
+  assert.deepEqual(history.getSnapshot(1).elements, []);
+});
+
 test("direct translation is immutable and detects coordinate overflow", () => {
   const source = line("a"); const result = translateAnnotationElement(source, 1, 2);
   source.points[0].x = 999;
