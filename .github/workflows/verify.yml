@@ -50,6 +50,10 @@ jobs:
         run: npm audit --audit-level=low
       - name: 소스 renderer 및 Electron 빌드
         run: npx vite build && npm run build:electron
+      - name: 패키징 전 소프트웨어 렌더링 실제 입력 검사
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/verify-source.ps1 -DisableHardwareAcceleration
       - name: 패키징 전 실제 입력·Canvas 참조 비교
         timeout-minutes: 5
         shell: pwsh

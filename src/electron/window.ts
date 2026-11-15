@@ -180,18 +180,9 @@ export async function createWindow(
   denyWindowOpen(mainWindow);
   lockRendererNavigation(mainWindow);
   mainWindow.center();
-  const controller = mainWindow;
-  let initiallyShown = false;
-  const initialShow = new Promise<void>((resolve) => {
-    controller.once("ready-to-show", () => {
-      showMainWindow();
-      closeSplash();
-      initiallyShown = true;
-      resolve();
-    });
-  });
   mainWindow.webContents.on("did-finish-load", () => {
-    if (initiallyShown) showMainWindow();
+    closeSplash();
+    showMainWindow();
   });
   mainWindow.on("always-on-top-changed", (_event, alwaysOnTop) => {
     if (overlayInteractive && !alwaysOnTop && !quitting) restoreWindowOrder();
@@ -221,8 +212,7 @@ export async function createWindow(
     beforeMainWindowHide = undefined;
   });
 
-  // Initial input must wait for the first paint, not only the loaded document.
-  await Promise.all([loadRenderer(mainWindow, rendererUrl, "/"), initialShow]);
+  await loadRenderer(mainWindow, rendererUrl, "/");
 }
 
 function destroyOverlayWindows(windows: readonly BrowserWindow[]) {

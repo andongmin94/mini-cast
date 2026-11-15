@@ -85,13 +85,32 @@ $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class MiniCastMouse {
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT point);
   [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr window, uint flags);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, StringBuilder name, int length);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window, out RECT bounds);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] static extern bool IsWindowEnabled(IntPtr window);
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
+  [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+  static string DescribeWindow(IntPtr window) {
+    var name = new StringBuilder(256);
+    GetClassName(window, name, name.Capacity);
+    uint pid; GetWindowThreadProcessId(window, out pid);
+    RECT bounds; GetWindowRect(window, out bounds);
+    return String.Format("hwnd={0},class={1},pid={2},rect={3}/{4}/{5}/{6},visible={7},enabled={8},exStyle={9:X},dpi={10}",
+      window, name, pid, bounds.Left, bounds.Top, bounds.Right, bounds.Bottom,
+      IsWindowVisible(window), IsWindowEnabled(window), GetWindowLongPtr(window, -20).ToInt64(), GetDpiForWindow(window));
+  }
   public static void WaitForTarget(IntPtr expected, int x, int y) {
     var deadline = DateTime.UtcNow.AddSeconds(5);
     IntPtr actual;
@@ -101,7 +120,8 @@ public static class MiniCastMouse {
       System.Threading.Thread.Sleep(50);
     } while (DateTime.UtcNow < deadline);
     throw new InvalidOperationException(String.Format(
-      "Native click target mismatch at ({0}, {1}): expected window {2}, actual {3}", x, y, expected, actual));
+      "Native click target mismatch at ({0}, {1}): expected [{2}]; actual [{3}]; foreground [{4}]",
+      x, y, DescribeWindow(expected), DescribeWindow(actual), DescribeWindow(GetForegroundWindow())));
   }
 }
 '@
