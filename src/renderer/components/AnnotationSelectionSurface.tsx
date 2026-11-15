@@ -173,6 +173,7 @@ function AnnotationSelectionSurface({ displayId, document, fillColor, onDocument
       requestPaint();
     };
     resize();
+    inputCanvas.current?.focus();
     const generation = epoch.current;
     const refreshFonts = () => {
       if (!alive.current || epoch.current !== generation) return;
@@ -423,14 +424,15 @@ function AnnotationSelectionSurface({ displayId, document, fillColor, onDocument
   return (
     <>
       <canvas ref={committedCanvas} className="pointer-events-none fixed inset-0 size-full" style={{ zIndex: 1 }} aria-hidden="true" />
-      <canvas ref={inputCanvas} className="fixed inset-0 size-full"
+      <canvas ref={inputCanvas} tabIndex={0} aria-describedby="annotation-selection-help"
+        className="fixed inset-0 size-full focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-blue-600"
         data-annotation-selection-count={count} data-annotation-selection-busy={busy}
         style={{ zIndex: 2, touchAction: "none", pointerEvents: "auto", cursor: busy ? "progress" : "default" }}
         onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel} onLostPointerCapture={handlePointerCancel} aria-label="판서 객체 선택 및 크기 조절" />
       {handleBounds && RESIZE_HANDLES.map(handle => {
         const point = resizeHandlePoint(handleBounds, handle);
-        return <button key={handle} type="button" data-selection-resize-handle={handle} disabled={busy}
+        return <button key={handle} type="button" tabIndex={-1} data-selection-resize-handle={handle} disabled={busy}
           aria-label={`${HANDLE_LABELS[handle]} 크기 조절`} title="드래그로 크기 조절 · Shift로 비율 고정"
           className="pointer-events-auto fixed rounded-sm border border-blue-600 bg-white"
           style={{ left: point.x - RESIZE_HANDLE_SIZE / 2, top: point.y - RESIZE_HANDLE_SIZE / 2,
@@ -438,14 +440,17 @@ function AnnotationSelectionSurface({ displayId, document, fillColor, onDocument
             zIndex: 4, touchAction: "none", cursor: resizeCursor(handle) }}
           onPointerDown={event => handleResizeDown(event, handle)} />;
       })}
-      {rotateHandle && <button type="button" data-selection-rotate="" disabled={busy}
+      {rotateHandle && <button type="button" tabIndex={-1} data-selection-rotate="" disabled={busy}
         aria-label="선택 객체 회전" title="드래그 회전 · Shift 15° 고정"
         onPointerDown={event => handleResizeDown(event, "rotate")}
         className="pointer-events-auto fixed flex items-center justify-center rounded-full border border-blue-600 bg-white text-blue-600"
         style={{ zIndex: 9, left: rotateHandle.x - ROTATION_HANDLE_SIZE / 2, top: rotateHandle.y - ROTATION_HANDLE_SIZE / 2,
           width: ROTATION_HANDLE_SIZE, height: ROTATION_HANDLE_SIZE, touchAction: "none", cursor: "grab" }}>↻</button>}
       <div className="pointer-events-auto fixed bottom-4 left-1/2 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white"
-        style={{ zIndex: 10 }} role="toolbar" aria-label="판서 선택 도구">
+        style={{ zIndex: 10 }} role="group" aria-label="판서 선택 도구">
+        <p id="annotation-selection-help" className="basis-full text-center text-xs">
+          객체를 선택한 뒤 Tab으로 명령 이동 · Enter/Space로 실행 · Escape로 조작 모드
+        </p>
         <span role="status" className="basis-full text-center">{busy ? "편집 반영 중" : count ? `${count}개 선택 · 모서리로 크기 조절` : "객체 클릭 · Shift로 추가 선택"}</span>
         <button type="button" data-selection-flip="horizontal" disabled={busy || !count}
           title="선택 영역 중심을 기준으로 좌우 반전"

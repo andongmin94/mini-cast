@@ -27,6 +27,7 @@ export let overlayDisplays: OverlayDisplayMeta[] = [];
 
 let quitting = false;
 let overlayInteractive = false;
+let overlaySelectionFocusable = false;
 let beforeMainWindowHide: (() => void) | undefined;
 const intentionallyClosingOverlayContents = new Set<number>();
 
@@ -42,6 +43,7 @@ export function prepareWindowsForQuit() {
 function applyOverlayInput(window: BrowserWindow) {
   if (window.isDestroyed()) return;
   try {
+    window.setFocusable(overlayInteractive && overlaySelectionFocusable);
     if (overlayInteractive) {
       window.setIgnoreMouseEvents(false);
     } else {
@@ -87,6 +89,11 @@ export function setOverlayInteractive(interactive: boolean) {
   overlayInteractive = interactive;
   overlayWindows.forEach(applyOverlayInput);
   restoreWindowOrder();
+}
+
+export function setOverlaySelectionFocusable(focusable: boolean) {
+  overlaySelectionFocusable = focusable;
+  overlayWindows.forEach(applyOverlayInput);
 }
 
 export function isOverlayInteractive() {

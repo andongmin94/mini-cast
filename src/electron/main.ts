@@ -97,6 +97,7 @@ import {
   prepareWindowsForQuit,
   registerOverlayLifecycle,
   setOverlayInteractive,
+  setOverlaySelectionFocusable,
   showMainWindow,
 } from "./window.js";
 
@@ -483,13 +484,23 @@ function setAnnotationTool(tool: AnnotationTool) {
   cancelTextEdit();
   if (tool !== "text") setControllerTextEditing(false);
   if (tool !== annotationTool) cancelActiveAnnotationGestures();
+  const leavingFocusedSelection = annotationTool === "select" && tool !== "select" &&
+    overlayWindows.some(window => !window.isDestroyed() && window.isFocused());
   annotationTool = tool;
   refreshControllerWindowActions();
   const interactive = tool !== "pass-through";
+  setOverlaySelectionFocusable(tool === "select");
   setOverlayInteractive(interactive);
   setAnnotationInputMode(interactive);
   refreshTransientAnnotationShortcuts();
   sendAnnotationState();
+  if (tool === "select") {
+    const index = overlayDisplays.findIndex(display => display.id === annotationCommandDisplayId());
+    const target = overlayWindows[index] ?? overlayWindows[0];
+    if (target && !target.isDestroyed()) target.focus();
+  } else if (leavingFocusedSelection && mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+    mainWindow.focus();
+  }
 }
 
 function annotationCommandDisplayId() {

@@ -30,6 +30,7 @@ export function createSplash() {
 body{margin:0;height:100vh;display:grid;place-content:center;gap:16px;text-align:center;font-family:system-ui,sans-serif;color:#333;user-select:none}
 .spinner{width:36px;height:36px;margin:auto;border:4px solid #ddd;border-left-color:#09f;border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spinner{animation:none}}
 </style>
 </head>
 <body><div class="spinner"></div><strong>로딩 중...</strong></body>
