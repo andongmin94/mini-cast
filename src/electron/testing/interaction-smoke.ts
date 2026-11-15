@@ -688,8 +688,13 @@ export function createSmokeChecks(context: SmokeContext) {
     );
     const point = await controllerElementScreenPoint(controller, selector);
     if (!point) throw new Error(`${description} was not visible`);
-    if (prepareInitialInput) controller.moveTop();
-    await injectWindowsClick(point.x, point.y, controller.getNativeWindowHandle());
+    const temporarilyOnTop = prepareInitialInput && !controller.isAlwaysOnTop();
+    if (temporarilyOnTop) controller.setAlwaysOnTop(true);
+    try {
+      await injectWindowsClick(point.x, point.y, controller.getNativeWindowHandle());
+    } finally {
+      if (temporarilyOnTop) controller.setAlwaysOnTop(false);
+    }
   }
 
   async function verifyControllerAnnotationToolWiring() {
