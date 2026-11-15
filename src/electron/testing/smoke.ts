@@ -100,8 +100,16 @@ public static class MiniCastMouse {
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
   [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+  public static IntPtr ConsoleAtPoint(int x, int y, out uint pid) {
+    var window = GetAncestor(WindowFromPoint(new POINT { X = x, Y = y }), 2);
+    var name = new StringBuilder(256);
+    GetClassName(window, name, name.Capacity);
+    GetWindowThreadProcessId(window, out pid);
+    return name.ToString() == "ConsoleWindowClass" ? window : IntPtr.Zero;
+  }
   static string DescribeWindow(IntPtr window) {
     var name = new StringBuilder(256);
     GetClassName(window, name, name.Capacity);
@@ -134,9 +142,26 @@ async function physicalPoint(x: number, y: number) {
   return screen.dipToScreenPoint({ x: Math.round(x), y: Math.round(y) });
 }
 
-export async function injectWindowsClick(x: number, y: number, targetWindow?: Buffer) {
+export async function injectWindowsClick(x: number, y: number, targetWindow?: Buffer, prepareInitialInput = false) {
   const point = await physicalPoint(x, y);
   const script = `${MOUSE_NATIVE_DECLARATION}
+${prepareInitialInput && targetWindow && process.env.GITHUB_ACTIONS === "true" ? `
+# The hosted runner console can cover the app; hide only its verified ancestor window.
+[uint32]$consoleOwner = 0
+$blockingConsole = [MiniCastMouse]::ConsoleAtPoint(${point.x}, ${point.y}, [ref]$consoleOwner)
+if ($blockingConsole -ne [IntPtr]::Zero) {
+  $ancestor = Get-CimInstance Win32_Process -Filter "ProcessId=$PID"
+  while ($null -ne $ancestor) {
+    if ($ancestor.ProcessId -eq $consoleOwner) {
+      if ([IO.Path]::GetFileNameWithoutExtension($ancestor.Name) -eq 'hosted-compute-agent') {
+        [MiniCastMouse]::ShowWindow($blockingConsole, 0) | Out-Null
+      }
+      break
+    }
+    if ($ancestor.ParentProcessId -eq 0) { break }
+    $ancestor = Get-CimInstance Win32_Process -Filter "ProcessId=$($ancestor.ParentProcessId)"
+  }
+}` : ""}
 ${targetWindow ? `[MiniCastMouse]::WaitForTarget([IntPtr]::new(${targetWindow.readBigUInt64LE()}), ${point.x}, ${point.y})` : ""}
 [MiniCastMouse]::SetCursorPos(${point.x}, ${point.y}) | Out-Null
 Start-Sleep -Milliseconds 100
