@@ -148,6 +148,7 @@ export function createSmokeChecks(context: SmokeContext) {
       controller,
       "[data-settings-retry]",
       "explicit settings Retry button",
+      true,
     );
     await waitFor(
       () => context.settingsState() === "saved",
@@ -676,6 +677,7 @@ export function createSmokeChecks(context: SmokeContext) {
     controller: BrowserWindow,
     selector: string,
     description: string,
+    prepareInitialInput = false,
   ) {
     showMainWindow();
     await waitFor(
@@ -686,6 +688,7 @@ export function createSmokeChecks(context: SmokeContext) {
     );
     const point = await controllerElementScreenPoint(controller, selector);
     if (!point) throw new Error(`${description} was not visible`);
+    if (prepareInitialInput) controller.moveTop();
     await injectWindowsClick(point.x, point.y, controller.getNativeWindowHandle());
   }
 
@@ -801,8 +804,6 @@ export function createSmokeChecks(context: SmokeContext) {
       throw new Error("interaction smoke test requires Windows");
     }
     await inspectAllRenderers();
-    // Expose the smoke target above the runner console before native input.
-    mainWindow?.moveTop();
     await verifySettingsFailureAndRetry();
     await verifyControllerAnnotationToolWiring();
 
