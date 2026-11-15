@@ -63,9 +63,8 @@ function Invoke-MiniCastSmoke {
   if ($DisableHardwareAcceleration) {
     $arguments += '--disable-hardware-acceleration'
   }
-  $launcher = Start-Process -FilePath $Executable -ArgumentList $arguments -PassThru -NoNewWindow `
+  $launcher = Start-Process -FilePath $Executable -ArgumentList $arguments -PassThru `
     -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
-  Write-Host "${Label}: launcher PID $($launcher.Id), parent PID $PID, inherited console."
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $payload = $null
 

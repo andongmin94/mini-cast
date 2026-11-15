@@ -801,6 +801,8 @@ export function createSmokeChecks(context: SmokeContext) {
       throw new Error("interaction smoke test requires Windows");
     }
     await inspectAllRenderers();
+    // Expose the smoke target above the runner console before native input.
+    mainWindow?.moveTop();
     await verifySettingsFailureAndRetry();
     await verifyControllerAnnotationToolWiring();
 
