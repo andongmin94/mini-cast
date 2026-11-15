@@ -686,7 +686,7 @@ export function createSmokeChecks(context: SmokeContext) {
     );
     const point = await controllerElementScreenPoint(controller, selector);
     if (!point) throw new Error(`${description} was not visible`);
-    await injectWindowsClick(point.x, point.y);
+    await injectWindowsClick(point.x, point.y, controller.getNativeWindowHandle());
   }
 
   async function verifyControllerAnnotationToolWiring() {

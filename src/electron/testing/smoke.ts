@@ -81,19 +81,44 @@ function runPowerShell(script: string) {
 }
 
 const MOUSE_NATIVE_DECLARATION = String.raw`
+$ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class MiniCastMouse {
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+  [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT point);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr window, uint flags);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+  public static void WaitForTarget(IntPtr expected, int x, int y) {
+    var deadline = DateTime.UtcNow.AddSeconds(5);
+    IntPtr actual;
+    do {
+      actual = GetAncestor(WindowFromPoint(new POINT { X = x, Y = y }), 2);
+      if (actual == expected) return;
+      System.Threading.Thread.Sleep(50);
+    } while (DateTime.UtcNow < deadline);
+    throw new InvalidOperationException(String.Format(
+      "Native click target mismatch at ({0}, {1}): expected window {2}, actual {3}", x, y, expected, actual));
+  }
 }
 '@
+[MiniCastMouse]::SetThreadDpiAwarenessContext([IntPtr]::new(-4)) | Out-Null
 `;
 
-export function injectWindowsClick(x: number, y: number) {
+async function physicalPoint(x: number, y: number) {
+  // Electron window/DOM coordinates are DIPs; the native helper uses physical pixels.
+  const { screen } = await import("electron");
+  return screen.dipToScreenPoint({ x: Math.round(x), y: Math.round(y) });
+}
+
+export async function injectWindowsClick(x: number, y: number, targetWindow?: Buffer) {
+  const point = await physicalPoint(x, y);
   const script = `${MOUSE_NATIVE_DECLARATION}
-[MiniCastMouse]::SetCursorPos(${Math.round(x)}, ${Math.round(y)}) | Out-Null
+${targetWindow ? `[MiniCastMouse]::WaitForTarget([IntPtr]::new(${targetWindow.readBigUInt64LE()}), ${point.x}, ${point.y})` : ""}
+[MiniCastMouse]::SetCursorPos(${point.x}, ${point.y}) | Out-Null
 Start-Sleep -Milliseconds 100
 [MiniCastMouse]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
 Start-Sleep -Milliseconds 50
@@ -102,16 +127,19 @@ Start-Sleep -Milliseconds 50
   return runPowerShell(script);
 }
 
-export function injectWindowsDrag(
+export async function injectWindowsDrag(
   startX: number, startY: number, endX: number, endY: number,
   modifiers: readonly "Shift"[] = [],
 ) {
+  const { screen } = await import("electron");
+  const start = screen.dipToScreenPoint({ x: Math.round(startX), y: Math.round(startY) });
   const steps = 12;
   const movements = Array.from({ length: steps }, (_, index) => {
     const progress = (index + 1) / steps;
     const x = Math.round(startX + (endX - startX) * progress);
     const y = Math.round(startY + (endY - startY) * progress);
-    return `[MiniCastMouse]::SetCursorPos(${x}, ${y}) | Out-Null\nStart-Sleep -Milliseconds 20`;
+    const point = screen.dipToScreenPoint({ x, y });
+    return `[MiniCastMouse]::SetCursorPos(${point.x}, ${point.y}) | Out-Null\nStart-Sleep -Milliseconds 20`;
   }).join("\n");
   const keys = modifiers.map(key => shortcutVirtualKeys(key)[0]);
   const press = keys.map(key => `[MiniCastKeyboard]::Key(${key}, $false)`).join("\n");
@@ -120,7 +148,7 @@ export function injectWindowsDrag(
 ${keys.length ? KEY_NATIVE_DECLARATION : ""}
 try {
 ${press}
-[MiniCastMouse]::SetCursorPos(${Math.round(startX)}, ${Math.round(startY)}) | Out-Null
+[MiniCastMouse]::SetCursorPos(${start.x}, ${start.y}) | Out-Null
 Start-Sleep -Milliseconds 100
 [MiniCastMouse]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
 ${movements}
@@ -195,21 +223,23 @@ export function injectWindowsShortcut(accelerator: string) {
   );
 }
 
-export function injectWindowsMouseButton(
+export async function injectWindowsMouseButton(
   x: number,
   y: number,
   pressed: boolean,
 ) {
+  const point = await physicalPoint(x, y);
   return runPowerShell(`${MOUSE_NATIVE_DECLARATION}
-[MiniCastMouse]::SetCursorPos(${Math.round(x)}, ${Math.round(y)}) | Out-Null
+[MiniCastMouse]::SetCursorPos(${point.x}, ${point.y}) | Out-Null
 Start-Sleep -Milliseconds 60
 [MiniCastMouse]::mouse_event(${pressed ? "0x0002" : "0x0004"}, 0, 0, 0, [UIntPtr]::Zero)
 `);
 }
 
-export function injectWindowsMouseMove(x: number, y: number) {
+export async function injectWindowsMouseMove(x: number, y: number) {
+  const point = await physicalPoint(x, y);
   return runPowerShell(`${MOUSE_NATIVE_DECLARATION}
-[MiniCastMouse]::SetCursorPos(${Math.round(x)}, ${Math.round(y)}) | Out-Null
+[MiniCastMouse]::SetCursorPos(${point.x}, ${point.y}) | Out-Null
 Start-Sleep -Milliseconds 60
 `);
 }
