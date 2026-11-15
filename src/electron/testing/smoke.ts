@@ -98,6 +98,7 @@ public static class MiniCastMouse {
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
   [DllImport("user32.dll")] static extern bool IsWindowEnabled(IntPtr window);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("kernel32.dll")] static extern IntPtr GetConsoleWindow();
   [DllImport("user32.dll")] static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
   [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
@@ -120,8 +121,9 @@ public static class MiniCastMouse {
       System.Threading.Thread.Sleep(50);
     } while (DateTime.UtcNow < deadline);
     throw new InvalidOperationException(String.Format(
-      "Native click target mismatch at ({0}, {1}): expected [{2}]; actual [{3}]; foreground [{4}]",
-      x, y, DescribeWindow(expected), DescribeWindow(actual), DescribeWindow(GetForegroundWindow())));
+      "Native click target mismatch at ({0}, {1}): expected [{2}]; actual [{3}]; foreground [{4}]; helper pid={5}, console [{6}]",
+      x, y, DescribeWindow(expected), DescribeWindow(actual), DescribeWindow(GetForegroundWindow()),
+      System.Diagnostics.Process.GetCurrentProcess().Id, DescribeWindow(GetConsoleWindow())));
   }
 }
 '@
@@ -136,8 +138,30 @@ async function physicalPoint(x: number, y: number) {
 
 export async function injectWindowsClick(x: number, y: number, targetWindow?: Buffer) {
   const point = await physicalPoint(x, y);
+  const targetCheck = targetWindow ? `
+try {
+  [MiniCastMouse]::WaitForTarget([IntPtr]::new(${targetWindow.readBigUInt64LE()}), ${point.x}, ${point.y})
+} catch {
+  $failure = $_
+  $processes = @{}
+  Get-CimInstance Win32_Process | ForEach-Object { $processes[[int]$_.ProcessId] = $_ }
+  $seeds = @($PID) + @([regex]::Matches($failure.Exception.Message, 'pid=(\\d+)') | ForEach-Object { [int]$_.Groups[1].Value })
+  $chains = foreach ($seed in ($seeds | Select-Object -Unique)) {
+    $currentId = [int]$seed
+    $seen = [System.Collections.Generic.HashSet[int]]::new()
+    $chain = while ($currentId -ne 0 -and $processes.ContainsKey($currentId) -and $seen.Add($currentId)) {
+      $process = $processes[$currentId]
+      [pscustomobject]@{ name = $process.Name; pid = $currentId; ppid = $process.ParentProcessId }
+      $currentId = [int]$process.ParentProcessId
+    }
+    [pscustomobject]@{ seed = $seed; chain = @($chain) }
+  }
+  [Console]::Error.WriteLine('Native click process chains: ' + (ConvertTo-Json -InputObject @($chains) -Depth 4 -Compress))
+  throw $failure
+}
+` : "";
   const script = `${MOUSE_NATIVE_DECLARATION}
-${targetWindow ? `[MiniCastMouse]::WaitForTarget([IntPtr]::new(${targetWindow.readBigUInt64LE()}), ${point.x}, ${point.y})` : ""}
+${targetCheck}
 [MiniCastMouse]::SetCursorPos(${point.x}, ${point.y}) | Out-Null
 Start-Sleep -Milliseconds 100
 [MiniCastMouse]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
